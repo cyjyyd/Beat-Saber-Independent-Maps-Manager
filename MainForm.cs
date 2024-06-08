@@ -156,6 +156,10 @@ namespace BeatSaberIndependentMapsManager
         {
 
         }
+        private void setTextParameter()
+        {
+
+        }
     }
 }
 
