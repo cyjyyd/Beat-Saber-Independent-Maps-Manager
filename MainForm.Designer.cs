@@ -40,19 +40,18 @@
             this.btnSaveMusicPack = new System.Windows.Forms.Button();
             this.tabMusicPackContorl = new System.Windows.Forms.TabControl();
             this.tabSongFolder = new System.Windows.Forms.TabPage();
+            this.btnDeduplication = new System.Windows.Forms.Button();
             this.label3 = new System.Windows.Forms.Label();
             this.trackVolume = new System.Windows.Forms.TrackBar();
             this.btnPlay = new System.Windows.Forms.Button();
             this.btnExportFavor = new System.Windows.Forms.Button();
-            this.label2 = new System.Windows.Forms.Label();
             this.btnInfo = new System.Windows.Forms.Button();
-            this.textBox1 = new System.Windows.Forms.TextBox();
             this.btnSaveList = new System.Windows.Forms.Button();
             this.btnSetImg = new System.Windows.Forms.Button();
             this.label1 = new System.Windows.Forms.Label();
             this.songListView = new System.Windows.Forms.ListView();
-            this.bsr = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.songName = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.bsr = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.bpm = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.musicPackListView = new System.Windows.Forms.ListView();
             this.musicPackimg = new System.Windows.Forms.ImageList(this.components);
@@ -62,13 +61,16 @@
             this.tabDelicatedSong = new System.Windows.Forms.TabPage();
             this.tabFolderandList = new System.Windows.Forms.TabPage();
             this.btnSetting = new System.Windows.Forms.Button();
-            this.comboBox1 = new System.Windows.Forms.ComboBox();
+            this.comboBoxPlatform = new System.Windows.Forms.ComboBox();
             this.lblPlatform = new System.Windows.Forms.Label();
             this.btnInstallEverything = new System.Windows.Forms.Button();
             this.lblExtension = new System.Windows.Forms.Label();
             this.btnTutorial = new System.Windows.Forms.Button();
             this.btnExit = new System.Windows.Forms.Button();
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
+            this.PlaybackTimer = new System.Windows.Forms.Timer(this.components);
+            this.musicPackCoverDialog = new System.Windows.Forms.OpenFileDialog();
+            this.savebplistDialog = new System.Windows.Forms.SaveFileDialog();
             this.BSIMMStats.SuspendLayout();
             this.tabMusicPackContorl.SuspendLayout();
             this.tabSongFolder.SuspendLayout();
@@ -144,6 +146,7 @@
             this.btnSaveMusicPack.TabIndex = 7;
             this.btnSaveMusicPack.Text = "保存曲包目录";
             this.btnSaveMusicPack.UseVisualStyleBackColor = true;
+            this.btnSaveMusicPack.Click += new System.EventHandler(this.btnSaveMusicPack_Click);
             // 
             // tabMusicPackContorl
             // 
@@ -160,13 +163,12 @@
             // 
             // tabSongFolder
             // 
+            this.tabSongFolder.Controls.Add(this.btnDeduplication);
             this.tabSongFolder.Controls.Add(this.label3);
             this.tabSongFolder.Controls.Add(this.trackVolume);
             this.tabSongFolder.Controls.Add(this.btnPlay);
             this.tabSongFolder.Controls.Add(this.btnExportFavor);
-            this.tabSongFolder.Controls.Add(this.label2);
             this.tabSongFolder.Controls.Add(this.btnInfo);
-            this.tabSongFolder.Controls.Add(this.textBox1);
             this.tabSongFolder.Controls.Add(this.btnSaveList);
             this.tabSongFolder.Controls.Add(this.btnSetImg);
             this.tabSongFolder.Controls.Add(this.label1);
@@ -184,6 +186,16 @@
             this.tabSongFolder.TabIndex = 0;
             this.tabSongFolder.Text = "歌曲目录列表";
             this.tabSongFolder.UseVisualStyleBackColor = true;
+            // 
+            // btnDeduplication
+            // 
+            this.btnDeduplication.Location = new System.Drawing.Point(489, 287);
+            this.btnDeduplication.Name = "btnDeduplication";
+            this.btnDeduplication.Size = new System.Drawing.Size(88, 31);
+            this.btnDeduplication.TabIndex = 24;
+            this.btnDeduplication.Text = "一键去重";
+            this.btnDeduplication.UseVisualStyleBackColor = true;
+            this.btnDeduplication.Click += new System.EventHandler(this.btnDeduplication_Click);
             // 
             // label3
             // 
@@ -225,15 +237,6 @@
             this.btnExportFavor.Text = "导出收藏";
             this.btnExportFavor.UseVisualStyleBackColor = true;
             // 
-            // label2
-            // 
-            this.label2.AutoSize = true;
-            this.label2.Location = new System.Drawing.Point(434, 289);
-            this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(35, 12);
-            this.label2.TabIndex = 19;
-            this.label2.Text = "搜索:";
-            // 
             // btnInfo
             // 
             this.btnInfo.BackColor = System.Drawing.Color.Transparent;
@@ -243,13 +246,7 @@
             this.btnInfo.TabIndex = 18;
             this.btnInfo.Text = "详细信息";
             this.btnInfo.UseVisualStyleBackColor = false;
-            // 
-            // textBox1
-            // 
-            this.textBox1.Location = new System.Drawing.Point(475, 285);
-            this.textBox1.Name = "textBox1";
-            this.textBox1.Size = new System.Drawing.Size(98, 21);
-            this.textBox1.TabIndex = 17;
+            this.btnInfo.Click += new System.EventHandler(this.btnInfo_Click);
             // 
             // btnSaveList
             // 
@@ -259,6 +256,7 @@
             this.btnSaveList.TabIndex = 16;
             this.btnSaveList.Text = "保存列表";
             this.btnSaveList.UseVisualStyleBackColor = true;
+            this.btnSaveList.Click += new System.EventHandler(this.btnSaveList_Click);
             // 
             // btnSetImg
             // 
@@ -268,6 +266,7 @@
             this.btnSetImg.TabIndex = 15;
             this.btnSetImg.Text = "选择图片";
             this.btnSetImg.UseVisualStyleBackColor = true;
+            this.btnSetImg.Click += new System.EventHandler(this.btnSetImg_Click);
             // 
             // label1
             // 
@@ -282,8 +281,8 @@
             // 
             this.songListView.AllowDrop = true;
             this.songListView.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
-            this.bsr,
             this.songName,
+            this.bsr,
             this.bpm});
             this.songListView.HeaderStyle = System.Windows.Forms.ColumnHeaderStyle.Nonclickable;
             this.songListView.HideSelection = false;
@@ -295,19 +294,20 @@
             this.songListView.View = System.Windows.Forms.View.Details;
             this.songListView.SelectedIndexChanged += new System.EventHandler(this.songListView_SelectedIndexChanged);
             // 
-            // bsr
-            // 
-            this.bsr.Text = "bsr";
-            this.bsr.Width = 40;
-            // 
             // songName
             // 
             this.songName.Text = "曲名";
-            this.songName.Width = 120;
+            this.songName.Width = 140;
+            // 
+            // bsr
+            // 
+            this.bsr.Text = "bsr";
+            this.bsr.Width = 42;
             // 
             // bpm
             // 
             this.bpm.Text = "bpm";
+            this.bpm.Width = 40;
             // 
             // musicPackListView
             // 
@@ -320,6 +320,7 @@
             this.musicPackListView.Size = new System.Drawing.Size(282, 247);
             this.musicPackListView.TabIndex = 12;
             this.musicPackListView.UseCompatibleStateImageBehavior = false;
+            this.musicPackListView.ItemMouseHover += new System.Windows.Forms.ListViewItemMouseHoverEventHandler(this.musicPackListView_ItemMouseHover);
             this.musicPackListView.Click += new System.EventHandler(this.musicPackListView_Click);
             this.musicPackListView.DragDrop += new System.Windows.Forms.DragEventHandler(this.DropEvent);
             this.musicPackListView.DragEnter += new System.Windows.Forms.DragEventHandler(this.DragEvent);
@@ -387,13 +388,18 @@
             this.btnSetting.Text = "程序设置";
             this.btnSetting.UseVisualStyleBackColor = true;
             // 
-            // comboBox1
+            // comboBoxPlatform
             // 
-            this.comboBox1.FormattingEnabled = true;
-            this.comboBox1.Location = new System.Drawing.Point(604, 333);
-            this.comboBox1.Name = "comboBox1";
-            this.comboBox1.Size = new System.Drawing.Size(88, 20);
-            this.comboBox1.TabIndex = 10;
+            this.comboBoxPlatform.FormattingEnabled = true;
+            this.comboBoxPlatform.Items.AddRange(new object[] {
+            "PC-Steam",
+            "PC-Oculus",
+            "Quest"});
+            this.comboBoxPlatform.Location = new System.Drawing.Point(604, 333);
+            this.comboBoxPlatform.Name = "comboBoxPlatform";
+            this.comboBoxPlatform.Size = new System.Drawing.Size(88, 20);
+            this.comboBoxPlatform.TabIndex = 10;
+            this.comboBoxPlatform.SelectedIndexChanged += new System.EventHandler(this.comboBoxPlatform_SelectedIndexChanged);
             // 
             // lblPlatform
             // 
@@ -453,6 +459,14 @@
             this.pictureBox1.TabIndex = 16;
             this.pictureBox1.TabStop = false;
             // 
+            // PlaybackTimer
+            // 
+            this.PlaybackTimer.Tick += new System.EventHandler(this.PlaybackTimer_Tick);
+            // 
+            // musicPackCoverDialog
+            // 
+            this.musicPackCoverDialog.Filter = "JPEG  (*.jpg)|*.jpg|Pictures (*.png)|*.png|bitmap (*.bmp)|*.bmp";
+            // 
             // MainForm
             // 
             this.AllowDrop = true;
@@ -466,7 +480,7 @@
             this.Controls.Add(this.lblExtension);
             this.Controls.Add(this.btnInstallEverything);
             this.Controls.Add(this.lblPlatform);
-            this.Controls.Add(this.comboBox1);
+            this.Controls.Add(this.comboBoxPlatform);
             this.Controls.Add(this.btnSetting);
             this.Controls.Add(this.tabMusicPackContorl);
             this.Controls.Add(this.txtDebug);
@@ -476,6 +490,7 @@
             this.Name = "MainForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "BSIMM-独立曲包管理/编辑器 v1.0.0 @万毒不侵";
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);
             this.Load += new System.EventHandler(this.MainForm_Load);
             this.BSIMMStats.ResumeLayout(false);
             this.BSIMMStats.PerformLayout();
@@ -505,7 +520,7 @@
         private System.Windows.Forms.TabPage tabDelicatedSong;
         private System.Windows.Forms.TabPage tabFolderandList;
         private System.Windows.Forms.Button btnSetting;
-        private System.Windows.Forms.ComboBox comboBox1;
+        private System.Windows.Forms.ComboBox comboBoxPlatform;
         private System.Windows.Forms.Label lblPlatform;
         private System.Windows.Forms.Button btnInstallEverything;
         private System.Windows.Forms.Label lblExtension;
@@ -522,13 +537,15 @@
         private System.Windows.Forms.ColumnHeader bpm;
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.Button btnInfo;
-        private System.Windows.Forms.TextBox textBox1;
         private System.Windows.Forms.Button btnSaveList;
         private System.Windows.Forms.Button btnSetImg;
         private System.Windows.Forms.Button btnPlay;
         private System.Windows.Forms.Button btnExportFavor;
-        private System.Windows.Forms.Label label2;
         private System.Windows.Forms.TrackBar trackVolume;
         private System.Windows.Forms.Label label3;
+        private System.Windows.Forms.Timer PlaybackTimer;
+        private System.Windows.Forms.OpenFileDialog musicPackCoverDialog;
+        private System.Windows.Forms.Button btnDeduplication;
+        private System.Windows.Forms.SaveFileDialog savebplistDialog;
     }
 }
