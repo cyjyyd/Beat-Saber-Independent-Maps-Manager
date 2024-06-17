@@ -186,6 +186,7 @@ namespace BeatSaberIndependentMapsManager
                                 {
                                     if (pirateGameDetect(beatSaberFolder))
                                     {
+                                        isFound = true;
                                         debugLog("检测到Beat Saber实例目录：" + beatSaberFolder );
                                         string ver = BeatSaberVersionDetect(beatSaberFolder);
                                         debugLog("Beat Saber版本：" + ver );
@@ -210,10 +211,10 @@ namespace BeatSaberIndependentMapsManager
                                 }
                             }
                         }
-                        if (!isFound)
-                        {
-                            debugLog("常规模式下未解析到Beat Saber安装目录？请确认您是否安装(推荐安装Everything插件，使用增强模式)");
-                        }
+                    }
+                    if (!isFound)
+                    {
+                        debugLog("常规模式下未解析到Beat Saber安装目录？请确认您是否安装(推荐安装Everything插件，使用增强模式)");
                     }
                 }
             }
@@ -759,56 +760,65 @@ namespace BeatSaberIndependentMapsManager
         }
         private void displayMusicpack(string musicPackName)
         {
-            Bitmap musicPackCover = Resources.默认;
-            switch (musicPackName)
+            Bitmap musicPackCover = null;
+            if (File.Exists(musicPackPath[musicPackName] + "\\cover.jpg"))
             {
-                case "1.菜鸡包":
-                    musicPackCover = Resources.菜鸡包;
-                    break;
-                case "排位萌新包":
-                    musicPackCover = Resources.排位萌新包;
-                    break;
-                case "热门曲目包":
-                    musicPackCover = Resources.热门包;
-                    break;
-                case "火爆曲目包":
-                    musicPackCover = Resources.超热门包;
-                    break;
-                case "谱师Joetastic":
-                    musicPackCover = Resources.Joetastic新手包;
-                    break;
-                case "bsaber.com":
-                    musicPackCover = Resources.奇妙流动包;
-                    break;
-                default:
-                    musicPackCover = Resources.默认;
-                    using (Graphics gfx = Graphics.FromImage(musicPackCover))
-                    {
-                        StringFormat format = new StringFormat()
-                        {
-                            Alignment = StringAlignment.Center,
-                            LineAlignment = StringAlignment.Center
-                        };
-                        Font font = new Font("黑体", 72, FontStyle.Bold);
-                        Brush brush = Brushes.White;
-                        gfx.DrawString(musicPackName, font, brush, new RectangleF(0, 0, musicPackCover.Width, musicPackCover.Height),format);
-                        font = new Font("黑体", 24, FontStyle.Bold);
-                        SizeF textSize = gfx.MeasureString("BSIMM自动生成@万毒不侵", font);
-                        float x = musicPackCover.Width - textSize.Width;
-                        float y = musicPackCover.Height - textSize.Height;
-                        gfx.DrawString("BSIMM自动生成@万毒不侵", font, brush, x, y);
-                    }
-                break;
+                musicPackCover = ReadImageFile(musicPackPath[musicPackName] + "\\cover.jpg");
             }
-            using (Bitmap scaleCover = new Bitmap(256,256)) {
-                using (Graphics gfx = Graphics.FromImage(scaleCover))
+            else
+            {
+                musicPackCover = Resources.默认;
+                switch (musicPackName)
                 {
-                    gfx.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                    gfx.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
-                    gfx.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
-                    gfx.DrawImage(musicPackCover, 0, 0, 256, 256);
+                    case "1.菜鸡包":
+                        musicPackCover = Resources.菜鸡包;
+                        break;
+                    case "排位萌新包":
+                        musicPackCover = Resources.排位萌新包;
+                        break;
+                    case "热门曲目包":
+                        musicPackCover = Resources.热门包;
+                        break;
+                    case "火爆曲目包":
+                        musicPackCover = Resources.超热门包;
+                        break;
+                    case "谱师Joetastic":
+                        musicPackCover = Resources.Joetastic新手包;
+                        break;
+                    case "bsaber.com":
+                        musicPackCover = Resources.奇妙流动包;
+                        break;
+                    default:
+                        musicPackCover = Resources.默认;
+                        using (Graphics gfx = Graphics.FromImage(musicPackCover))
+                        {
+                            StringFormat format = new StringFormat()
+                            {
+                                Alignment = StringAlignment.Center,
+                                LineAlignment = StringAlignment.Center
+                            };
+                            Font font = new Font("黑体", 72, FontStyle.Bold);
+                            Brush brush = Brushes.White;
+                            gfx.DrawString(musicPackName, font, brush, new RectangleF(0, 0, musicPackCover.Width, musicPackCover.Height), format);
+                            font = new Font("黑体", 24, FontStyle.Bold);
+                            SizeF textSize = gfx.MeasureString("BSIMM自动生成@万毒不侵", font);
+                            float x = musicPackCover.Width - textSize.Width;
+                            float y = musicPackCover.Height - textSize.Height;
+                            gfx.DrawString("BSIMM自动生成@万毒不侵", font, brush, x, y);
+                        }
+                        break;
                 }
-                musicPackCover = new Bitmap(scaleCover);
+                using (Bitmap scaleCover = new Bitmap(256, 256))
+                {
+                    using (Graphics gfx = Graphics.FromImage(scaleCover))
+                    {
+                        gfx.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        gfx.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                        gfx.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                        gfx.DrawImage(musicPackCover, 0, 0, 256, 256);
+                    }
+                    musicPackCover = new Bitmap(scaleCover);
+                }
             }
             Invoke(new MethodInvoker(delegate
             {
@@ -1095,6 +1105,25 @@ namespace BeatSaberIndependentMapsManager
                 btnSaveMusicPack.Enabled = true;
             }
         }
+        private Bitmap ReadImageFile(String path)
+        {
+            Bitmap bitmap = null;
+            try
+            {
+                FileStream fileStream = File.OpenRead(path);
+                Int32 filelength = 0;
+                filelength = (int)fileStream.Length;
+                Byte[] image = new Byte[filelength];
+                fileStream.Read(image, 0, filelength);
+                System.Drawing.Image result = System.Drawing.Image.FromStream(fileStream);
+                fileStream.Close();
+                bitmap = new Bitmap(result);
+            }
+            catch (Exception ex)
+            {
+            }
+            return bitmap;
+        }
 
         private void btnSaveMusicPack_Click(object sender, EventArgs e)
         {
@@ -1157,46 +1186,61 @@ namespace BeatSaberIndependentMapsManager
         {
             if (musicPackListView.Items.Count > 0)
             {
-                int index = musicPackListView.SelectedItems[0].Index;
-                if (index == -1)
+                if (musicPackListView.SelectedItems.Count > 0)
                 {
-                    MessageBox.Show("请先选择要更改封面的曲包！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-                else
-                {
-                    if(MessageBox.Show("您在曲包列表中选择了曲包，你想要导出这个曲包（是）还是导出全部曲包（否）？", "提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Information) == DialogResult.Yes)
+                    int index = musicPackListView.SelectedItems[0].Index;
+                    if (index == -1)
                     {
-                        string musicPackName = musicPackListView.Items[index].Text;
-                        savebplistDialog.ShowDialog();
-                        string path = savebplistDialog.FileName;
-                        if (path != "")
-                        {
-                            Exportbplist(path,musicPackName);
-                        }
-                        else
-                        {
-                            debugLog("未选择保存路径！");
-                        }
-                    }
-                    else if(MessageBox.Show("您在曲包列表中选择了曲包，你想要导出这个曲包还是导出全部曲包？", "提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Information) == DialogResult.No)
-                    {
-                        savebplistDialog.ShowDialog();
-                        string path = savebplistDialog.FileName;
-                        if (path != "")
-                        {
-                            Exportbplist(path);
-                        }
-                        else
-                        {
-                            debugLog("未选择保存路径！");
-                        }
+                        MessageBox.Show("请先选择要更改封面的曲包！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     }
                     else
                     {
-                       debugLog("取消导出！");
+                        DialogResult result = MessageBox.Show("您在曲包列表中选择了曲包，你想要导出这个曲包（是）还是导出全部曲包（否）？", "提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Information);
+                        if (result == DialogResult.Yes)
+                        {
+                            string musicPackName = musicPackListView.Items[index].Text;
+                            savebplistDialog.ShowDialog();
+                            string path = savebplistDialog.FileName;
+                            if (path != "")
+                            {
+                                Exportbplist(path, musicPackName);
+                            }
+                            else
+                            {
+                                debugLog("未选择保存路径！");
+                            }
+                        }
+                        else if (result == DialogResult.No)
+                        {
+                            savebplistDialog.ShowDialog();
+                            string path = savebplistDialog.FileName;
+                            if (path != "")
+                            {
+                                Exportbplist(path);
+                            }
+                            else
+                            {
+                                debugLog("未选择保存路径！");
+                            }
+                        }
+                        else
+                        {
+                            debugLog("取消导出！");
+                        }
                     }
-                    
-
+                }
+                else
+                {
+                    savebplistDialog.ShowDialog();
+                    string path = savebplistDialog.FileName;
+                    if (path != "")
+                    {
+                        Exportbplist(path);
+                    }
+                    else
+                    {
+                        debugLog("未选择保存路径！");
+                    }
                 }
             }
             else
@@ -1206,7 +1250,15 @@ namespace BeatSaberIndependentMapsManager
         }
         private void Exportbplist(string path,string musicPackName=null)
         {
-            debugLog("开始导出bplist文件：" + path + musicPackName==null ? " 曲包："+ musicPackName : "");
+            if (musicPackName != null)
+            {
+                debugLog("开始导出bplist文件：" + path + " 曲包：" + musicPackName);
+            }
+            else
+            {
+                debugLog("开始导出bplist文件：" + path);
+            }
+            
             debugLog("导出成功！");
         }
     }

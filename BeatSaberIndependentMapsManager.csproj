@@ -77,6 +77,10 @@
   <PropertyGroup>
     <GenerateManifests>true</GenerateManifests>
   </PropertyGroup>
+  <PropertyGroup />
+  <PropertyGroup>
+    <ApplicationIcon>aa2yv-q2dg9-001.ico</ApplicationIcon>
+  </PropertyGroup>
   <PropertyGroup>
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
   </PropertyGroup>
@@ -236,6 +240,9 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="assets\scripts\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="aa2yv-q2dg9-001.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
