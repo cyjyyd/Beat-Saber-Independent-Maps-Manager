@@ -72,7 +72,6 @@
             PlaybackTimer = new System.Windows.Forms.Timer(components);
             musicPackCoverDialog = new System.Windows.Forms.OpenFileDialog();
             savebplistDialog = new System.Windows.Forms.FolderBrowserDialog();
-            GcTimer = new System.Windows.Forms.Timer(components);
             BSIMMStats.SuspendLayout();
             tabMusicPackContorl.SuspendLayout();
             tabSongFolder.SuspendLayout();
@@ -490,12 +489,6 @@
             // 
             musicPackCoverDialog.Filter = "JPEG  (*.jpg)|*.jpg|Pictures (*.png)|*.png|bitmap (*.bmp)|*.bmp";
             // 
-            // GcTimer
-            // 
-            GcTimer.Enabled = true;
-            GcTimer.Interval = 1000;
-            GcTimer.Tick += GcTimer_Tick;
-            // 
             // MainForm
             // 
             AllowDrop = true;
@@ -577,6 +570,5 @@
         private System.Windows.Forms.OpenFileDialog musicPackCoverDialog;
         private System.Windows.Forms.Button btnDeduplication;
         private System.Windows.Forms.FolderBrowserDialog savebplistDialog;
-        private System.Windows.Forms.Timer GcTimer;
     }
 }

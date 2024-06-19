@@ -1291,7 +1291,25 @@ namespace BeatSaberIndependentMapsManager
 
         private async Task<string> getSongHash(SongMap songMap)
         {
-            return await songMap.GetSongHash();
+            MemoryStream allFiles = new();
+            FileStream infoFile = new FileStream(songMap.songFolder + "\\Info.dat", FileMode.Open, FileAccess.Read);
+            await infoFile.CopyToAsync(allFiles);
+            infoFile.Close();
+            await infoFile.DisposeAsync();
+            string[] files = songMap.GetDifficultiesFiles();
+            for (int i = 0; i < files.Length; i++)
+            {
+                FileStream file = new FileStream(songMap.songFolder + "\\" + files[i], FileMode.Open, FileAccess.Read);
+                await file.CopyToAsync(allFiles);
+                file.Close();
+                await file.DisposeAsync();
+            }
+            allFiles.Position = 0;
+            using SHA1 sha1 = SHA1.Create();
+            byte[] hashBytes = await sha1.ComputeHashAsync(allFiles);
+            string sha1Result = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+            await allFiles.DisposeAsync();
+            return sha1Result;
         }
 
         private void btnAutoFill_Click(object sender, EventArgs e)
@@ -1301,14 +1319,6 @@ namespace BeatSaberIndependentMapsManager
             foreach (string folder in folders)
             {
                 new Thread(() => addFolder(folder)).Start();
-            }
-        }
-
-        private void GcTimer_Tick(object sender, EventArgs e)
-        {
-            if (Process.GetCurrentProcess().PagedMemorySize64 > 1024*1024*400) 
-            {
-                GC.Collect();
             }
         }
     }
