@@ -17,6 +17,10 @@ using System.Diagnostics;
 using Microsoft.Win32;
 using System.Linq;
 using System.Xml.Linq;
+using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
+using System.Drawing.Imaging;
+using System.Security.Principal;
 namespace BeatSaberIndependentMapsManager
 {
     public partial class MainForm : Form
@@ -30,12 +34,12 @@ namespace BeatSaberIndependentMapsManager
         private byte[] bsVersions = null;
         private readonly HashSet<string> gameInstance = new();
         List<BSVerInfo> bsVerionSet = null;
-        private Dictionary<string,SongMap> delicatedSongList = new Dictionary<string, SongMap>();
-        Dictionary<string,Dictionary<string,SongMap>> musicPackInfo = new Dictionary<string, Dictionary<string, SongMap>>();
+        private Dictionary<string, SongMap> delicatedSongList = new Dictionary<string, SongMap>();
+        Dictionary<string, Dictionary<string, SongMap>> musicPackInfo = new Dictionary<string, Dictionary<string, SongMap>>();
         Dictionary<string, string> musicPackPath = new Dictionary<string, string>();
         Dictionary<string, string> BSInstancePath = new Dictionary<string, string>();
         Dictionary<string, bool[]> InstanceSongCoreReady = new Dictionary<string, bool[]>();
-        Dictionary<string,Image> musicPackCoverimgs = new Dictionary<string, Image>();
+        Dictionary<string, Image> musicPackCoverimgs = new Dictionary<string, Image>();
         WaveOut waveOut = new WaveOut();
         [DllImport("Everything64.dll", CharSet = CharSet.Unicode)]
         private static extern UInt32 Everything_SetSearch(string lpSearchString);
@@ -59,18 +63,18 @@ namespace BeatSaberIndependentMapsManager
         {
             comboBoxPlatform.SelectedIndex = 0;
             string language = cultureInfo.TwoLetterISOLanguageName;
-            this.Text= "BSIMM-独立曲包管理/编辑器 " + version + " " + author;
-            waveOut.Volume = (float)trackVolume.Value/100;
+            this.Text = "BSIMM-独立曲包管理/编辑器 " + version + " " + author;
+            waveOut.Volume = (float)trackVolume.Value / 100;
             //双语的适配以后再做
             Thread update = new Thread(updateDetect);
             update.Start();
-            if(!File.Exists("Everything64.dll"))
+            if (!File.Exists("Everything64.dll"))
             {
-                MessageBox.Show("未检测到Everything64.dll文件，请将Everything64.dll放置在程序目录下！","错误",MessageBoxButtons.OK,MessageBoxIcon.Error);
-                Environment.Exit(0);
+                debugLog("未检测到Everything64.dll文件，所有增强功能将不可用！");
+                multiInstanceDetect = false;
             }
             Process[] everythingService = Process.GetProcessesByName("Everything");
-            if (everythingService.Length > 1 || (everythingService.Length == 1 && everythingService[0].PagedMemorySize64>2048*1024))
+            if (everythingService.Length > 1 || (everythingService.Length == 1 && everythingService[0].PagedMemorySize64 > 2048 * 1024))
             {
                 debugLog("检测到Everything增强扩展，将使用增强模式检测Beat Saber实例目录");
                 debugLog("如果未检测到实例，请尝试重启Everything软件");
@@ -111,9 +115,9 @@ namespace BeatSaberIndependentMapsManager
         private bool oculusGameDetect(string path)
         {
             string gamepath = path + "\\Software\\hyperbolic-magnetism-beat-saber";
-            if (Directory.Exists(gamepath)&&File.Exists(gamepath+"\\Beat Saber.exe"))
+            if (Directory.Exists(gamepath) && File.Exists(gamepath + "\\Beat Saber.exe"))
             {
-                debugLog("检测到Beat Saber实例目录：" + gamepath );
+                debugLog("检测到Beat Saber实例目录：" + gamepath);
                 return true;
             }
             else
@@ -187,9 +191,9 @@ namespace BeatSaberIndependentMapsManager
                                     if (pirateGameDetect(beatSaberFolder))
                                     {
                                         isFound = true;
-                                        debugLog("检测到Beat Saber实例目录：" + beatSaberFolder );
+                                        debugLog("检测到Beat Saber实例目录：" + beatSaberFolder);
                                         string ver = BeatSaberVersionDetect(beatSaberFolder);
-                                        debugLog("Beat Saber版本：" + ver );
+                                        debugLog("Beat Saber版本：" + ver);
                                         if (!BSInstancePath.ContainsKey(ver))
                                         {
                                             BSInstancePath.Add(ver, beatSaberFolder);
@@ -225,25 +229,25 @@ namespace BeatSaberIndependentMapsManager
             Everything_SetRequestFlags(EVERYTHING_REQUEST_PATH | EVERYTHING_REQUEST_FILE_NAME);
             Everything_Query(true);
             var buf = new StringBuilder(300);
-            for(uint i = 0; i < Everything_GetNumResults(); i++)
+            for (uint i = 0; i < Everything_GetNumResults(); i++)
             {
                 buf.Clear();
                 Everything_GetResultFullPathName(i, buf, 300);
                 var path = Path.GetDirectoryName(buf.ToString())!;
                 if (gameInstance.Contains(path) || path.Contains("Prefetch") || path.Contains("$RECYCLE.BIN") || path.Contains("OneDrive") || File.GetAttributes(buf.ToString()).HasFlag(FileAttributes.Directory)) continue;
                 gameInstance.Add(path);
-                var searchmod =  (string path) =>
+                var searchmod = (string path) =>
                 {
                     try
                     {
                         var gamepath = path + "\\Beat Saber.exe";
                         if (File.Exists(gamepath))
                         {
-                            if(pirateGameDetect(path))
+                            if (pirateGameDetect(path))
                             {
-                                debugLog("检测到Beat Saber实例目录：" + path );
+                                debugLog("检测到Beat Saber实例目录：" + path);
                                 string ver = BeatSaberVersionDetect(path);
-                                debugLog("Beat Saber版本：" + ver );
+                                debugLog("Beat Saber版本：" + ver);
                                 if (!BSInstancePath.ContainsKey(ver))
                                 {
                                     BSInstancePath.Add(ver, path);
@@ -255,11 +259,11 @@ namespace BeatSaberIndependentMapsManager
                                     BSInstancePath.Add(Rename(ver), path);
                                     InstanceSongCoreReady.Add(Rename(ver), modCheck(path));
                                 }
-                                
+
                             }
                             else
                             {
-                                MessageBox.Show("检测到盗版Beat Saber游戏，本软件只支持正版游戏的曲包管理，程序将退出！","错误",MessageBoxButtons.OK,MessageBoxIcon.Error);
+                                MessageBox.Show("检测到盗版Beat Saber游戏，本软件只支持正版游戏的曲包管理，程序将退出！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                                 Environment.Exit(0);
                             }
                         }
@@ -278,19 +282,19 @@ namespace BeatSaberIndependentMapsManager
             string pendingpath = path + "\\IPA\\Pending";
             string[] mods = { "\\SiraUtil.dll", "\\BSML.dll", "\\SongCore.dll" };
             bool[] Modstatus = new bool[5];// 0:SiraUtil 1:BSML 2:SongCore 3:Installed or Pending 4:FileNotFound
-            for(int i = 0; i < mods.Length; i++)
+            for (int i = 0; i < mods.Length; i++)
             {
                 Modstatus[i] = File.Exists(modpath + mods[i]);
             }
-            if(Modstatus[0] && Modstatus[1] && Modstatus[2])
+            if (Modstatus[0] && Modstatus[1] && Modstatus[2])
             {
                 Modstatus[3] = true;
             }
             else
             {
-                for(int i = 0; i < mods.Length; i++)
+                for (int i = 0; i < mods.Length; i++)
                 {
-                    Modstatus[i]= File.Exists(pendingpath + mods[i]);
+                    Modstatus[i] = File.Exists(pendingpath + mods[i]);
                 }
                 if (Modstatus[0] && Modstatus[1] && Modstatus[2])
                 {
@@ -305,14 +309,14 @@ namespace BeatSaberIndependentMapsManager
             string globalManager = path + "\\Beat Saber_Data\\globalgamemanagers";
             string globalManagerContent = null;
             string formatContent = null;
-            if (!File.Exists(globalManager)) 
+            if (!File.Exists(globalManager))
             {
                 debugLog("未检测到globalgamemanagers文件，无法检测Beat Saber版本");
                 return "未知版本";
             }
             else
             {
-                globalManagerContent = Encoding.UTF8.GetString(File.ReadAllBytes(globalManager)).Substring(0,5000);
+                globalManagerContent = Encoding.UTF8.GetString(File.ReadAllBytes(globalManager)).Substring(0, 5000);
                 string pattern = @"[\w\.]+";
                 MatchCollection matches = Regex.Matches(globalManagerContent, pattern);
                 foreach (Match match in matches)
@@ -369,9 +373,9 @@ namespace BeatSaberIndependentMapsManager
         }
         private void debugLog(string text)
         {
-            Invoke(new MethodInvoker(delegate
+            Invoke(new System.Windows.Forms.MethodInvoker(delegate
             {
-                txtDebug.AppendText(DateTime.Now.ToString() + ":" + text+"\r\n");
+                txtDebug.AppendText(DateTime.Now.ToString() + ":" + text + "\r\n");
             }));
         }
         public static string GetFileMD5(string filePath)
@@ -422,7 +426,7 @@ namespace BeatSaberIndependentMapsManager
             else return false;
         }
 
-        private void DragEvent(object sender,DragEventArgs e)
+        private void DragEvent(object sender, DragEventArgs e)
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
@@ -435,8 +439,7 @@ namespace BeatSaberIndependentMapsManager
         }
         private void DropEvent(object sender, DragEventArgs e)
         {
-            BSIMMProgress.ProgressBar.Value = 0;
-            BSIMMStatusText.Text = "分析歌单目录中......";
+            BSIMMStatusUpdate("解析：", "正在解析拖放文件夹", 0);
             string[] folderPaths = ((string[])e.Data.GetData(DataFormats.FileDrop));
             List<string> verifiedPaths = new List<string>();
             for (int i = 0; i < folderPaths.Length; i++)
@@ -450,18 +453,17 @@ namespace BeatSaberIndependentMapsManager
                     debugLog("您拖放的路径：'" + folderPaths[i] + "'似乎不是文件夹!");
                     BSIMMStatusText.Text = "'" + folderPaths[i] + "'不是文件夹!跳过添加";
                 }
-                BSIMMProgress.ProgressBar.Value += (int)(100 / folderPaths.Length);
             }
             for (int i = 0; i < verifiedPaths.Count; i++)
             {
-                addFolder(verifiedPaths[i]);
+                int localI = i;
+                Task.Run(() => addFolder(verifiedPaths[localI]));
             }
-            BSIMMProgress.ProgressBar.Value = 100;
         }
         private void btnOpenFolder_Click(object sender, EventArgs e)
         {
             BSIMMFolderBrowser.ShowDialog();
-            if(BSIMMFolderBrowser.SelectedPath == "")
+            if (BSIMMFolderBrowser.SelectedPath == "")
             {
                 return;
             }
@@ -479,7 +481,11 @@ namespace BeatSaberIndependentMapsManager
                     BSIMMStatusText.Text = "'" + folderPaths[i] + "'不是文件夹!跳过添加";
                 }
             }
-            new Thread(() => addFolder(verifiedPaths[0])).Start();
+            for (int i = 0; i < verifiedPaths.Count; i++)
+            {
+                int localI = i;
+                Task.Run(() => addFolder(verifiedPaths[localI]));
+            }
         }
 
         private void addFolder(string path)
@@ -488,9 +494,9 @@ namespace BeatSaberIndependentMapsManager
             switch (depth)
             {
                 case 0:
-                    if(addDelicatedSong(path)==2)
+                    if (addDelicatedSong(path) == 2)
                     {
-                        debugLog("该目录只有一首歌曲，将添加到独立歌曲列表中：" + path );
+                        debugLog("该目录只有一首歌曲，将添加到独立歌曲列表中：" + path);
                     }
                     break;
                 case 1:
@@ -518,7 +524,7 @@ namespace BeatSaberIndependentMapsManager
             DirectoryInfo di = new DirectoryInfo(folderPath);
             foreach (DirectoryInfo subDir in di.GetDirectories())
             {
-                if(subDir.GetDirectories().Length==0 && subDir.GetFiles().Length == 0)
+                if (subDir.GetDirectories().Length == 0 && subDir.GetFiles().Length == 0)
                 {
                     return maxDepth;
                 }
@@ -534,7 +540,7 @@ namespace BeatSaberIndependentMapsManager
         {
             string pattern = @"\[([0-9]+)\]$";
             Match match = Regex.Match(str, pattern);
-            if(match.Success)
+            if (match.Success)
             {
                 int duplicateCount = Convert.ToInt32(match.Groups[1].Value);
                 duplicateCount++;
@@ -560,7 +566,7 @@ namespace BeatSaberIndependentMapsManager
                 return false;
             }
         }
-        private int addDelicatedSong(string mapDir,string musicPackName = null)
+        private int addDelicatedSong(string mapDir, string musicPackName = null)
         {
             string language = cultureInfo.TwoLetterISOLanguageName;
             DirectoryInfo dir = new DirectoryInfo(mapDir);
@@ -580,7 +586,7 @@ namespace BeatSaberIndependentMapsManager
             {
                 debugLog("未知的bsr! 目录" + mapDir + "可能不是歌曲谱面目录！请检查文件夹的命名格式！");
             }
-            if (File.Exists(mapDir + "\\Info.dat")||File.Exists(mapDir + "\\Info.json"))
+            if (File.Exists(mapDir + "\\Info.dat") || File.Exists(mapDir + "\\Info.json"))
             {
                 byte[] mapInfo = File.ReadAllBytes(mapDir + "\\Info.dat");
                 Dictionary<string, object> mapStruct = new Dictionary<string, object>();
@@ -595,14 +601,14 @@ namespace BeatSaberIndependentMapsManager
                     debugLog("警告:解析歌曲信息文件失败！" + mapDir + "目录下的info.dat或info.json文件损坏！");
                     return 0;
                 }
-                catch(Exception)
+                catch (Exception)
                 {
                     debugLog("警告:解析歌曲信息文件失败！" + mapDir + "下的文件可能被锁定或占用！");
                     return 0;
                 }
                 if (mapIntergrityCheck(mapDir, songMap))
                 {
-                    if(musicPackName!=null)
+                    if (musicPackName != null)
                     {
                         if (musicPackInfo[musicPackName].ContainsKey(bsr))
                         {
@@ -621,14 +627,14 @@ namespace BeatSaberIndependentMapsManager
                             musicPackInfo[musicPackName].Add(newBsr, songMap);
                             return 3;
                         }
-                        else 
-                        { 
-                            musicPackInfo[musicPackName].Add(bsr, songMap);            
+                        else
+                        {
+                            musicPackInfo[musicPackName].Add(bsr, songMap);
                         }
                     }
                     else
                     {
-                        if(delicatedSongList.ContainsKey(bsr))
+                        if (delicatedSongList.ContainsKey(bsr))
                         {
                             debugLog("警告:检测到重复歌曲：" + bsr + "，将不会添加到独立歌曲列表中");
                             return 3;
@@ -648,31 +654,31 @@ namespace BeatSaberIndependentMapsManager
             }
         }
 
-        private bool mapIntergrityCheck(string mapDir,SongMap map)
+        private bool mapIntergrityCheck(string mapDir, SongMap map)
         {
             string[] mapStruct = map.GetDifficultiesFiles();
             string coverImg = map._coverImageFilename;
             string musicFile = map._songFilename;
             if (!File.Exists(mapDir + "\\" + coverImg))
             {
-                debugLog("警告:检测到缺失封面文件：" + coverImg );
+                debugLog("警告:检测到缺失封面文件：" + coverImg);
                 return false;
             }
             if (!File.Exists(mapDir + "\\" + musicFile))
             {
-                debugLog("警告:检测到缺失音乐文件：" + musicFile );
+                debugLog("警告:检测到缺失音乐文件：" + musicFile);
                 return false;
             }
             foreach (string mapFile in mapStruct)
             {
                 if (!File.Exists(mapDir + "\\" + mapFile))
                 {
-                    debugLog("警告:检测到缺失谱面文件：" + mapFile );
+                    debugLog("警告:检测到缺失谱面文件：" + mapFile);
                     return false;
                 }
             }
             return true;
-            
+
         }
         private void addMusicPack(string path)
         {
@@ -688,7 +694,7 @@ namespace BeatSaberIndependentMapsManager
             {
                 musicPackName = match.Groups[1].Value;
                 debugLog("获取到曲包名称【" + musicPackName + "】");
-                if(musicPackInfo.ContainsKey(musicPackName))
+                if (musicPackInfo.ContainsKey(musicPackName))
                 {
                     debugLog("警告:检测到重复括号内曲包命名：" + musicPackName + "，使用完整目录名称");
                     musicPackName = new DirectoryInfo(path).Name;
@@ -719,7 +725,7 @@ namespace BeatSaberIndependentMapsManager
             BSIMMStatusUpdate("解析：", "正在解析曲包：" + musicPackName, 0);
             foreach (string mapDir in mapsDir)
             {
-                switch (addDelicatedSong(mapDir,musicPackName))
+                switch (addDelicatedSong(mapDir, musicPackName))
                 {
                     case 1:
                         intergrityCount++;
@@ -735,7 +741,7 @@ namespace BeatSaberIndependentMapsManager
                         break;
                 }
             }
-            if(mapsCount==0)
+            if (mapsCount == 0)
             {
                 debugLog("警告:未检测到完整歌曲目录！将不会添加曲包");
                 musicPackInfo.Remove(musicPackName);
@@ -743,15 +749,15 @@ namespace BeatSaberIndependentMapsManager
             }
             else
             {
-                debugLog("曲包:" + musicPackName + " 检测到" + mapsCount + "个完整歌曲目录  "+duplicateCount+"个重复歌曲目录  "+intergrityCount+"个不完整目录 "+ otherCount+ "个非曲包目录"); 
+                debugLog("曲包:" + musicPackName + " 检测到" + mapsCount + "个完整歌曲目录  " + duplicateCount + "个重复歌曲目录  " + intergrityCount + "个不完整目录 " + otherCount + "个非曲包目录");
                 musicPackPath.Add(musicPackName, path);
                 displayMusicpack(musicPackName);
                 BSIMMStatusUpdate("就绪", "曲包：" + musicPackName + "添加完成", 100);
             }
         }
-        private void BSIMMStatusUpdate(string action,string status,int progress)
+        private void BSIMMStatusUpdate(string action, string status, int progress)
         {
-            Invoke(new MethodInvoker(delegate
+            Invoke(new System.Windows.Forms.MethodInvoker(delegate
             {
                 BSIMMActionText.Text = action;
                 BSIMMStatusText.Text = status;
@@ -820,7 +826,7 @@ namespace BeatSaberIndependentMapsManager
                     musicPackCover = new Bitmap(scaleCover);
                 }
             }
-            Invoke(new MethodInvoker(delegate
+            Invoke(new System.Windows.Forms.MethodInvoker(delegate
             {
                 musicPackCoverimgs.Add(musicPackName, musicPackCover);
                 musicPackimg.Images.Add(musicPackName, musicPackCover);
@@ -835,7 +841,7 @@ namespace BeatSaberIndependentMapsManager
             currentMusicPack = musicPackName;
             songListinited = false;
             Dictionary<string, SongMap> songList = musicPackInfo[musicPackName];
-            Invoke(new MethodInvoker(delegate
+            Invoke(new System.Windows.Forms.MethodInvoker(delegate
             {
                 songListView.BeginUpdate();
                 songListView.Items.Clear();
@@ -880,7 +886,7 @@ namespace BeatSaberIndependentMapsManager
                 BSIMMStatusText.Text = "已暂停";
                 PlaybackTimer.Enabled = false;
             }
-            else if(btnPlay.Text == "播放" &&waveOut.PlaybackState==PlaybackState.Paused)
+            else if (btnPlay.Text == "播放" && waveOut.PlaybackState == PlaybackState.Paused)
             {
                 waveOut.Resume();
                 btnPlay.Text = "暂停";
@@ -888,12 +894,12 @@ namespace BeatSaberIndependentMapsManager
                 BSIMMStatusText.Text = "恢复播放";
                 PlaybackTimer.Enabled = true;
             }
-            else if (songListView.Items.Count==0)
+            else if (songListView.Items.Count == 0)
             {
                 MessageBox.Show("请先点击左侧曲包以获取歌曲列表！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            else if(songListView.SelectedItems.Count == 0)
+            else if (songListView.SelectedItems.Count == 0)
             {
                 MessageBox.Show("请先选择要播放的歌曲！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -936,17 +942,14 @@ namespace BeatSaberIndependentMapsManager
 
         private void btnExit_Click(object sender, EventArgs e)
         {
-            if (MessageBox.Show("确定要退出吗？", "提示", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-            {
-                Environment.Exit(0);
-            }
+            Environment.Exit(0);
         }
 
         private void PlaybackTimer_Tick(object sender, EventArgs e)
         {
-            if(waveOut.PlaybackState == PlaybackState.Stopped) 
-            { 
-                btnPlay.Text = "播放"; 
+            if (waveOut.PlaybackState == PlaybackState.Stopped)
+            {
+                btnPlay.Text = "播放";
                 BSIMMActionText.Text = "播放器：";
                 BSIMMStatusText.Text = "已停止";
                 PlaybackTimer.Enabled = false;
@@ -994,12 +997,12 @@ namespace BeatSaberIndependentMapsManager
                 }
                 else
                 {
-                    MessageBox.Show("请先选择要设置封面的曲包！","提示",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+                    MessageBox.Show("请先选择要设置封面的曲包！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             }
             else
             {
-                MessageBox.Show("请先添加曲包目录！","提示",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+                MessageBox.Show("请先添加曲包目录！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
@@ -1014,33 +1017,29 @@ namespace BeatSaberIndependentMapsManager
                 SongMap playSong = musicPackInfo[musicPackListView.SelectedItems[0].Text][playKey];
                 StringBuilder diffinfo = new StringBuilder();
                 StringBuilder difffile = new StringBuilder();
-                foreach(string diff in playSong.GetDifficulties())
+                foreach (string diff in playSong.GetDifficulties())
                 {
                     diffinfo.Append(diff + " ");
                 }
-                foreach(string files in playSong.GetDifficultiesFiles())
+                foreach (string files in playSong.GetDifficultiesFiles())
                 {
                     difffile.Append(files + " ");
                 }
-                string info = "歌曲名称：" + playSong._songName  +
-                    "\n歌曲作者：" + playSong._songAuthorName  +
-                    "\n谱面作者：" + playSong._levelAuthorName  +
-                    "\nBPM：" + playSong._beatsPerMinute  +
-                    "\n难度：" + diffinfo.ToString()  +
-                    "\n谱面文件：" + difffile.ToString()  +
-                    "\n谱面文件夹：" + playSong.songFolder ;
+                string info = "歌曲名称：" + playSong._songName +
+                    "\n歌曲作者：" + playSong._songAuthorName +
+                    "\n谱面作者：" + playSong._levelAuthorName +
+                    "\nBPM：" + playSong._beatsPerMinute +
+                    "\n难度：" + diffinfo.ToString() +
+                    "\n谱面文件：" + difffile.ToString() +
+                    "\n谱面文件夹：" + playSong.songFolder;
                 MessageBox.Show(info, "歌曲信息", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            if (MessageBox.Show("确定要退出吗？", "提示", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+            if (MessageBox.Show("确定要退出吗？", "提示", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.No)
             {
-                Environment.Exit(0);
-            }
-            else 
-            {                 
                 e.Cancel = true;
             }
         }
@@ -1049,23 +1048,23 @@ namespace BeatSaberIndependentMapsManager
         {
             if (duplicateAdvance)
             {
-               MessageBox.Show("该功能尚未实现！","提示",MessageBoxButtons.OK,MessageBoxIcon.Information);
+                MessageBox.Show("该功能尚未实现！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else
             {
-                if(musicPackListView.Items.Count==0)
+                if (musicPackListView.Items.Count == 0)
                 {
                     MessageBox.Show("请先添加曲包目录！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-                else if(musicPackListView.SelectedItems.Count==0)
+                else if (musicPackListView.SelectedItems.Count == 0)
                 {
                     MessageBox.Show("请先选择要去重的曲包！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
                 else
                 {
-                    if (MessageBox.Show("一键去重将默认保留检索到的第一个曲目，确认继续吗（可在设置中开启高级模式选择要保留的曲目）","提示",MessageBoxButtons.YesNo,MessageBoxIcon.Question) == DialogResult.Yes)
+                    if (MessageBox.Show("一键去重将默认保留检索到的第一个曲目，确认继续吗（可在设置中开启高级模式选择要保留的曲目）", "提示", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                     {
                         foreach (ListViewItem list in songListView.Items)
                         {
@@ -1080,7 +1079,7 @@ namespace BeatSaberIndependentMapsManager
                                 }
                                 catch (Exception)
                                 {
-                                    debugLog("删除文件夹失败：" + currentFolder + " 文件夹可能不存在或文件被其他程序占用！ ");   
+                                    debugLog("删除文件夹失败：" + currentFolder + " 文件夹可能不存在或文件被其他程序占用！ ");
                                 }
                             }
                         }
@@ -1100,8 +1099,8 @@ namespace BeatSaberIndependentMapsManager
             {
                 btnSaveMusicPack.Enabled = false;
             }
-            else 
-            { 
+            else
+            {
                 btnSaveMusicPack.Enabled = true;
             }
         }
@@ -1127,7 +1126,7 @@ namespace BeatSaberIndependentMapsManager
 
         private void btnSaveMusicPack_Click(object sender, EventArgs e)
         {
-            if(musicPackListView.Items.Count>0)
+            if (musicPackListView.Items.Count > 0)
             {
                 XElement rootElement = new XElement("folders");
                 foreach (ListViewItem musicPack in musicPackListView.Items)
@@ -1200,7 +1199,7 @@ namespace BeatSaberIndependentMapsManager
                         {
                             string musicPackName = musicPackListView.Items[index].Text;
                             savebplistDialog.ShowDialog();
-                            string path = savebplistDialog.FileName;
+                            string path = savebplistDialog.SelectedPath;
                             if (path != "")
                             {
                                 Exportbplist(path, musicPackName);
@@ -1213,7 +1212,7 @@ namespace BeatSaberIndependentMapsManager
                         else if (result == DialogResult.No)
                         {
                             savebplistDialog.ShowDialog();
-                            string path = savebplistDialog.FileName;
+                            string path = savebplistDialog.SelectedPath;
                             if (path != "")
                             {
                                 Exportbplist(path);
@@ -1232,7 +1231,7 @@ namespace BeatSaberIndependentMapsManager
                 else
                 {
                     savebplistDialog.ShowDialog();
-                    string path = savebplistDialog.FileName;
+                    string path = savebplistDialog.SelectedPath;
                     if (path != "")
                     {
                         Exportbplist(path);
@@ -1248,18 +1247,69 @@ namespace BeatSaberIndependentMapsManager
                 MessageBox.Show("请先添加曲包目录！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
-        private void Exportbplist(string path,string musicPackName=null)
+        private void Exportbplist(string path, string musicPackName = null)
         {
             if (musicPackName != null)
             {
                 debugLog("开始导出bplist文件：" + path + " 曲包：" + musicPackName);
+                Task.Run(() => saveMusicPackSonginfo(musicPackName, path));
             }
             else
             {
                 debugLog("开始导出bplist文件：" + path);
+                foreach (string bplistName in musicPackInfo.Keys)
+                {
+                    Task.Run(() => saveMusicPackSonginfo(bplistName, path));
+                }
             }
-            
-            debugLog("导出成功！");
+        }
+        public static string ImageToBase64(Image image, ImageFormat format)
+        {
+            using (var memoryStream = new MemoryStream())
+            {
+                image.Save(memoryStream, format);
+                byte[] imageBytes = memoryStream.ToArray();
+                return Convert.ToBase64String(imageBytes);
+            }
+        }
+        private async Task saveMusicPackSonginfo(string musicPackName, string path)
+        {
+            string imgBytes = "data:image/jpg;base64," + ImageToBase64(musicPackCoverimgs[musicPackName], ImageFormat.Jpeg);
+            string author = Environment.UserName + "使用BSIMM@万毒不侵 生成";
+            string description = "本歌单由" + Environment.UserName + "使用BSIMM生成\r\nBSIMM由万毒不侵开发，开源且免费，如果你是购买的请要求商家退款\r\n项目地址：https://github.com/cyjyyd/Beat-Saber-Independent-Maps-Manager";
+            PlayList playList = new PlayList(musicPackName, author, description, imgBytes);
+            foreach (SongMap song in musicPackInfo[musicPackName].Values)
+            {
+                playList.AddSongHash(await getSongHash(song));
+            }
+            FileStream output = File.Create(path + "\\" + musicPackName + ".bplist");
+            byte[] playListContent = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(playList));
+            output.Write(playListContent, 0, playListContent.Length);//TODO 测试bplist导出
+            debugLog("曲包:" + musicPackName + "导出成功！路径：" + path);
+            output.Close(); output.Dispose();
+        }
+
+        private async Task<string> getSongHash(SongMap songMap)
+        {
+            return await songMap.GetSongHash();
+        }
+
+        private void btnAutoFill_Click(object sender, EventArgs e)
+        {
+            debugLog("开始自动填充曲包列表，自动读取程序所在目录.....");
+            string[] folders = Directory.GetDirectories(Application.StartupPath);
+            foreach (string folder in folders)
+            {
+                new Thread(() => addFolder(folder)).Start();
+            }
+        }
+
+        private void GcTimer_Tick(object sender, EventArgs e)
+        {
+            if (Process.GetCurrentProcess().PagedMemorySize64 > 1024*1024*400) 
+            {
+                GC.Collect();
+            }
         }
     }
 }

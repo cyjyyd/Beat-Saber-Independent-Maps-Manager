@@ -1,9 +1,14 @@
 ﻿using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Pipes;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Forms;
+using Windows.Foundation;
 
 namespace BeatSaberIndependentMapsManager
 {
@@ -143,6 +148,23 @@ namespace BeatSaberIndependentMapsManager
                 }
             }
             return difficulties.ToArray();
+        }
+        public async Task<string> GetSongHash()
+        {
+            using MemoryStream allFiles = new MemoryStream();
+            using FileStream infoFile = new FileStream(this.songfolder + "\\Info.dat", FileMode.Open, FileAccess.Read);
+            await infoFile.CopyToAsync(allFiles);
+            string[] files = GetDifficultiesFiles();
+            for (int i = 0; i < files.Length; i++)
+            {
+                using FileStream file = new FileStream(this.songfolder + "\\" + files[i], FileMode.Open, FileAccess.Read);
+                await file.CopyToAsync(allFiles);
+            }
+            allFiles.Position = 0;
+            using SHA1 sha1 = SHA1.Create();
+            byte[] hashBytes = await sha1.ComputeHashAsync(allFiles);
+            string sha1Result = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+            return sha1Result;
         }
     }
 }
