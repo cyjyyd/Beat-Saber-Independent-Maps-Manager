@@ -315,7 +315,7 @@
             // bsr
             // 
             bsr.Text = "bsr";
-            bsr.Width = 42;
+            bsr.Width = 50;
             // 
             // bpm
             // 
@@ -325,6 +325,7 @@
             // musicPackListView
             // 
             musicPackListView.AllowDrop = true;
+            musicPackListView.LabelEdit = true;
             musicPackListView.LargeImageList = musicPackimg;
             musicPackListView.Location = new System.Drawing.Point(9, 41);
             musicPackListView.Margin = new System.Windows.Forms.Padding(4);
@@ -333,10 +334,11 @@
             musicPackListView.Size = new System.Drawing.Size(339, 348);
             musicPackListView.TabIndex = 12;
             musicPackListView.UseCompatibleStateImageBehavior = false;
-            musicPackListView.ItemMouseHover += musicPackListView_ItemMouseHover;
+            musicPackListView.AfterLabelEdit += musicPackListView_AfterLabelEdit;
             musicPackListView.Click += musicPackListView_Click;
             musicPackListView.DragDrop += DropEvent;
             musicPackListView.DragEnter += DragEvent;
+            musicPackListView.MouseDoubleClick += musicPackListView_MouseDoubleClick;
             // 
             // musicPackimg
             // 
