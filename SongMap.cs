@@ -9,121 +9,85 @@ namespace BeatSaberIndependentMapsManager
 {
     internal class SongMap
     {
-        private string version;
-        private string songName;
-        private string songSubName;
-        private string songAuthorName;
-        private string levelAuthorName;
-        private double beatsPerMinute;
-        private double previewStartTime;
-        private double previewDuration;
-        private string coverImagePath;
-        private string environmentName;
-        private JArray difficultyBeatmapSets;
-        private JObject customData;
-        private double shuffle;
-        private double shufflePeriod;
-        private string songFilename;
-        private string coverImageFilename;
-        private double songTimeOffset;
-        private string songfolder;
 
         public SongMap() { }
         public string _version
-        {
-            get { return version; }
-            set { version = value; }
+        { 
+            get; set; 
         }
         public string _songName
         {
-            get { return songName; }
-            set { songName = value; }
+            get; set;
         }
         public string _songSubName
         {
-            get { return songSubName; }
-            set { songSubName = value; }
+            get; set;
         }
         public string _songAuthorName
         {
-            get { return songAuthorName; }
-            set { songAuthorName = value; }
+            get; set;
         }
         public string _levelAuthorName
         {
-            get { return levelAuthorName; }
-            set { levelAuthorName = value; }
+            get; set;
         }
         public double _beatsPerMinute
         {
-            get { return beatsPerMinute; }
-            set { beatsPerMinute = value; }
+            get; set;
         }
         public double _previewStartTime
         {
-            get { return previewStartTime; }
-            set { previewStartTime = value; }
+            get; set;
         }
         public double _previewDuration
         {
-            get { return previewDuration; }
-            set { previewDuration = value; }
+            get; set;
         }
         public string _coverImagePath
         {
-            get { return coverImagePath; }
-            set { coverImagePath = value; }
+            get; set;
         }
         public string _environmentName
         {
-            get { return environmentName; }
-            set { environmentName = value; }
+            get; set;
         }
         public JArray _difficultyBeatmapSets
         {
-            get { return difficultyBeatmapSets; }
-            set { difficultyBeatmapSets = value; }
+            get; set;
         }
         public JObject _customData
         {
-            get { return customData; }
-            set { customData = value; }
+            get; set;
         }
         public double _shuffle
         {
-            get { return shuffle; }
-            set { shuffle = value; }
+            get; set;
         }
         public double _shufflePeriod
         {
-            get { return shufflePeriod; }
-            set { shufflePeriod = value; }
+            get; set;
         }
         public string _songFilename
         {
-            get { return songFilename; }
-            set { songFilename = value; }
+            get; set;
         }
         public string _coverImageFilename
         {
-            get { return coverImageFilename; }
-            set { coverImageFilename = value; }
+            get; set;
         }
         public double _songTimeOffset
         {
-            get { return songTimeOffset; }
-            set { songTimeOffset = value; }
+            get; set;
         }
         public string songFolder
         {
-            get { return songfolder; }
-            set { songfolder = value; }
+            get; set;
         }
 
         public string[] GetDifficulties()
         {
             List<string> difficulties = new List<string>();
-            foreach (JObject difficultyBeatmapSet in difficultyBeatmapSets)
+            foreach (JObject difficultyBeatmapSet in _difficultyBeatmapSets)
             {
                 foreach (JObject difficultyBeatmap in (JArray)difficultyBeatmapSet["_difficultyBeatmaps"])
                 {
@@ -135,7 +99,7 @@ namespace BeatSaberIndependentMapsManager
         public string[] GetDifficultiesFiles()
         {
             List<string> difficulties = new List<string>();
-            foreach (JObject difficultyBeatmapSet in difficultyBeatmapSets)
+            foreach (JObject difficultyBeatmapSet in _difficultyBeatmapSets)
             {
                 foreach (JObject difficultyBeatmap in (JArray)difficultyBeatmapSet["_difficultyBeatmaps"])
                 {

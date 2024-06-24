@@ -60,6 +60,17 @@
             lblMusicPack = new System.Windows.Forms.Label();
             tabBSVer = new System.Windows.Forms.TabPage();
             tabDelicatedSong = new System.Windows.Forms.TabPage();
+            button1 = new System.Windows.Forms.Button();
+            btnPlay2 = new System.Windows.Forms.Button();
+            label2 = new System.Windows.Forms.Label();
+            trackVolume2 = new System.Windows.Forms.TrackBar();
+            btnMigrateFolder = new System.Windows.Forms.Button();
+            btnMigrateList = new System.Windows.Forms.Button();
+            DelicatedSongListView = new System.Windows.Forms.ListView();
+            columnHeader1 = new System.Windows.Forms.ColumnHeader();
+            columnHeader2 = new System.Windows.Forms.ColumnHeader();
+            columnHeader3 = new System.Windows.Forms.ColumnHeader();
+            columnHeader4 = new System.Windows.Forms.ColumnHeader();
             tabFolderandList = new System.Windows.Forms.TabPage();
             btnSetting = new System.Windows.Forms.Button();
             comboBoxPlatform = new System.Windows.Forms.ComboBox();
@@ -76,6 +87,8 @@
             tabMusicPackContorl.SuspendLayout();
             tabSongFolder.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)trackVolume).BeginInit();
+            tabDelicatedSong.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)trackVolume2).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             SuspendLayout();
             // 
@@ -117,7 +130,11 @@
             txtDebug.ReadOnly = true;
             txtDebug.Size = new System.Drawing.Size(693, 75);
             txtDebug.TabIndex = 4;
-            txtDebug.Text = "程序日志：日志文件将同步到软件目录下*.log文件\n";
+            txtDebug.Text = "";
+            // 
+            // BSIMMFolderBrowser
+            // 
+            BSIMMFolderBrowser.Description = "请选择导入\\导出目录";
             // 
             // btnOpenFolder
             // 
@@ -165,6 +182,7 @@
             tabMusicPackContorl.SelectedIndex = 0;
             tabMusicPackContorl.Size = new System.Drawing.Size(697, 497);
             tabMusicPackContorl.TabIndex = 8;
+            tabMusicPackContorl.SelectedIndexChanged += tabMusicPackContorl_SelectedIndexChanged;
             // 
             // tabSongFolder
             // 
@@ -381,6 +399,13 @@
             // 
             // tabDelicatedSong
             // 
+            tabDelicatedSong.Controls.Add(button1);
+            tabDelicatedSong.Controls.Add(btnPlay2);
+            tabDelicatedSong.Controls.Add(label2);
+            tabDelicatedSong.Controls.Add(trackVolume2);
+            tabDelicatedSong.Controls.Add(btnMigrateFolder);
+            tabDelicatedSong.Controls.Add(btnMigrateList);
+            tabDelicatedSong.Controls.Add(DelicatedSongListView);
             tabDelicatedSong.Location = new System.Drawing.Point(4, 26);
             tabDelicatedSong.Margin = new System.Windows.Forms.Padding(4);
             tabDelicatedSong.Name = "tabDelicatedSong";
@@ -388,6 +413,104 @@
             tabDelicatedSong.TabIndex = 2;
             tabDelicatedSong.Text = "散装歌曲列表";
             tabDelicatedSong.UseVisualStyleBackColor = true;
+            // 
+            // button1
+            // 
+            button1.Location = new System.Drawing.Point(3, 433);
+            button1.Name = "button1";
+            button1.Size = new System.Drawing.Size(112, 30);
+            button1.TabIndex = 27;
+            button1.Text = "全盘扫描（增强）";
+            button1.UseVisualStyleBackColor = true;
+            // 
+            // btnPlay2
+            // 
+            btnPlay2.Location = new System.Drawing.Point(379, 430);
+            btnPlay2.Margin = new System.Windows.Forms.Padding(4);
+            btnPlay2.Name = "btnPlay2";
+            btnPlay2.Size = new System.Drawing.Size(100, 30);
+            btnPlay2.TabIndex = 26;
+            btnPlay2.Text = "播放";
+            btnPlay2.UseVisualStyleBackColor = true;
+            btnPlay2.Click += btnPlay2_Click;
+            // 
+            // label2
+            // 
+            label2.AutoSize = true;
+            label2.Location = new System.Drawing.Point(487, 435);
+            label2.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            label2.Name = "label2";
+            label2.Size = new System.Drawing.Size(35, 17);
+            label2.TabIndex = 25;
+            label2.Text = "音量:";
+            // 
+            // trackVolume2
+            // 
+            trackVolume2.BackColor = System.Drawing.Color.White;
+            trackVolume2.Location = new System.Drawing.Point(530, 433);
+            trackVolume2.Margin = new System.Windows.Forms.Padding(4);
+            trackVolume2.Maximum = 100;
+            trackVolume2.MaximumSize = new System.Drawing.Size(155, 30);
+            trackVolume2.Name = "trackVolume2";
+            trackVolume2.Size = new System.Drawing.Size(155, 30);
+            trackVolume2.TabIndex = 24;
+            trackVolume2.TickStyle = System.Windows.Forms.TickStyle.None;
+            trackVolume2.Value = 20;
+            trackVolume2.Scroll += trackVolume2_Scroll;
+            // 
+            // btnMigrateFolder
+            // 
+            btnMigrateFolder.Location = new System.Drawing.Point(227, 433);
+            btnMigrateFolder.Name = "btnMigrateFolder";
+            btnMigrateFolder.Size = new System.Drawing.Size(100, 30);
+            btnMigrateFolder.TabIndex = 16;
+            btnMigrateFolder.Text = "整合到歌曲目录";
+            btnMigrateFolder.UseVisualStyleBackColor = true;
+            btnMigrateFolder.Click += btnMigrateFolder_Click;
+            // 
+            // btnMigrateList
+            // 
+            btnMigrateList.Location = new System.Drawing.Point(121, 433);
+            btnMigrateList.Name = "btnMigrateList";
+            btnMigrateList.Size = new System.Drawing.Size(100, 30);
+            btnMigrateList.TabIndex = 15;
+            btnMigrateList.Text = "整合为歌单文件";
+            btnMigrateList.UseVisualStyleBackColor = true;
+            btnMigrateList.Click += btnMigrateList_Click;
+            // 
+            // DelicatedSongListView
+            // 
+            DelicatedSongListView.AllowDrop = true;
+            DelicatedSongListView.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] { columnHeader1, columnHeader2, columnHeader3, columnHeader4 });
+            DelicatedSongListView.HeaderStyle = System.Windows.Forms.ColumnHeaderStyle.Nonclickable;
+            DelicatedSongListView.Location = new System.Drawing.Point(4, 4);
+            DelicatedSongListView.Margin = new System.Windows.Forms.Padding(4);
+            DelicatedSongListView.Name = "DelicatedSongListView";
+            DelicatedSongListView.Size = new System.Drawing.Size(681, 420);
+            DelicatedSongListView.TabIndex = 14;
+            DelicatedSongListView.UseCompatibleStateImageBehavior = false;
+            DelicatedSongListView.View = System.Windows.Forms.View.Details;
+            DelicatedSongListView.SelectedIndexChanged += DelicatedSongListView_SelectedIndexChanged;
+            // 
+            // columnHeader1
+            // 
+            columnHeader1.Text = "曲名";
+            columnHeader1.Width = 160;
+            // 
+            // columnHeader2
+            // 
+            columnHeader2.Text = "bsr";
+            columnHeader2.Width = 50;
+            // 
+            // columnHeader3
+            // 
+            columnHeader3.Text = "bpm";
+            columnHeader3.Width = 40;
+            // 
+            // columnHeader4
+            // 
+            columnHeader4.Text = "所在目录";
+            columnHeader4.Width = 200;
             // 
             // tabFolderandList
             // 
@@ -439,6 +562,7 @@
             btnInstallEverything.TabIndex = 12;
             btnInstallEverything.Text = "安装增强扩展";
             btnInstallEverything.UseVisualStyleBackColor = true;
+            btnInstallEverything.Click += btnInstallEverything_Click;
             // 
             // lblExtension
             // 
@@ -449,7 +573,7 @@
             lblExtension.Name = "lblExtension";
             lblExtension.Size = new System.Drawing.Size(104, 204);
             lblExtension.TabIndex = 13;
-            lblExtension.Text = "提示：软件支持Everything增强扩展，该扩展可以帮助本软件更好的管理多个版本的节奏光剑，同时可以更快速的搜寻歌曲文件，如果想使用本软件的增强功能，可点击安装增强扩展一件安装（已安装请忽略本提示）";
+            lblExtension.Text = "提示：软件支持Everything增强扩展，该扩展可以帮助本软件更好的管理多个版本的节奏光剑，同时可以更快速的搜寻歌曲文件，如果想使用本软件的增强功能，可点击安装增强扩展下载安装（已安装请忽略本提示）";
             // 
             // btnTutorial
             // 
@@ -491,6 +615,10 @@
             // 
             musicPackCoverDialog.Filter = "JPEG  (*.jpg)|*.jpg|Pictures (*.png)|*.png|bitmap (*.bmp)|*.bmp";
             // 
+            // savebplistDialog
+            // 
+            savebplistDialog.Description = "请选择bplist保存路径";
+            // 
             // MainForm
             // 
             AllowDrop = true;
@@ -524,6 +652,9 @@
             tabSongFolder.ResumeLayout(false);
             tabSongFolder.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)trackVolume).EndInit();
+            tabDelicatedSong.ResumeLayout(false);
+            tabDelicatedSong.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)trackVolume2).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             ResumeLayout(false);
             PerformLayout();
@@ -572,5 +703,16 @@
         private System.Windows.Forms.OpenFileDialog musicPackCoverDialog;
         private System.Windows.Forms.Button btnDeduplication;
         private System.Windows.Forms.FolderBrowserDialog savebplistDialog;
+        private System.Windows.Forms.ListView DelicatedSongListView;
+        private System.Windows.Forms.ColumnHeader columnHeader1;
+        private System.Windows.Forms.ColumnHeader columnHeader2;
+        private System.Windows.Forms.ColumnHeader columnHeader3;
+        private System.Windows.Forms.Button btnPlay2;
+        private System.Windows.Forms.Label label2;
+        private System.Windows.Forms.TrackBar trackVolume2;
+        private System.Windows.Forms.Button btnMigrateFolder;
+        private System.Windows.Forms.Button btnMigrateList;
+        private System.Windows.Forms.ColumnHeader columnHeader4;
+        private System.Windows.Forms.Button button1;
     }
 }

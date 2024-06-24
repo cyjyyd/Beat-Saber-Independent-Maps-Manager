@@ -49,6 +49,14 @@
 		<ServerGarbageCollection>true</ServerGarbageCollection>
 		<GarbageCollectionAdapatationMode>1</GarbageCollectionAdapatationMode>
 	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+	  <NoWarn>1701;1702;CA1416</NoWarn>
+	  <WarningLevel>4</WarningLevel>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+	  <NoWarn>1701;1702;CA1416</NoWarn>
+	  <WarningLevel>4</WarningLevel>
+	</PropertyGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.7.2">
       <Visible>False</Visible>
@@ -68,6 +76,9 @@
   <ItemGroup>
     <Content Include="aa2yv-q2dg9-001.ico" />
   </ItemGroup>
+	<ItemGroup>
+		<SupportedPlatform Include="windows" />
+	</ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
