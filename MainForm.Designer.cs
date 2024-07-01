@@ -65,7 +65,6 @@
             label2 = new System.Windows.Forms.Label();
             trackVolume2 = new System.Windows.Forms.TrackBar();
             btnMigrateFolder = new System.Windows.Forms.Button();
-            btnMigrateList = new System.Windows.Forms.Button();
             DelicatedSongListView = new System.Windows.Forms.ListView();
             columnHeader1 = new System.Windows.Forms.ColumnHeader();
             columnHeader2 = new System.Windows.Forms.ColumnHeader();
@@ -404,7 +403,6 @@
             tabDelicatedSong.Controls.Add(label2);
             tabDelicatedSong.Controls.Add(trackVolume2);
             tabDelicatedSong.Controls.Add(btnMigrateFolder);
-            tabDelicatedSong.Controls.Add(btnMigrateList);
             tabDelicatedSong.Controls.Add(DelicatedSongListView);
             tabDelicatedSong.Location = new System.Drawing.Point(4, 26);
             tabDelicatedSong.Margin = new System.Windows.Forms.Padding(4);
@@ -416,7 +414,7 @@
             // 
             // button1
             // 
-            button1.Location = new System.Drawing.Point(3, 433);
+            button1.Location = new System.Drawing.Point(154, 430);
             button1.Name = "button1";
             button1.Size = new System.Drawing.Size(112, 30);
             button1.TabIndex = 27;
@@ -460,23 +458,13 @@
             // 
             // btnMigrateFolder
             // 
-            btnMigrateFolder.Location = new System.Drawing.Point(227, 433);
+            btnMigrateFolder.Location = new System.Drawing.Point(272, 430);
             btnMigrateFolder.Name = "btnMigrateFolder";
             btnMigrateFolder.Size = new System.Drawing.Size(100, 30);
             btnMigrateFolder.TabIndex = 16;
             btnMigrateFolder.Text = "整合到歌曲目录";
             btnMigrateFolder.UseVisualStyleBackColor = true;
             btnMigrateFolder.Click += btnMigrateFolder_Click;
-            // 
-            // btnMigrateList
-            // 
-            btnMigrateList.Location = new System.Drawing.Point(121, 433);
-            btnMigrateList.Name = "btnMigrateList";
-            btnMigrateList.Size = new System.Drawing.Size(100, 30);
-            btnMigrateList.TabIndex = 15;
-            btnMigrateList.Text = "整合为歌单文件";
-            btnMigrateList.UseVisualStyleBackColor = true;
-            btnMigrateList.Click += btnMigrateList_Click;
             // 
             // DelicatedSongListView
             // 
@@ -711,7 +699,6 @@
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.TrackBar trackVolume2;
         private System.Windows.Forms.Button btnMigrateFolder;
-        private System.Windows.Forms.Button btnMigrateList;
         private System.Windows.Forms.ColumnHeader columnHeader4;
         private System.Windows.Forms.Button button1;
     }

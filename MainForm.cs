@@ -578,10 +578,6 @@ namespace BeatSaberIndependentMapsManager
                     break;
             }
         }
-        private void saveBplistDSong(string path)
-        {
-
-        }
         private void saveSongFolderDSong(string path)
         {
             try
@@ -1430,6 +1426,7 @@ namespace BeatSaberIndependentMapsManager
                 if (!e.CancelEdit)
                 {
                     musicPackInfo.Add(e.Label, musicPackInfo[musicPackListView.SelectedItems[0].Text]);
+                    musicPackInfo.Remove(musicPackListView.SelectedItems[0].Text);
                     using Image newImg = musicPackimg.Images[musicPackListView.SelectedItems[0].Text];
                     musicPackimg.Images.Add(e.Label, newImg);
                     musicPackListView.SelectedItems[0].ImageIndex = musicPackimg.Images.IndexOfKey(e.Label);
@@ -1525,19 +1522,6 @@ namespace BeatSaberIndependentMapsManager
             BSIMMStatusUpdate("播放器：", "已停止", 0);
         }
 
-        private void btnMigrateList_Click(object sender, EventArgs e)
-        {
-            savebplistDialog.ShowDialog();
-            string path = savebplistDialog.SelectedPath;
-            if (path != "")
-            {
-                Task.Run(() => saveBplistDSong(path));
-            }
-            else
-            {
-                debugLog("未选择保存路径！");
-            }
-        }
         private void btnMigrateFolder_Click(object sender, EventArgs e)
         {
             BSIMMFolderBrowser.ShowDialog();
