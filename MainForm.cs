@@ -50,6 +50,8 @@ namespace BeatSaberIndependentMapsManager
         [DllImport("Everything64.dll")]
         public static extern bool Everything_Query(bool bWait);
         [DllImport("Everything64.dll")]
+        public static extern bool Everything_SetMatchWholeWord(bool bEnable);
+        [DllImport("Everything64.dll")]
         private static extern UInt32 Everything_GetNumResults();
         [DllImport("Everything64.dll", CharSet = CharSet.Unicode)]
         private static extern void Everything_GetResultFullPathName(UInt32 nIndex, StringBuilder lpString, UInt32 nMaxCount);
@@ -236,6 +238,7 @@ namespace BeatSaberIndependentMapsManager
         {
             Everything_SetSearch("Beat Saber.exe");
             Everything_SetRequestFlags(EVERYTHING_REQUEST_PATH | EVERYTHING_REQUEST_FILE_NAME);
+            Everything_SetMatchWholeWord(true);
             Everything_Query(true);
             var buf = new StringBuilder(300);
             for (uint i = 0; i < Everything_GetNumResults(); i++)
@@ -414,7 +417,7 @@ namespace BeatSaberIndependentMapsManager
         {
             Invoke(new System.Windows.Forms.MethodInvoker(delegate
             {
-                if(txtDebug.Text == "")
+                if (txtDebug.Text == "")
                 {
                     txtDebug.AppendText(DateTime.Now.ToString() + ":" + text);
                 }
@@ -586,7 +589,7 @@ namespace BeatSaberIndependentMapsManager
                 {
                     DirectoryInfo song = new DirectoryInfo(item.songFolder);
                     string newPath = Path.Combine(path, song.Name);
-                    if(Directory.Exists(newPath))
+                    if (Directory.Exists(newPath))
                     {
                         Directory.Delete(newPath, true);
                     }
@@ -603,7 +606,6 @@ namespace BeatSaberIndependentMapsManager
         }
         private int addDelicatedSong(string mapDir, string musicPackName = null)
         {
-            string language = cultureInfo.TwoLetterISOLanguageName;
             DirectoryInfo dir = new DirectoryInfo(mapDir);
             SongMap songMap = null;
             string dirName = dir.Name;
@@ -613,14 +615,26 @@ namespace BeatSaberIndependentMapsManager
             if (spaceIndex == -1)
             {
                 bsr = dirName;//如果没有空格，直接使用文件夹名
+                if (bsr.Length > 5)
+                {
+                    debugLog("非标准bsr命名格式! 目录" + mapDir + "可能不是歌曲谱面目录！请检查文件夹的命名格式！");
+                }
             }
             else
             {
-                bsr = dirName.Substring(0, spaceIndex);//如果有空格，使用空格前的部分
+                bsr = dirName.Substring(0, spaceIndex);//如果有空格，使用空格前
             }
-            if (!Regex.IsMatch(bsr, @"^[a-fA-F0-9]+$"))
+            if (bsr.Length > 5&&spaceIndex != -1)
             {
-                debugLog("未知的bsr! 目录" + mapDir + "可能不是歌曲谱面目录！请检查文件夹的命名格式！");
+                bsr = dirName.Substring(0, 5);
+                if (!Regex.IsMatch(bsr, @"^[a-fA-F0-9]+$"))
+                {
+                    bsr = dirName.Substring(0, 4);
+                    if (!Regex.IsMatch(bsr, @"^[a-fA-F0-9]+$"))
+                    {
+                        debugLog("未知的bsr! 目录" + mapDir + "可能不是歌曲谱面目录！请检查文件夹的命名格式！");
+                    }
+                }
             }
             if (File.Exists(mapDir + "\\Info.dat"))
             {
@@ -1529,7 +1543,7 @@ namespace BeatSaberIndependentMapsManager
             if (path != "")
             {
                 saveSongFolderDSong(path);
-                debugLog("散装歌曲已经全部移动到目录："+path+" 可以在第一页添加此目录！");
+                debugLog("散装歌曲已经全部移动到目录：" + path + " 可以在第一页添加此目录！");
                 DelicatedSongListView.Clear();
             }
             else
@@ -1538,6 +1552,34 @@ namespace BeatSaberIndependentMapsManager
             }
         }
         #endregion
+
+        private void btnFullScan_Click(object sender, EventArgs e)
+        {
+            if (multiInstanceDetect)
+            {
+                if (MessageBox.Show("全盘扫描旨在扫描散落的歌曲,建议先在第一页添加歌曲目录，软件会自动排除扫描\n如果已添加歌曲目录，请忽略本提示并点击确认，否则请点击取消", "提示", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) == DialogResult.OK)
+                {
+                    Everything_SetSearch("info.dat");
+                    Everything_SetRequestFlags(EVERYTHING_REQUEST_PATH | EVERYTHING_REQUEST_FILE_NAME);
+                    Everything_SetMatchWholeWord(true);
+                    Everything_Query(true);
+                    var buf = new StringBuilder(300);
+                    for (uint i = 0; i < Everything_GetNumResults(); i++)
+                    {
+                        buf.Clear();
+                        Everything_GetResultFullPathName(i, buf, 300);
+                        var path = Path.GetDirectoryName(buf.ToString())!;
+                        if (musicPackPath.ContainsValue(path) || path.Contains("Prefetch") || path.Contains("$RECYCLE.BIN") || path.Contains("OneDrive") || File.GetAttributes(buf.ToString()).HasFlag(FileAttributes.Directory)) continue;
+                        addDelicatedSong(path);
+                    }
+                    displayDelicatedSongList();
+                }
+            }
+            else
+            {
+                debugLog("未检测到Everthing增强扩展或扩展状态异常，无法全盘扫描！");
+            }
+        }
     }
 }
 

@@ -60,7 +60,7 @@
             lblMusicPack = new System.Windows.Forms.Label();
             tabBSVer = new System.Windows.Forms.TabPage();
             tabDelicatedSong = new System.Windows.Forms.TabPage();
-            button1 = new System.Windows.Forms.Button();
+            btnFullScan = new System.Windows.Forms.Button();
             btnPlay2 = new System.Windows.Forms.Button();
             label2 = new System.Windows.Forms.Label();
             trackVolume2 = new System.Windows.Forms.TrackBar();
@@ -71,6 +71,8 @@
             columnHeader3 = new System.Windows.Forms.ColumnHeader();
             columnHeader4 = new System.Windows.Forms.ColumnHeader();
             tabFolderandList = new System.Windows.Forms.TabPage();
+            comboBox1 = new System.Windows.Forms.ComboBox();
+            lblSaveSongFolder = new System.Windows.Forms.Label();
             btnSetting = new System.Windows.Forms.Button();
             comboBoxPlatform = new System.Windows.Forms.ComboBox();
             lblPlatform = new System.Windows.Forms.Label();
@@ -88,6 +90,7 @@
             ((System.ComponentModel.ISupportInitialize)trackVolume).BeginInit();
             tabDelicatedSong.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)trackVolume2).BeginInit();
+            tabFolderandList.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             SuspendLayout();
             // 
@@ -398,7 +401,7 @@
             // 
             // tabDelicatedSong
             // 
-            tabDelicatedSong.Controls.Add(button1);
+            tabDelicatedSong.Controls.Add(btnFullScan);
             tabDelicatedSong.Controls.Add(btnPlay2);
             tabDelicatedSong.Controls.Add(label2);
             tabDelicatedSong.Controls.Add(trackVolume2);
@@ -412,14 +415,15 @@
             tabDelicatedSong.Text = "散装歌曲列表";
             tabDelicatedSong.UseVisualStyleBackColor = true;
             // 
-            // button1
+            // btnFullScan
             // 
-            button1.Location = new System.Drawing.Point(154, 430);
-            button1.Name = "button1";
-            button1.Size = new System.Drawing.Size(112, 30);
-            button1.TabIndex = 27;
-            button1.Text = "全盘扫描（增强）";
-            button1.UseVisualStyleBackColor = true;
+            btnFullScan.Location = new System.Drawing.Point(154, 430);
+            btnFullScan.Name = "btnFullScan";
+            btnFullScan.Size = new System.Drawing.Size(112, 30);
+            btnFullScan.TabIndex = 27;
+            btnFullScan.Text = "全盘扫描（增强）";
+            btnFullScan.UseVisualStyleBackColor = true;
+            btnFullScan.Click += btnFullScan_Click;
             // 
             // btnPlay2
             // 
@@ -502,6 +506,8 @@
             // 
             // tabFolderandList
             // 
+            tabFolderandList.Controls.Add(comboBox1);
+            tabFolderandList.Controls.Add(lblSaveSongFolder);
             tabFolderandList.Location = new System.Drawing.Point(4, 26);
             tabFolderandList.Margin = new System.Windows.Forms.Padding(4);
             tabFolderandList.Name = "tabFolderandList";
@@ -509,6 +515,24 @@
             tabFolderandList.TabIndex = 3;
             tabFolderandList.Text = "歌曲目录编辑/歌单编辑";
             tabFolderandList.UseVisualStyleBackColor = true;
+            // 
+            // comboBox1
+            // 
+            comboBox1.FormattingEnabled = true;
+            comboBox1.Location = new System.Drawing.Point(131, 10);
+            comboBox1.Margin = new System.Windows.Forms.Padding(4);
+            comboBox1.Name = "comboBox1";
+            comboBox1.Size = new System.Drawing.Size(153, 25);
+            comboBox1.TabIndex = 11;
+            // 
+            // lblSaveSongFolder
+            // 
+            lblSaveSongFolder.AutoSize = true;
+            lblSaveSongFolder.Location = new System.Drawing.Point(8, 13);
+            lblSaveSongFolder.Name = "lblSaveSongFolder";
+            lblSaveSongFolder.Size = new System.Drawing.Size(128, 17);
+            lblSaveSongFolder.TabIndex = 0;
+            lblSaveSongFolder.Text = "已导入歌曲目录选择：";
             // 
             // btnSetting
             // 
@@ -643,6 +667,8 @@
             tabDelicatedSong.ResumeLayout(false);
             tabDelicatedSong.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)trackVolume2).EndInit();
+            tabFolderandList.ResumeLayout(false);
+            tabFolderandList.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             ResumeLayout(false);
             PerformLayout();
@@ -700,6 +726,8 @@
         private System.Windows.Forms.TrackBar trackVolume2;
         private System.Windows.Forms.Button btnMigrateFolder;
         private System.Windows.Forms.ColumnHeader columnHeader4;
-        private System.Windows.Forms.Button button1;
+        private System.Windows.Forms.Button btnFullScan;
+        private System.Windows.Forms.Label lblSaveSongFolder;
+        private System.Windows.Forms.ComboBox comboBox1;
     }
 }
