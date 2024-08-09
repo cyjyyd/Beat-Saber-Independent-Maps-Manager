@@ -618,13 +618,14 @@ namespace BeatSaberIndependentMapsManager
                 if (bsr.Length > 5)
                 {
                     debugLog("非标准bsr命名格式! 目录" + mapDir + "可能不是歌曲谱面目录！请检查文件夹的命名格式！");
+                    bsr = "unknown";
                 }
             }
             else
             {
                 bsr = dirName.Substring(0, spaceIndex);//如果有空格，使用空格前
             }
-            if (bsr.Length > 5&&spaceIndex != -1)
+            if (bsr.Length > 5 && spaceIndex != -1)
             {
                 bsr = dirName.Substring(0, 5);
                 if (!Regex.IsMatch(bsr, @"^[a-fA-F0-9]+$"))
@@ -1579,6 +1580,13 @@ namespace BeatSaberIndependentMapsManager
             {
                 debugLog("未检测到Everthing增强扩展或扩展状态异常，无法全盘扫描！");
             }
+        }
+
+        private void btnSetting_Click(object sender, EventArgs e)
+        {
+            SettingsForm settingsForm = new SettingsForm();
+            settingsForm.ShowDialog();
+            settingsForm.Owner = this;
         }
     }
 }
