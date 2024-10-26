@@ -71,6 +71,11 @@
             columnHeader3 = new System.Windows.Forms.ColumnHeader();
             columnHeader4 = new System.Windows.Forms.ColumnHeader();
             tabFolderandList = new System.Windows.Forms.TabPage();
+            btnDFSelect = new System.Windows.Forms.Button();
+            lbldownloadFolderTip = new System.Windows.Forms.Label();
+            lbldownloadFolder = new System.Windows.Forms.Label();
+            textBox1 = new System.Windows.Forms.TextBox();
+            lblbplistTip = new System.Windows.Forms.Label();
             btnSetting = new System.Windows.Forms.Button();
             comboBoxPlatform = new System.Windows.Forms.ComboBox();
             lblPlatform = new System.Windows.Forms.Label();
@@ -82,10 +87,6 @@
             PlaybackTimer = new System.Windows.Forms.Timer(components);
             musicPackCoverDialog = new System.Windows.Forms.OpenFileDialog();
             savebplistDialog = new System.Windows.Forms.FolderBrowserDialog();
-            lblbplistTip = new System.Windows.Forms.Label();
-            textBox1 = new System.Windows.Forms.TextBox();
-            lbldownloadFolder = new System.Windows.Forms.Label();
-            lbldownloadFolderTip = new System.Windows.Forms.Label();
             BSIMMStats.SuspendLayout();
             tabMusicPackContorl.SuspendLayout();
             tabSongFolder.SuspendLayout();
@@ -508,6 +509,7 @@
             // 
             // tabFolderandList
             // 
+            tabFolderandList.Controls.Add(btnDFSelect);
             tabFolderandList.Controls.Add(lbldownloadFolderTip);
             tabFolderandList.Controls.Add(lbldownloadFolder);
             tabFolderandList.Controls.Add(textBox1);
@@ -519,6 +521,50 @@
             tabFolderandList.TabIndex = 3;
             tabFolderandList.Text = "歌单编辑";
             tabFolderandList.UseVisualStyleBackColor = true;
+            // 
+            // btnDFSelect
+            // 
+            btnDFSelect.Location = new System.Drawing.Point(315, 29);
+            btnDFSelect.Name = "btnDFSelect";
+            btnDFSelect.Size = new System.Drawing.Size(75, 23);
+            btnDFSelect.TabIndex = 4;
+            btnDFSelect.Text = "浏览";
+            btnDFSelect.UseVisualStyleBackColor = true;
+            btnDFSelect.Click += btnDFSelect_Click;
+            // 
+            // lbldownloadFolderTip
+            // 
+            lbldownloadFolderTip.AutoSize = true;
+            lbldownloadFolderTip.Location = new System.Drawing.Point(390, 32);
+            lbldownloadFolderTip.Name = "lbldownloadFolderTip";
+            lbldownloadFolderTip.Size = new System.Drawing.Size(296, 17);
+            lbldownloadFolderTip.TabIndex = 3;
+            lbldownloadFolderTip.Text = "如留空则默认下载到软件运行目录下的Songs子目录！";
+            // 
+            // lbldownloadFolder
+            // 
+            lbldownloadFolder.AutoSize = true;
+            lbldownloadFolder.Location = new System.Drawing.Point(8, 32);
+            lbldownloadFolder.Name = "lbldownloadFolder";
+            lbldownloadFolder.Size = new System.Drawing.Size(92, 17);
+            lbldownloadFolder.TabIndex = 2;
+            lbldownloadFolder.Text = "歌曲下载目录：";
+            // 
+            // textBox1
+            // 
+            textBox1.Location = new System.Drawing.Point(106, 29);
+            textBox1.Name = "textBox1";
+            textBox1.Size = new System.Drawing.Size(203, 23);
+            textBox1.TabIndex = 1;
+            // 
+            // lblbplistTip
+            // 
+            lblbplistTip.AutoSize = true;
+            lblbplistTip.Location = new System.Drawing.Point(8, 9);
+            lblbplistTip.Name = "lblbplistTip";
+            lblbplistTip.Size = new System.Drawing.Size(512, 17);
+            lblbplistTip.TabIndex = 0;
+            lblbplistTip.Text = "注：如需要快速从目录生成歌单请使用曲包目录管理中的生成歌单功能！此页面为歌单细化编辑\r\n";
             // 
             // btnSetting
             // 
@@ -617,40 +663,6 @@
             // savebplistDialog
             // 
             savebplistDialog.Description = "请选择bplist保存路径";
-            // 
-            // lblbplistTip
-            // 
-            lblbplistTip.AutoSize = true;
-            lblbplistTip.Location = new System.Drawing.Point(8, 9);
-            lblbplistTip.Name = "lblbplistTip";
-            lblbplistTip.Size = new System.Drawing.Size(512, 17);
-            lblbplistTip.TabIndex = 0;
-            lblbplistTip.Text = "注：如需要快速从目录生成歌单请使用曲包目录管理中的生成歌单功能！此页面为歌单细化编辑\r\n";
-            // 
-            // textBox1
-            // 
-            textBox1.Location = new System.Drawing.Point(106, 29);
-            textBox1.Name = "textBox1";
-            textBox1.Size = new System.Drawing.Size(212, 23);
-            textBox1.TabIndex = 1;
-            // 
-            // lbldownloadFolder
-            // 
-            lbldownloadFolder.AutoSize = true;
-            lbldownloadFolder.Location = new System.Drawing.Point(8, 32);
-            lbldownloadFolder.Name = "lbldownloadFolder";
-            lbldownloadFolder.Size = new System.Drawing.Size(92, 17);
-            lbldownloadFolder.TabIndex = 2;
-            lbldownloadFolder.Text = "歌曲下载目录：";
-            // 
-            // lbldownloadFolderTip
-            // 
-            lbldownloadFolderTip.AutoSize = true;
-            lbldownloadFolderTip.Location = new System.Drawing.Point(324, 32);
-            lbldownloadFolderTip.Name = "lbldownloadFolderTip";
-            lbldownloadFolderTip.Size = new System.Drawing.Size(296, 17);
-            lbldownloadFolderTip.TabIndex = 3;
-            lbldownloadFolderTip.Text = "如留空则默认下载到软件运行目录下的Songs子目录！";
             // 
             // MainForm
             // 
@@ -752,5 +764,6 @@
         private System.Windows.Forms.Label lbldownloadFolderTip;
         private System.Windows.Forms.Label lbldownloadFolder;
         private System.Windows.Forms.TextBox textBox1;
+        private System.Windows.Forms.Button btnDFSelect;
     }
 }

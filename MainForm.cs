@@ -24,6 +24,8 @@ using System.Security.Principal;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using System.Security.Policy;
 using System.Runtime.Versioning;
+using Windows.Media.Playlists;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 namespace BeatSaberIndependentMapsManager
 {
     public partial class MainForm : Form
@@ -37,7 +39,9 @@ namespace BeatSaberIndependentMapsManager
         private string currentMusicPack = "";
         private byte[] bsVersions = null;
         private readonly HashSet<string> gameInstance = new();
+        Dictionary<string, string> SongsHash = null;
         List<BSVerInfo> bsVerionSet = null;
+        Config config = new Config();
         private Dictionary<string, SongMap> delicatedSongList = new Dictionary<string, SongMap>();
         Dictionary<string, Dictionary<string, SongMap>> musicPackInfo = new Dictionary<string, Dictionary<string, SongMap>>();
         Dictionary<string, string> musicPackPath = new Dictionary<string, string>();
@@ -111,6 +115,10 @@ namespace BeatSaberIndependentMapsManager
             {
                 Thread detect = new Thread(detectSingleBeatSaberInstance);
                 detect.Start();
+            }
+            if (config.HashCache)
+            {
+                readHash();
             }
         }
         #endregion
@@ -385,6 +393,22 @@ namespace BeatSaberIndependentMapsManager
         }
         #endregion
         #region 工具方法
+        public void readHash()
+        {
+            if (File.Exists("hash.cache"))
+            {
+                try
+                {
+                    byte[] encryptedHash = Convert.FromBase64String(File.ReadAllText("hash.cache"));
+                    SongsHash = JsonConvert.DeserializeObject<Dictionary<string, string>>(Encoding.UTF8.GetString(encryptedHash));
+                }
+                catch (JsonException)
+                {
+                    debugLog("错误！检测到缓存损坏，将自动删除待稍后重建！");
+                    File.Delete("hash.cache");
+                }
+            }
+        }
         public static string ImageToBase64(Image image, ImageFormat format)
         {
             using (var memoryStream = new MemoryStream())
@@ -393,6 +417,11 @@ namespace BeatSaberIndependentMapsManager
                 byte[] imageBytes = memoryStream.ToArray();
                 return Convert.ToBase64String(imageBytes);
             }
+        }
+        public int calcProgress(int current,int total)
+        {
+            double percentage = ((double)current / total) * 100;
+            return (int)Math.Round(percentage);
         }
         private Bitmap ReadImageFile(string path)
         {
@@ -836,6 +865,41 @@ namespace BeatSaberIndependentMapsManager
             }
             GC.Collect();
         }
+        public async void HashCachePack(string musicPackName) 
+        {
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            int count = 0;
+            if (SongsHash != null)
+            {
+                foreach (KeyValuePair<string, SongMap> hashlist in musicPackInfo[musicPackName])
+                {
+                    if (!SongsHash.ContainsKey(hashlist.Key))
+                    {
+                        SongsHash.Add(hashlist.Key, await getSongHash(hashlist.Value));
+                    }
+                    else
+                    {
+                        count++;
+                        BSIMMProgressUpdate(calcProgress(count, SongsHash.Count));
+                    }
+                }
+                stopwatch.Stop();
+                debugLog(($"曲包歌曲已有缓存，查漏补缺！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
+                BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
+            }
+            else
+            {
+                SongsHash = new Dictionary<string, string>();
+                foreach (KeyValuePair<string, SongMap> hashlist in musicPackInfo[musicPackName])
+                {
+                    SongsHash.Add(hashlist.Key, await getSongHash(hashlist.Value));
+                }
+                stopwatch.Stop();
+                debugLog(($"建立缓存成功！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
+                BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
+            }
+            GC.Collect();   
+        }
         private void displayMusicpack(string musicPackName)
         {
             Bitmap musicPackCover = null;
@@ -958,27 +1022,83 @@ namespace BeatSaberIndependentMapsManager
             else
             {
                 debugLog("开始导出bplist文件：" + path);
-                foreach (string bplistName in musicPackInfo.Keys)
+
+                Task.Run(() =>
                 {
-                    Task.Run(() => saveMusicPackSonginfo(bplistName, path));
-                }
+                    foreach (string bplistName in musicPackInfo.Keys)
+                    {
+                        string currentBplistName = bplistName;
+                        Task.Run(() => saveMusicPackSonginfo(currentBplistName, path));
+                    }
+                }).ContinueWith(t => { 
+                    if(config.HashCache)
+                    {
+                        string HashResults = JsonConvert.SerializeObject(SongsHash, Formatting.None);
+                        File.WriteAllText("hash.cache", Convert.ToBase64String(Encoding.UTF8.GetBytes(HashResults)));
+                        HashResults = "";
+                    }
+                });
             }
         }
+
         private async Task saveMusicPackSonginfo(string musicPackName, string path)
         {
+            Stopwatch stopwatch = Stopwatch.StartNew();
             JsonSerializerSettings settings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
             string imgBytes = "data:image/jpg;base64," + ImageToBase64(musicPackCoverimgs[musicPackName], ImageFormat.Jpeg);
             string author = Environment.UserName + "使用BSIMM@万毒不侵 生成";
             string description = "本歌单由" + Environment.UserName + "使用BSIMM生成\r\nBSIMM由万毒不侵开发，开源且免费，如果你是购买的请要求商家退款\r\n项目地址：https://github.com/cyjyyd/Beat-Saber-Independent-Maps-Manager";
             PlayList playList = new PlayList(musicPackName, author, description, imgBytes);
-            foreach (SongMap song in musicPackInfo[musicPackName].Values)
+            if (config.HashCache)
             {
-                playList.AddSongHash(await getSongHash(song));
+                if (SongsHash != null)
+                {
+                    foreach (KeyValuePair<string, SongMap> hashlist in musicPackInfo[musicPackName])
+                    {
+                        if (!SongsHash.ContainsKey(hashlist.Key))
+                        {
+                            string hashValue = await getSongHash(hashlist.Value);
+                            playList.AddSongHash(hashValue);
+                            SongsHash.Add(hashlist.Key, hashValue);
+                        }
+                        else
+                        {
+                            playList.AddSongHash(SongsHash[hashlist.Key]);
+                        }
+                    }
+                    stopwatch.Stop();
+                    debugLog(("曲包：" + musicPackName + $"导出使用缓存加速成功！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
+                    BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
+                }
+                else
+                {
+                    SongsHash = new Dictionary<string, string>();
+                    foreach (KeyValuePair<string, SongMap> hashlist in musicPackInfo[musicPackName])
+                    {
+                        string hashValue = await getSongHash(hashlist.Value);
+                        SongsHash.Add(hashlist.Key, hashValue);
+                        playList.AddSongHash(hashValue);
+                    }
+                    stopwatch.Stop();
+                    debugLog(("曲包：" + musicPackName + $"未找到缓存，已在计算同时缓存！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
+                    BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
+                }
+            }
+            else
+            {
+                foreach (SongMap song in musicPackInfo[musicPackName].Values)
+                {
+                    playList.AddSongHash(await getSongHash(song));
+                }
+                stopwatch.Stop();
+                debugLog(("曲包：" + musicPackName + $"不使用缓存导出成功！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
+                BSIMMStatusUpdate("导出：", "导出完成！", 100);
             }
             FileStream output = File.Create(path + "\\" + musicPackName + ".bplist");
-            byte[] playListContent = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(playList, Formatting.Indented, settings));
+            byte[] playListContent = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(playList, Formatting.None, settings));
             output.Write(playListContent, 0, playListContent.Length);//TODO 测试bplist导出
             debugLog("曲包:" + musicPackName + "导出成功！路径：" + path);
+            BSIMMStatusUpdate("曲包：", musicPackName + "bplist导出成功！路径：" + path,100);
             output.Close(); output.Dispose();
             GC.Collect();
         }
@@ -1012,6 +1132,13 @@ namespace BeatSaberIndependentMapsManager
                 BSIMMProgress.ProgressBar.Value = progress;
             }));
         }
+        private void BSIMMProgressUpdate(int progress) 
+        {
+            Invoke(new System.Windows.Forms.MethodInvoker(delegate
+            {
+                BSIMMProgress.ProgressBar.Value = progress;
+            }));
+        }
         private void DragEvent(object sender, DragEventArgs e)
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
@@ -1037,13 +1164,36 @@ namespace BeatSaberIndependentMapsManager
                 else
                 {
                     debugLog("您拖放的路径：'" + folderPaths[i] + "'似乎不是文件夹!");
-                    BSIMMStatusText.Text = "'" + folderPaths[i] + "'不是文件夹!跳过添加";
+                    BSIMMStatusUpdate("解析：", "'" + folderPaths[i] + "'不是文件夹!跳过添加", 100);
                 }
             }
-            for (int i = 0; i < verifiedPaths.Count; i++)
+            try
             {
-                int localI = i;
-                Task.Run(() => addFolder(verifiedPaths[localI]));
+                Task.Run(() =>
+                {
+                    for (int i = 0; i < verifiedPaths.Count; i++)
+                    {
+                        addFolder(verifiedPaths[i]);
+                    }
+                    if (config.HashCache)
+                    {
+                        foreach (KeyValuePair<string, Dictionary<string, SongMap>> HashMusicPack in musicPackInfo)
+                        {
+                            HashCachePack(HashMusicPack.Key);
+                        }
+                    }
+                }).ContinueWith(t => {
+                    if (config.HashCache)
+                    {
+                        string HashResults = JsonConvert.SerializeObject(SongsHash, Formatting.None);
+                        File.WriteAllText("hash.cache", Convert.ToBase64String(Encoding.UTF8.GetBytes(HashResults)));
+                        HashResults = "";
+                    }
+                });
+            }
+            catch (Exception)
+            {
+
             }
         }
         private void btnOpenFolder_Click(object sender, EventArgs e)
@@ -1055,6 +1205,7 @@ namespace BeatSaberIndependentMapsManager
             }
             string[] folderPaths = BSIMMFolderBrowser.SelectedPath.Split(';');
             List<string> verifiedPaths = new List<string>();
+            BSIMMFolderBrowser.SelectedPath = "";
             for (int i = 0; i < folderPaths.Length; i++)
             {
                 if (Directory.Exists(folderPaths[i]))
@@ -1064,15 +1215,27 @@ namespace BeatSaberIndependentMapsManager
                 else
                 {
                     debugLog("您选择的路径：'" + folderPaths[i] + "'似乎不是文件夹!");
-                    BSIMMStatusText.Text = "'" + folderPaths[i] + "'不是文件夹!跳过添加";
+                    BSIMMStatusUpdate("解析：", "'" + folderPaths[i] + "'不是文件夹!跳过添加", 100);
                 }
             }
-            for (int i = 0; i < verifiedPaths.Count; i++)
+            Task.Run(() =>
             {
-                int localI = i;
-                Task.Run(() => addFolder(verifiedPaths[localI]));
-            }
-
+                addFolder(verifiedPaths[0]);
+                if (config.HashCache)
+                {
+                    foreach (KeyValuePair<string, Dictionary<string, SongMap>> HashMusicPack in musicPackInfo)
+                    {
+                        HashCachePack(HashMusicPack.Key);
+                    }
+                }
+            }).ContinueWith(t => {
+                if (config.HashCache)
+                {
+                    string HashResults = JsonConvert.SerializeObject(SongsHash, Formatting.None);
+                    File.WriteAllText("hash.cache", Convert.ToBase64String(Encoding.UTF8.GetBytes(HashResults)));
+                    HashResults = "";
+                }
+            });
         }
         private void musicPackListView_Click(object sender, EventArgs e)
         {
@@ -1086,8 +1249,7 @@ namespace BeatSaberIndependentMapsManager
                 }
                 else
                 {
-                    BSIMMStatusText.Text = "正在加载歌曲信息，请稍后";
-                    BSIMMActionText.Text = "繁忙";
+                    BSIMMStatusUpdate("繁忙", "正在加载歌曲信息，请稍后", 0);
                 }
             }
         }
@@ -1179,6 +1341,7 @@ namespace BeatSaberIndependentMapsManager
                     string musicPackName = musicPackListView.Items[index].Text;
                     musicPackCoverDialog.ShowDialog();
                     string imgPath = musicPackCoverDialog.FileName;
+                    musicPackCoverDialog.FileName = "";
                     if (imgPath != "")
                     {
                         Image img = Image.FromFile(imgPath);
@@ -1363,6 +1526,7 @@ namespace BeatSaberIndependentMapsManager
                             string musicPackName = musicPackListView.Items[index].Text;
                             savebplistDialog.ShowDialog();
                             string path = savebplistDialog.SelectedPath;
+                            savebplistDialog.SelectedPath = "";
                             if (path != "")
                             {
                                 Exportbplist(path, musicPackName);
@@ -1552,7 +1716,6 @@ namespace BeatSaberIndependentMapsManager
                 debugLog("未选择保存路径！");
             }
         }
-        #endregion
 
         private void btnFullScan_Click(object sender, EventArgs e)
         {
@@ -1585,9 +1748,27 @@ namespace BeatSaberIndependentMapsManager
         private void btnSetting_Click(object sender, EventArgs e)
         {
             SettingsForm settingsForm = new SettingsForm();
-            settingsForm.ShowDialog();
             settingsForm.Owner = this;
+            if(settingsForm.ShowDialog() == DialogResult.Cancel)
+            {
+                config.readset();
+                if(config.HashCache)
+                {
+                    readHash();
+                }
+            }
         }
+
+        private void btnDFSelect_Click(object sender, EventArgs e)
+        {
+            BSIMMFolderBrowser.ShowDialog();
+            if (BSIMMFolderBrowser.SelectedPath == "")
+            {
+                return;
+            }
+            string[] folderPaths = BSIMMFolderBrowser.SelectedPath.Split(';');
+        }
+        #endregion
     }
 }
 

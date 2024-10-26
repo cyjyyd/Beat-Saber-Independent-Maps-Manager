@@ -90,6 +90,8 @@
             Name = "SettingsForm";
             StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             Text = "程序设置";
+            FormClosing += SettingsForm_FormClosing;
+            Load += SettingsForm_Load;
             ResumeLayout(false);
             PerformLayout();
         }
