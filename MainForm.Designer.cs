@@ -71,6 +71,9 @@
             columnHeader3 = new System.Windows.Forms.ColumnHeader();
             columnHeader4 = new System.Windows.Forms.ColumnHeader();
             tabFolderandList = new System.Windows.Forms.TabPage();
+            lblFilterCondition = new System.Windows.Forms.Label();
+            lblFilterResult = new System.Windows.Forms.Label();
+            dataGridView1 = new System.Windows.Forms.DataGridView();
             btnDFSelect = new System.Windows.Forms.Button();
             lbldownloadFolderTip = new System.Windows.Forms.Label();
             lbldownloadFolder = new System.Windows.Forms.Label();
@@ -87,6 +90,12 @@
             PlaybackTimer = new System.Windows.Forms.Timer(components);
             musicPackCoverDialog = new System.Windows.Forms.OpenFileDialog();
             savebplistDialog = new System.Windows.Forms.FolderBrowserDialog();
+            DB_bsr = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            DB_Cover = new System.Windows.Forms.DataGridViewImageColumn();
+            DB_Name = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            DB_description = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            DB_bpm = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            DB_levelAuthorName = new System.Windows.Forms.DataGridViewTextBoxColumn();
             BSIMMStats.SuspendLayout();
             tabMusicPackContorl.SuspendLayout();
             tabSongFolder.SuspendLayout();
@@ -94,6 +103,7 @@
             tabDelicatedSong.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)trackVolume2).BeginInit();
             tabFolderandList.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)dataGridView1).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             SuspendLayout();
             // 
@@ -509,6 +519,9 @@
             // 
             // tabFolderandList
             // 
+            tabFolderandList.Controls.Add(lblFilterCondition);
+            tabFolderandList.Controls.Add(lblFilterResult);
+            tabFolderandList.Controls.Add(dataGridView1);
             tabFolderandList.Controls.Add(btnDFSelect);
             tabFolderandList.Controls.Add(lbldownloadFolderTip);
             tabFolderandList.Controls.Add(lbldownloadFolder);
@@ -521,6 +534,36 @@
             tabFolderandList.TabIndex = 3;
             tabFolderandList.Text = "歌单编辑";
             tabFolderandList.UseVisualStyleBackColor = true;
+            // 
+            // lblFilterCondition
+            // 
+            lblFilterCondition.AutoSize = true;
+            lblFilterCondition.Location = new System.Drawing.Point(8, 58);
+            lblFilterCondition.Name = "lblFilterCondition";
+            lblFilterCondition.Size = new System.Drawing.Size(56, 17);
+            lblFilterCondition.TabIndex = 7;
+            lblFilterCondition.Text = "筛选条件";
+            // 
+            // lblFilterResult
+            // 
+            lblFilterResult.AutoSize = true;
+            lblFilterResult.Location = new System.Drawing.Point(326, 58);
+            lblFilterResult.Name = "lblFilterResult";
+            lblFilterResult.Size = new System.Drawing.Size(68, 17);
+            lblFilterResult.TabIndex = 6;
+            lblFilterResult.Text = "筛选结果：";
+            // 
+            // dataGridView1
+            // 
+            dataGridView1.AllowUserToAddRows = false;
+            dataGridView1.AllowUserToOrderColumns = true;
+            dataGridView1.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            dataGridView1.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] { DB_bsr, DB_Cover, DB_Name, DB_description, DB_bpm, DB_levelAuthorName });
+            dataGridView1.Location = new System.Drawing.Point(326, 78);
+            dataGridView1.Name = "dataGridView1";
+            dataGridView1.ReadOnly = true;
+            dataGridView1.Size = new System.Drawing.Size(344, 331);
+            dataGridView1.TabIndex = 5;
             // 
             // btnDFSelect
             // 
@@ -664,6 +707,45 @@
             // 
             savebplistDialog.Description = "请选择bplist保存路径";
             // 
+            // DB_bsr
+            // 
+            DB_bsr.HeaderText = "bsr";
+            DB_bsr.Name = "DB_bsr";
+            DB_bsr.ReadOnly = true;
+            DB_bsr.Width = 40;
+            // 
+            // DB_Cover
+            // 
+            DB_Cover.HeaderText = "封面";
+            DB_Cover.Name = "DB_Cover";
+            DB_Cover.ReadOnly = true;
+            DB_Cover.Resizable = System.Windows.Forms.DataGridViewTriState.True;
+            DB_Cover.SortMode = System.Windows.Forms.DataGridViewColumnSortMode.Automatic;
+            // 
+            // DB_Name
+            // 
+            DB_Name.HeaderText = "名称";
+            DB_Name.Name = "DB_Name";
+            DB_Name.ReadOnly = true;
+            // 
+            // DB_description
+            // 
+            DB_description.HeaderText = "简介";
+            DB_description.Name = "DB_description";
+            DB_description.ReadOnly = true;
+            // 
+            // DB_bpm
+            // 
+            DB_bpm.HeaderText = "bpm";
+            DB_bpm.Name = "DB_bpm";
+            DB_bpm.ReadOnly = true;
+            // 
+            // DB_levelAuthorName
+            // 
+            DB_levelAuthorName.HeaderText = "谱面作者";
+            DB_levelAuthorName.Name = "DB_levelAuthorName";
+            DB_levelAuthorName.ReadOnly = true;
+            // 
             // MainForm
             // 
             AllowDrop = true;
@@ -702,6 +784,7 @@
             ((System.ComponentModel.ISupportInitialize)trackVolume2).EndInit();
             tabFolderandList.ResumeLayout(false);
             tabFolderandList.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)dataGridView1).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             ResumeLayout(false);
             PerformLayout();
@@ -765,5 +848,14 @@
         private System.Windows.Forms.Label lbldownloadFolder;
         private System.Windows.Forms.TextBox textBox1;
         private System.Windows.Forms.Button btnDFSelect;
+        private System.Windows.Forms.DataGridView dataGridView1;
+        private System.Windows.Forms.Label lblFilterCondition;
+        private System.Windows.Forms.Label lblFilterResult;
+        private System.Windows.Forms.DataGridViewTextBoxColumn DB_bsr;
+        private System.Windows.Forms.DataGridViewImageColumn DB_Cover;
+        private System.Windows.Forms.DataGridViewTextBoxColumn DB_Name;
+        private System.Windows.Forms.DataGridViewTextBoxColumn DB_description;
+        private System.Windows.Forms.DataGridViewTextBoxColumn DB_bpm;
+        private System.Windows.Forms.DataGridViewTextBoxColumn DB_levelAuthorName;
     }
 }

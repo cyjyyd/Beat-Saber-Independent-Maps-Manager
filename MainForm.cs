@@ -18,14 +18,9 @@ using Microsoft.Win32;
 using System.Linq;
 using System.Xml.Linq;
 using System.Threading.Tasks;
-using Newtonsoft.Json.Linq;
 using System.Drawing.Imaging;
-using System.Security.Principal;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-using System.Security.Policy;
-using System.Runtime.Versioning;
-using Windows.Media.Playlists;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using Microsoft.VisualBasic.FileIO;
+using NAudio.Vorbis;
 namespace BeatSaberIndependentMapsManager
 {
     public partial class MainForm : Form
@@ -39,6 +34,7 @@ namespace BeatSaberIndependentMapsManager
         private string currentMusicPack = "";
         private byte[] bsVersions = null;
         private readonly HashSet<string> gameInstance = new();
+        private SongMap playSong;
         Dictionary<string, string> SongsHash = null;
         List<BSVerInfo> bsVerionSet = null;
         Config config = new Config();
@@ -49,6 +45,8 @@ namespace BeatSaberIndependentMapsManager
         Dictionary<string, bool[]> InstanceSongCoreReady = new Dictionary<string, bool[]>();
         Dictionary<string, Image> musicPackCoverimgs = new Dictionary<string, Image>();
         WaveOut waveOut = new WaveOut();
+        #endregion
+        #region 动态库引用
         [DllImport("Everything64.dll", CharSet = CharSet.Unicode)]
         private static extern UInt32 Everything_SetSearch(string lpSearchString);
         [DllImport("Everything64.dll")]
@@ -393,6 +391,53 @@ namespace BeatSaberIndependentMapsManager
         }
         #endregion
         #region 工具方法
+        void AudioPlayer(SongMap playSong)
+        {
+            try
+            {
+                string playPath = playSong.songFolder + "\\" + playSong._songFilename;
+                if (File.Exists(playPath))
+                {
+                    if (playSong._songFilename.EndsWith("wav"))
+                    {
+                        WaveFileReader waveFileReader = new WaveFileReader(playPath);
+                        waveOut.Init(waveFileReader);
+                        waveOut.Play();
+                        BSIMMStatusUpdate("播放器：", "正在播放" + playSong._songName, 50);
+                        btnPlay2.Text = "暂停";
+                        PlaybackTimer.Enabled = true;
+                    }
+                    else if (playSong._songFilename.EndsWith("ogg") || playSong._songFilename.EndsWith("egg"))
+                    {
+                        VorbisWaveReader vorbis = new VorbisWaveReader(playPath);
+                        waveOut.Init(vorbis);
+                        waveOut.Play();
+                        BSIMMStatusUpdate("播放器：", "正在播放" + playSong._songName, 50);
+                        btnPlay2.Text = "暂停";
+                        PlaybackTimer.Enabled = true;
+                    }
+                    else
+                    {
+                        debugLog("播放失败！目前还不支持该格式！");
+                        BSIMMStatusUpdate("播放器：", "已停止", 0);
+                    }
+                }
+                else
+                {
+                    debugLog("播放失败！文件不存在！");
+                    BSIMMStatusUpdate("播放器：", "已停止", 0);
+                }
+            }
+            catch (IOException)
+            {
+                debugLog("播放失败！文件可能被占用或已损坏！");
+                BSIMMStatusUpdate("播放器：", "已停止", 0);
+            }
+            catch (Exception)
+            {
+                debugLog("播放失败,未知错误");
+            }
+        }
         public void readHash()
         {
             if (File.Exists("hash.cache"))
@@ -475,7 +520,6 @@ namespace BeatSaberIndependentMapsManager
         {
             T entity = new T();
             Type type = typeof(T);
-
             foreach (KeyValuePair<string, object> pair in dictionary)
             {
                 PropertyInfo property = type.GetProperty(pair.Key);
@@ -501,7 +545,11 @@ namespace BeatSaberIndependentMapsManager
             {
                 if (subDir.GetDirectories().Length == 0 && subDir.GetFiles().Length == 0)
                 {
-                    return maxDepth;
+                    if (di.GetDirectories().Length > 0) 
+                    {
+                        maxDepth++;
+                    }
+                    else return maxDepth;
                 }
                 else
                 {
@@ -576,7 +624,7 @@ namespace BeatSaberIndependentMapsManager
                     }
                     break;
                 case 1:
-                    if (Directory.GetDirectories(path).Length > 2)
+                    if (Directory.GetDirectories(path).Length >= 2)
                     {
                         addMusicPack(path);
                     }
@@ -610,7 +658,7 @@ namespace BeatSaberIndependentMapsManager
                     break;
             }
         }
-        private void saveSongFolderDSong(string path)
+        private void saveSongFolderDSong(string path,bool copyFile)
         {
             try
             {
@@ -618,14 +666,30 @@ namespace BeatSaberIndependentMapsManager
                 {
                     DirectoryInfo song = new DirectoryInfo(item.songFolder);
                     string newPath = Path.Combine(path, song.Name);
-                    if (Directory.Exists(newPath))
+                    if (Directory.Exists(newPath) && newPath != item.songFolder)
                     {
                         Directory.Delete(newPath, true);
                     }
-                    Directory.Move(item.songFolder, newPath);
-                    debugLog("歌曲：" + item._songName + "移动到目录：" + path);
+                    else if (Directory.Exists(newPath) && newPath == item.songFolder)
+                    {
+                        continue;
+                    }
+                    if (copyFile)
+                    {
+                        FileSystem.CopyDirectory(item.songFolder, newPath);
+                        debugLog("歌曲：" + item._songName + "复制到目录：" + path);
+                    }
+                    else
+                    {
+                        FileSystem.MoveDirectory(item.songFolder, newPath);
+                        debugLog("歌曲：" + item._songName + "移动到目录：" + path);
+                    }
                 }
-                delicatedSongList.Clear();
+                if (!copyFile) 
+                {
+                    delicatedSongList.Clear();
+                    DelicatedSongListView.Clear();
+                }
             }
             catch (IOException)
             {
@@ -1285,16 +1349,27 @@ namespace BeatSaberIndependentMapsManager
                 if (index != -1)
                 {
                     string playKey = songListView.SelectedItems[0].SubItems[1].Text;
-                    SongMap playSong = musicPackInfo[musicPackListView.SelectedItems[0].Text][playKey];
-                    if (btnPlay.Text == "播放")
+                    if (musicPackListView.SelectedItems.Count > 0)
                     {
-                        string playPath = playSong.songFolder + "\\" + playSong._songFilename;
-                        NAudio.Vorbis.VorbisWaveReader vorbis = new NAudio.Vorbis.VorbisWaveReader(playPath);
-                        waveOut.Init(vorbis);
-                        waveOut.Play();
-                        BSIMMStatusUpdate("播放器：", "正在播放" + playSong._songName, 50);
-                        btnPlay.Text = "暂停";
-                        PlaybackTimer.Enabled = true;
+                        playSong = musicPackInfo[musicPackListView.SelectedItems[0].Text][playKey];
+                    }
+                    else
+                    {
+                        foreach (Dictionary<string,SongMap> musicPack in musicPackInfo.Values)
+                        {
+                            if(musicPack.ContainsKey(playKey))
+                            {
+                                playSong = musicPack[playKey];
+                            }
+                        }
+                    }
+                    if (btnPlay.Text == "播放" && playSong != null)
+                    {
+                        AudioPlayer(playSong);
+                    }
+                    else 
+                    {
+                        debugLog("未找到" + playKey + "对应的歌曲，请检查该key是否存在！");
                     }
                 }
             }
@@ -1329,6 +1404,7 @@ namespace BeatSaberIndependentMapsManager
                 BSIMMStatusUpdate("播放器：", "已停止", 0);
                 PlaybackTimer.Enabled = false;
             }
+            
         }
 
         private void btnSetImg_Click(object sender, EventArgs e)
@@ -1682,13 +1758,7 @@ namespace BeatSaberIndependentMapsManager
                     SongMap playSong = delicatedSongList[playKey];
                     if (btnPlay2.Text == "播放")
                     {
-                        string playPath = playSong.songFolder + "\\" + playSong._songFilename;
-                        NAudio.Vorbis.VorbisWaveReader vorbis = new NAudio.Vorbis.VorbisWaveReader(playPath);
-                        waveOut.Init(vorbis);
-                        waveOut.Play();
-                        BSIMMStatusUpdate("播放器：", "正在播放" + playSong._songName, 50);
-                        btnPlay2.Text = "暂停";
-                        PlaybackTimer.Enabled = true;
+                        AudioPlayer(playSong);
                     }
                 }
             }
@@ -1707,9 +1777,18 @@ namespace BeatSaberIndependentMapsManager
             string path = BSIMMFolderBrowser.SelectedPath;
             if (path != "")
             {
-                saveSongFolderDSong(path);
-                debugLog("散装歌曲已经全部移动到目录：" + path + " 可以在第一页添加此目录！");
-                DelicatedSongListView.Clear();
+                DialogResult saveSrcFile = MessageBox.Show("需要保留原目录文件吗？", "提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                if (saveSrcFile == DialogResult.Yes)
+                {
+                    saveSongFolderDSong(path, true);
+                    debugLog("散装歌曲已经全部复制到目录：" + path + " 可以在第一页添加此目录！");
+                }
+                else if (saveSrcFile == DialogResult.No)
+                {
+                    saveSongFolderDSong(path, false);
+                    debugLog("散装歌曲已经全部复制到目录：" + path + " 可以在第一页添加此目录！");
+                }
+                else debugLog("操作取消：整合散装歌曲到目录："+ path);
             }
             else
             {
@@ -1723,6 +1802,7 @@ namespace BeatSaberIndependentMapsManager
             {
                 if (MessageBox.Show("全盘扫描旨在扫描散落的歌曲,建议先在第一页添加歌曲目录，软件会自动排除扫描\n如果已添加歌曲目录，请忽略本提示并点击确认，否则请点击取消", "提示", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) == DialogResult.OK)
                 {
+                    bool excluded = false;
                     Everything_SetSearch("info.dat");
                     Everything_SetRequestFlags(EVERYTHING_REQUEST_PATH | EVERYTHING_REQUEST_FILE_NAME);
                     Everything_SetMatchWholeWord(true);
@@ -1733,8 +1813,20 @@ namespace BeatSaberIndependentMapsManager
                         buf.Clear();
                         Everything_GetResultFullPathName(i, buf, 300);
                         var path = Path.GetDirectoryName(buf.ToString())!;
-                        if (musicPackPath.ContainsValue(path) || path.Contains("Prefetch") || path.Contains("$RECYCLE.BIN") || path.Contains("OneDrive") || File.GetAttributes(buf.ToString()).HasFlag(FileAttributes.Directory)) continue;
-                        addDelicatedSong(path);
+                        if (path.Contains("Prefetch") || path.Contains("$RECYCLE.BIN") || path.Contains("OneDrive") || File.GetAttributes(buf.ToString()).HasFlag(FileAttributes.Directory)) continue;
+                        foreach (var musicPackDir in musicPackPath.Values) 
+                        {
+                            if (path.Contains(musicPackDir))
+                            {
+                                excluded = true;
+                                break;
+                            }
+                            
+                        }
+                        if (!excluded) 
+                        {
+                            addDelicatedSong(path);
+                        }
                     }
                     displayDelicatedSongList();
                 }
