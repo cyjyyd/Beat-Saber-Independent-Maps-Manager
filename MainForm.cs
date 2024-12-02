@@ -1365,6 +1365,7 @@ namespace BeatSaberIndependentMapsManager
                     }
                     if (btnPlay.Text == "播放" && playSong != null)
                     {
+                        btnPlay.Text = "暂停";
                         AudioPlayer(playSong);
                     }
                     else 
