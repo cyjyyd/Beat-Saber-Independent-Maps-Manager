@@ -35,7 +35,7 @@ namespace BeatSaberIndependentMapsManager
         private byte[] bsVersions = null;
         private readonly HashSet<string> gameInstance = new();
         private SongMap playSong;
-        Dictionary<string, string> SongsHash = null;
+        Dictionary<string, string> SongsHash = new Dictionary<string, string>();
         List<BSVerInfo> bsVerionSet = null;
         Config config = new Config();
         private Dictionary<string, SongMap> delicatedSongList = new Dictionary<string, SongMap>();
@@ -274,8 +274,19 @@ namespace BeatSaberIndependentMapsManager
                                 else
                                 {
                                     debugLog("检测到相同版本，自动重命名");
-                                    BSInstancePath.Add(Rename(ver), path);
-                                    InstanceSongCoreReady.Add(Rename(ver), modCheck(path));
+                                    string escapedPrefix = Regex.Escape(ver);
+                                    string pattern = @"^" + escapedPrefix + @"(\[[0-9]+\])?$";
+                                    List<string> duplicateTemp = new List<string>();
+                                    foreach (string storeVer in BSInstancePath.Keys)
+                                    {
+                                        if (Regex.Match(storeVer, pattern).Success)
+                                        {
+                                            duplicateTemp.Add(storeVer);
+                                        }
+                                    }
+                                    string newVer = Rename(duplicateTemp.Last());
+                                    BSInstancePath.Add(newVer, path);
+                                    InstanceSongCoreReady.Add(newVer, modCheck(path));
                                 }
 
                             }
@@ -477,13 +488,14 @@ namespace BeatSaberIndependentMapsManager
                 Int32 filelength = 0;
                 filelength = (int)fileStream.Length;
                 Byte[] image = new Byte[filelength];
-                fileStream.Read(image, 0, filelength);
+                fileStream.ReadExactly(image, 0, filelength);
                 System.Drawing.Image result = System.Drawing.Image.FromStream(fileStream);
                 fileStream.Close();
                 bitmap = new Bitmap(result);
             }
-            catch
+            catch(IOException)
             {
+                debugLog("读取cover.jpg文件时出现错误");
             }
             return bitmap;
         }
@@ -754,7 +766,7 @@ namespace BeatSaberIndependentMapsManager
                 {
                     if (musicPackName != null)
                     {
-                        if (musicPackInfo[musicPackName].ContainsKey(bsr))
+                        if (!musicPackInfo[musicPackName].TryAdd(bsr, songMap))
                         {
                             debugLog("警告:检测到重复歌曲：" + songMap._songName + "将自动重命名标注");
                             string escapedPrefix = Regex.Escape(bsr);
@@ -771,21 +783,16 @@ namespace BeatSaberIndependentMapsManager
                             musicPackInfo[musicPackName].Add(newBsr, songMap);
                             return 3;
                         }
-                        else
-                        {
-                            musicPackInfo[musicPackName].Add(bsr, songMap);
-                        }
                     }
                     else
                     {
-                        if (delicatedSongList.ContainsKey(bsr))
+                        lock(delicatedSongList)
                         {
-                            debugLog("警告:检测到重复歌曲：" + bsr + "，将不会添加到独立歌曲列表中");
-                            return 3;
-                        }
-                        else
-                        {
-                            delicatedSongList.Add(bsr, songMap);
+                            if (!delicatedSongList.TryAdd(bsr, songMap))
+                            {
+                                debugLog("警告:检测到重复歌曲：" + bsr + "，将不会添加到独立歌曲列表中");
+                                return 3;
+                            }
                         }
                     }
                     return 2;
@@ -929,39 +936,25 @@ namespace BeatSaberIndependentMapsManager
             }
             GC.Collect();
         }
-        public async void HashCachePack(string musicPackName) 
+        public async Task HashCachePack(string musicPackName) 
         {
             Stopwatch stopwatch = Stopwatch.StartNew();
             int count = 0;
-            if (SongsHash != null)
+            foreach (KeyValuePair<string, SongMap> hashlist in musicPackInfo[musicPackName])
             {
-                foreach (KeyValuePair<string, SongMap> hashlist in musicPackInfo[musicPackName])
-                {
-                    if (!SongsHash.ContainsKey(hashlist.Key))
-                    {
-                        SongsHash.Add(hashlist.Key, await getSongHash(hashlist.Value));
-                    }
-                    else
-                    {
-                        count++;
-                        BSIMMProgressUpdate(calcProgress(count, SongsHash.Count));
-                    }
-                }
-                stopwatch.Stop();
-                debugLog(($"曲包歌曲已有缓存，查漏补缺！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
-                BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
-            }
-            else
-            {
-                SongsHash = new Dictionary<string, string>();
-                foreach (KeyValuePair<string, SongMap> hashlist in musicPackInfo[musicPackName])
+                if (!SongsHash.ContainsKey(hashlist.Key))
                 {
                     SongsHash.Add(hashlist.Key, await getSongHash(hashlist.Value));
                 }
-                stopwatch.Stop();
-                debugLog(($"建立缓存成功！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
-                BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
+                else
+                {
+                    count++;
+                    BSIMMProgressUpdate(calcProgress(count, SongsHash.Count));
+                }
             }
+            stopwatch.Stop();
+            debugLog(($"曲包缓存已刷新！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
+            BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
             GC.Collect();   
         }
         private void displayMusicpack(string musicPackName)
@@ -1086,14 +1079,15 @@ namespace BeatSaberIndependentMapsManager
             else
             {
                 debugLog("开始导出bplist文件：" + path);
-
-                Task.Run(() =>
+                List<Task> tasks = new List<Task>();
+                Task.Run(async() =>
                 {
                     foreach (string bplistName in musicPackInfo.Keys)
                     {
                         string currentBplistName = bplistName;
-                        Task.Run(() => saveMusicPackSonginfo(currentBplistName, path));
+                        tasks.Add(Task.Run(async() => await saveMusicPackSonginfo(currentBplistName, path)));
                     }
+                    await Task.WhenAll(tasks);
                 }).ContinueWith(t => { 
                     if(config.HashCache)
                     {
@@ -1115,38 +1109,22 @@ namespace BeatSaberIndependentMapsManager
             PlayList playList = new PlayList(musicPackName, author, description, imgBytes);
             if (config.HashCache)
             {
-                if (SongsHash != null)
+                foreach (KeyValuePair<string, SongMap> hashlist in musicPackInfo[musicPackName])
                 {
-                    foreach (KeyValuePair<string, SongMap> hashlist in musicPackInfo[musicPackName])
-                    {
-                        if (!SongsHash.ContainsKey(hashlist.Key))
-                        {
-                            string hashValue = await getSongHash(hashlist.Value);
-                            playList.AddSongHash(hashValue);
-                            SongsHash.Add(hashlist.Key, hashValue);
-                        }
-                        else
-                        {
-                            playList.AddSongHash(SongsHash[hashlist.Key]);
-                        }
-                    }
-                    stopwatch.Stop();
-                    debugLog(("曲包：" + musicPackName + $"导出使用缓存加速成功！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
-                    BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
-                }
-                else
-                {
-                    SongsHash = new Dictionary<string, string>();
-                    foreach (KeyValuePair<string, SongMap> hashlist in musicPackInfo[musicPackName])
+                    if (!SongsHash.ContainsKey(hashlist.Key))
                     {
                         string hashValue = await getSongHash(hashlist.Value);
-                        SongsHash.Add(hashlist.Key, hashValue);
                         playList.AddSongHash(hashValue);
+                        SongsHash.TryAdd(hashlist.Key, hashValue);
                     }
-                    stopwatch.Stop();
-                    debugLog(("曲包：" + musicPackName + $"未找到缓存，已在计算同时缓存！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
-                    BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
+                    else
+                    {
+                        playList.AddSongHash(SongsHash[hashlist.Key]);
+                    }
                 }
+                stopwatch.Stop();
+                debugLog(("曲包：" + musicPackName + $"导出使用缓存加速成功！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
+                BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
             }
             else
             {
@@ -1166,24 +1144,22 @@ namespace BeatSaberIndependentMapsManager
             output.Close(); output.Dispose();
             GC.Collect();
         }
-
         private async Task<string> getSongHash(SongMap songMap)
         {
-            using MemoryStream allFiles = new();
-            using FileStream infoFile = new FileStream(songMap.songFolder + "\\Info.dat", FileMode.Open, FileAccess.Read);
-            infoFile.CopyTo(allFiles);
-            string[] files = songMap.GetDifficultiesFiles();
-            for (int i = 0; i < files.Length; i++)
-            {
-                using FileStream file = new FileStream(songMap.songFolder + "\\" + files[i], FileMode.Open, FileAccess.Read);
-                file.CopyTo(allFiles);
-            }
-            allFiles.Position = 0;
             using SHA1 sha1 = SHA1.Create();
-            byte[] hashBytes = await sha1.ComputeHashAsync(allFiles);
-            string sha1Result = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
-            hashBytes = null;
-            return sha1Result;
+            foreach (string filePath in new[] { songMap.songFolder + "\\Info.dat" }.Concat(songMap.GetDifficultiesFiles().Select(f => songMap.songFolder + "\\" + f)))
+            {
+                using FileStream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+                byte[] buffer = new byte[65536]; // 64KB buffer
+                int bytesRead;
+                while ((bytesRead = await fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                {
+                    sha1.TransformBlock(buffer, 0, bytesRead, null, 0);
+                }
+            }
+            sha1.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+            byte[] hashBytes = sha1.Hash;
+            return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
         }
         #endregion
         #region 窗口事件
@@ -1233,7 +1209,7 @@ namespace BeatSaberIndependentMapsManager
             }
             try
             {
-                Task.Run(() =>
+                Task.Run(async() =>
                 {
                     for (int i = 0; i < verifiedPaths.Count; i++)
                     {
@@ -1243,7 +1219,7 @@ namespace BeatSaberIndependentMapsManager
                     {
                         foreach (KeyValuePair<string, Dictionary<string, SongMap>> HashMusicPack in musicPackInfo)
                         {
-                            HashCachePack(HashMusicPack.Key);
+                            await HashCachePack(HashMusicPack.Key);
                         }
                     }
                 }).ContinueWith(t => {
@@ -1282,14 +1258,14 @@ namespace BeatSaberIndependentMapsManager
                     BSIMMStatusUpdate("解析：", "'" + folderPaths[i] + "'不是文件夹!跳过添加", 100);
                 }
             }
-            Task.Run(() =>
+            Task.Run(async () =>
             {
                 addFolder(verifiedPaths[0]);
                 if (config.HashCache)
                 {
                     foreach (KeyValuePair<string, Dictionary<string, SongMap>> HashMusicPack in musicPackInfo)
                     {
-                        HashCachePack(HashMusicPack.Key);
+                        await HashCachePack(HashMusicPack.Key);
                     }
                 }
             }).ContinueWith(t => {
@@ -1561,7 +1537,10 @@ namespace BeatSaberIndependentMapsManager
                 {
                     try
                     {
-                        musicPackCoverimgs[musicPack.Text].Save(musicPackPath[musicPack.Text] + "\\cover.jpg");
+                        if (!File.Exists(musicPackPath[musicPack.Text] + "\\cover.jpg"))
+                        {
+                            musicPackCoverimgs[musicPack.Text].Save(musicPackPath[musicPack.Text] + "\\cover.jpg");
+                        }
                         XElement folder = new XElement("folder",
                             new XElement("Name", musicPack.Text),
                             new XElement("Path", musicPackPath[musicPack.Text]),
@@ -1797,38 +1776,46 @@ namespace BeatSaberIndependentMapsManager
             }
         }
 
-        private void btnFullScan_Click(object sender, EventArgs e)
+        private async void btnFullScan_Click(object sender, EventArgs e)
         {
             if (multiInstanceDetect)
             {
                 if (MessageBox.Show("全盘扫描旨在扫描散落的歌曲,建议先在第一页添加歌曲目录，软件会自动排除扫描\n如果已添加歌曲目录，请忽略本提示并点击确认，否则请点击取消", "提示", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) == DialogResult.OK)
                 {
-                    bool excluded = false;
                     Everything_SetSearch("info.dat");
                     Everything_SetRequestFlags(EVERYTHING_REQUEST_PATH | EVERYTHING_REQUEST_FILE_NAME);
                     Everything_SetMatchWholeWord(true);
                     Everything_Query(true);
-                    var buf = new StringBuilder(300);
+                    StringBuilder buf = new StringBuilder(300);
+                    List<Task> tasks = new List<Task>();
+                    List<string> paths = new List<string>();
+                    SemaphoreSlim semaphore = new SemaphoreSlim(10);
                     for (uint i = 0; i < Everything_GetNumResults(); i++)
                     {
                         buf.Clear();
                         Everything_GetResultFullPathName(i, buf, 300);
                         var path = Path.GetDirectoryName(buf.ToString())!;
                         if (path.Contains("Prefetch") || path.Contains("$RECYCLE.BIN") || path.Contains("OneDrive") || File.GetAttributes(buf.ToString()).HasFlag(FileAttributes.Directory)) continue;
-                        foreach (var musicPackDir in musicPackPath.Values) 
+                        paths.Add(path);
+                    }
+                    foreach (string path in paths)
+                    {
+                        bool excluded = false;
+                        foreach (string MusicPackDir in musicPackPath.Values)
                         {
-                            if (path.Contains(musicPackDir))
+                            if(path.Contains(MusicPackDir))
                             {
                                 excluded = true;
                                 break;
                             }
-                            
                         }
-                        if (!excluded) 
+                        if (!excluded)
                         {
-                            addDelicatedSong(path);
+                            await semaphore.WaitAsync();
+                            tasks.Add(Task.Run(() => { try { addDelicatedSong(path); } finally { semaphore.Release(); } }));
                         }
                     }
+                    await Task.WhenAll(tasks);
                     displayDelicatedSongList();
                 }
             }
