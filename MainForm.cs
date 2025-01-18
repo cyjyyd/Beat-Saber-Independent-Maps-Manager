@@ -1795,7 +1795,7 @@ namespace BeatSaberIndependentMapsManager
                         buf.Clear();
                         Everything_GetResultFullPathName(i, buf, 300);
                         var path = Path.GetDirectoryName(buf.ToString())!;
-                        if (path.Contains("Prefetch") || path.Contains("$RECYCLE.BIN") || path.Contains("OneDrive") || File.GetAttributes(buf.ToString()).HasFlag(FileAttributes.Directory)) continue;
+                        if (path.Contains("Prefetch") || path.Contains("$RECYCLE.BIN") || path.Contains("OneDrive") || Directory.Exists(buf.ToString())) continue;
                         paths.Add(path);
                     }
                     foreach (string path in paths)
