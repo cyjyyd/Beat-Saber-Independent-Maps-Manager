@@ -21,7 +21,6 @@ using System.Drawing.Imaging;
 using Microsoft.VisualBasic.FileIO;
 using NAudio.Vorbis;
 using NAudio.Wave;
-using AxWMPLib;
 
 namespace BeatSaberIndependentMapsManager
 {
@@ -416,21 +415,19 @@ namespace BeatSaberIndependentMapsManager
                 if (tabMusicPackContorl.SelectedIndex == 0)
                 {
                     axWMPMusicPack.URL = playPath;
-                    Thread.Sleep(100);
+                    Thread.Sleep(50);
                     axWMPMusicPack.Ctlcontrols.stop();
                 }
                 else if (tabMusicPackContorl.SelectedIndex == 2)
                 {
                     axWMPDelicatedSong.URL = playPath;
-                    Thread.Sleep(100);
+                    Thread.Sleep(50);
                     axWMPDelicatedSong.Ctlcontrols.stop();
                 }
             }));
         }
         void AudioPlayer(SongMap playSong)
         {
-            axWMPMusicPack.URL = "";
-            axWMPDelicatedSong.URL = "";
             try
             {
                 string playPath = playSong.songFolder + "\\" + playSong._songFilename;
@@ -1384,9 +1381,10 @@ namespace BeatSaberIndependentMapsManager
                     {
                         if (axWMPMusicPack.URL != "") 
                         {
-                            File.Delete(axWMPMusicPack.URL);
+                            string url = axWMPMusicPack.URL;
+                            axWMPMusicPack.Ctlcontrols.stop();
+                            Task.Run(()=>File.Delete(url));
                         }
-                        axWMPMusicPack.Ctlcontrols.stop();
                         AudioPlayer(playSong);
                     }
                 }
@@ -1395,7 +1393,7 @@ namespace BeatSaberIndependentMapsManager
 
         private void btnExit_Click(object sender, EventArgs e)
         {
-            Environment.Exit(0);
+            Application.Exit();
         }
         private void btnSetImg_Click(object sender, EventArgs e)
         {
@@ -1478,12 +1476,28 @@ namespace BeatSaberIndependentMapsManager
             }
         }
 
-        private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
+        private async void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             if (MessageBox.Show("确定要退出吗？", "提示", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.No)
             {
                 e.Cancel = true;
+                return;
             }
+            string[] files = Directory.GetFiles(Application.StartupPath + "assets\\temp\\");
+            await Task.Run(() =>
+            {
+                foreach (string file in files)
+                {
+                    try
+                    {
+                        File.Delete(file);
+                    }
+                    catch (IOException ex)
+                    {
+                        debugLog($"删除文件 {file} 失败: {ex.Message} 清尝试手动清理临时文件夹asset\temp");
+                    }
+                }
+            });
         }
 
         private void btnDeduplication_Click(object sender, EventArgs e)
@@ -1727,9 +1741,10 @@ namespace BeatSaberIndependentMapsManager
                 }
                 if (axWMPDelicatedSong.URL != "")
                 {
-                    File.Delete(axWMPDelicatedSong.URL);
+                    string durl = axWMPDelicatedSong.URL;
+                    axWMPDelicatedSong.Ctlcontrols.stop();
+                    Task.Run(() => File.Delete(durl));
                 }
-                axWMPDelicatedSong.Ctlcontrols.stop();
                 playSong = delicatedSongList[DelicatedSongListView.SelectedItems[0].SubItems[1].Text];
                 AudioPlayer(playSong);
             }
