@@ -47,7 +47,7 @@
   </PropertyGroup>
 	<PropertyGroup>
 		<ServerGarbageCollection>true</ServerGarbageCollection>
-		<GarbageCollectionAdapatationMode>1</GarbageCollectionAdapatationMode>
+		<GarbageCollectionAdaptationMode>1</GarbageCollectionAdaptationMode>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
 	  <NoWarn>1701;1702;CA1416</NoWarn>
