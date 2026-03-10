@@ -23,7 +23,7 @@
 
 ### 关于本项目
 Beat Saber mod依赖：[Song Core]
-增强扩展：[EveryThing]
+增强扩展：[Everything]
 部分功能依赖everything实现，请提前安装好everything或在软件内点击安装并保持运行状态。（也可以选择不安装，但是部分功能体验将降级）
 
 
