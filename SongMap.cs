@@ -1,6 +1,7 @@
 ﻿using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -98,15 +99,23 @@ namespace BeatSaberIndependentMapsManager
         }
         public string[] GetDifficultiesFiles()
         {
-            List<string> difficulties = new List<string>();
-            foreach (JObject difficultyBeatmapSet in _difficultyBeatmapSets)
+            try
             {
-                foreach (JObject difficultyBeatmap in (JArray)difficultyBeatmapSet["_difficultyBeatmaps"])
+                List<string> difficulties = new List<string>();
+                foreach (JObject difficultyBeatmapSet in _difficultyBeatmapSets)
                 {
-                    difficulties.Add(difficultyBeatmap["_beatmapFilename"].ToString());
+                    foreach (JObject difficultyBeatmap in (JArray)difficultyBeatmapSet["_difficultyBeatmaps"])
+                    {
+                        difficulties.Add(difficultyBeatmap["_beatmapFilename"].ToString());
+                    }
                 }
+                return difficulties.ToArray();
             }
-            return difficulties.ToArray();
+            catch (Exception)
+            {
+                return null;
+            }
+
         }
     }
 }

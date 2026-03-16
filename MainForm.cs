@@ -837,19 +837,19 @@ namespace BeatSaberIndependentMapsManager
             string musicFile = map._songFilename;
             if (!File.Exists(mapDir + "\\" + coverImg))
             {
-                debugLog("警告:检测到缺失封面文件：" + coverImg);
+                debugLog("警告:检测到缺失封面文件：" + coverImg +"目录：" + mapDir);
                 return false;
             }
             if (!File.Exists(mapDir + "\\" + musicFile))
             {
-                debugLog("警告:检测到缺失音乐文件：" + musicFile);
+                debugLog("警告:检测到缺失音乐文件：" + musicFile + "目录：" + mapDir);
                 return false;
             }
             foreach (string mapFile in mapStruct)
             {
                 if (!File.Exists(mapDir + "\\" + mapFile))
                 {
-                    debugLog("警告:检测到缺失谱面文件：" + mapFile);
+                    debugLog("警告:检测到缺失谱面文件：" + mapFile + "目录：" + mapDir);
                     return false;
                 }
             }
