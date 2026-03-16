@@ -316,28 +316,28 @@ namespace BeatSaberIndependentMapsManager
             string modpath = path + "\\Plugins";
             string pendingpath = path + "\\IPA\\Pending";
             string[] mods = { "\\SiraUtil.dll", "\\BSML.dll", "\\SongCore.dll" };
-            bool[] Modstatus = new bool[5];// 0:SiraUtil 1:BSML 2:SongCore 3:Installed or Pending 4:FileNotFound
+            bool[] modStatus = new bool[5];// 0:SiraUtil 1:BSML 2:SongCore 3:Installed(true)或Pending(false) 4:FileNotFound
             for (int i = 0; i < mods.Length; i++)
             {
-                Modstatus[i] = File.Exists(modpath + mods[i]);
+                modStatus[i] = File.Exists(modpath + mods[i]);
             }
-            if (Modstatus[0] && Modstatus[1] && Modstatus[2])
+            if (modStatus[0] && modStatus[1] && modStatus[2])
             {
-                Modstatus[3] = true;
+                modStatus[3] = true;
             }
             else
             {
                 for (int i = 0; i < mods.Length; i++)
                 {
-                    Modstatus[i] = File.Exists(pendingpath + mods[i]);
+                    modStatus[i] = File.Exists(pendingpath + mods[i]);
                 }
-                if (Modstatus[0] && Modstatus[1] && Modstatus[2])
+                if (modStatus[0] && modStatus[1] && modStatus[2])
                 {
-                    Modstatus[3] = false;
+                    modStatus[3] = false;
                 }
-                else Modstatus[4] = true;
+                else modStatus[4] = true;
             }
-            return Modstatus;
+            return modStatus;
         }
         private string BeatSaberVersionDetect(string path)
         {
