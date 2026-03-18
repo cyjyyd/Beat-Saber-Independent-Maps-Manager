@@ -1,4 +1,6 @@
-﻿namespace BeatSaberIndependentMapsManager
+﻿using System.Windows.Forms;
+
+namespace BeatSaberIndependentMapsManager
 {
     partial class MainForm
     {
@@ -30,84 +32,79 @@
         {
             components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
-            BSIMMStats = new System.Windows.Forms.StatusStrip();
-            BSIMMActionText = new System.Windows.Forms.ToolStripStatusLabel();
-            BSIMMStatusText = new System.Windows.Forms.ToolStripStatusLabel();
-            BSIMMProgress = new System.Windows.Forms.ToolStripProgressBar();
-            txtDebug = new System.Windows.Forms.RichTextBox();
-            BSIMMFolderBrowser = new System.Windows.Forms.FolderBrowserDialog();
-            btnOpenFolder = new System.Windows.Forms.Button();
-            btnSaveMusicPack = new System.Windows.Forms.Button();
-            tabMusicPackContorl = new System.Windows.Forms.TabControl();
-            tabSongFolder = new System.Windows.Forms.TabPage();
-            label2 = new System.Windows.Forms.Label();
-            axWMPMusicPack = new AxWMPLib.AxWindowsMediaPlayer();
-            btnDeduplication = new System.Windows.Forms.Button();
-            label3 = new System.Windows.Forms.Label();
-            trackVolume = new System.Windows.Forms.TrackBar();
-            btnPlay = new System.Windows.Forms.Button();
-            trackProgress = new System.Windows.Forms.TrackBar();
-            btnExportFavor = new System.Windows.Forms.Button();
-            btnInfo = new System.Windows.Forms.Button();
-            btnSaveList = new System.Windows.Forms.Button();
-            btnSetImg = new System.Windows.Forms.Button();
-            label1 = new System.Windows.Forms.Label();
-            songListView = new System.Windows.Forms.ListView();
-            songName = new System.Windows.Forms.ColumnHeader();
-            bsr = new System.Windows.Forms.ColumnHeader();
-            bpm = new System.Windows.Forms.ColumnHeader();
-            musicPackListView = new System.Windows.Forms.ListView();
-            musicPackimg = new System.Windows.Forms.ImageList(components);
-            lblMap = new System.Windows.Forms.Label();
-            lblMusicPack = new System.Windows.Forms.Label();
-            tabBSVer = new System.Windows.Forms.TabPage();
-            tabDelicatedSong = new System.Windows.Forms.TabPage();
-            lblPreviewdsong = new System.Windows.Forms.Label();
-            axWMPDelicatedSong = new AxWMPLib.AxWindowsMediaPlayer();
-            btnFullScan = new System.Windows.Forms.Button();
-            btnPlay2 = new System.Windows.Forms.Button();
-            label2 = new System.Windows.Forms.Label();
-            trackVolume2 = new System.Windows.Forms.TrackBar();
-            trackProgress2 = new System.Windows.Forms.TrackBar();
-            btnMigrateFolder = new System.Windows.Forms.Button();
-            DelicatedSongListView = new System.Windows.Forms.ListView();
-            columnHeader1 = new System.Windows.Forms.ColumnHeader();
-            columnHeader2 = new System.Windows.Forms.ColumnHeader();
-            columnHeader3 = new System.Windows.Forms.ColumnHeader();
-            columnHeader4 = new System.Windows.Forms.ColumnHeader();
-            tabFolderandList = new System.Windows.Forms.TabPage();
-            lblFilterCondition = new System.Windows.Forms.Label();
-            lblFilterResult = new System.Windows.Forms.Label();
-            dataGridView1 = new System.Windows.Forms.DataGridView();
-            DB_bsr = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            DB_Cover = new System.Windows.Forms.DataGridViewImageColumn();
-            DB_Name = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            DB_description = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            DB_bpm = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            DB_levelAuthorName = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            btnDFSelect = new System.Windows.Forms.Button();
-            lbldownloadFolderTip = new System.Windows.Forms.Label();
-            lbldownloadFolder = new System.Windows.Forms.Label();
-            textBox1 = new System.Windows.Forms.TextBox();
-            lblbplistTip = new System.Windows.Forms.Label();
-            btnSetting = new System.Windows.Forms.Button();
-            comboBoxPlatform = new System.Windows.Forms.ComboBox();
-            lblPlatform = new System.Windows.Forms.Label();
-            btnInstallEverything = new System.Windows.Forms.Button();
-            lblExtension = new System.Windows.Forms.Label();
-            btnTutorial = new System.Windows.Forms.Button();
-            btnExit = new System.Windows.Forms.Button();
-            pictureBox1 = new System.Windows.Forms.PictureBox();
-            musicPackCoverDialog = new System.Windows.Forms.OpenFileDialog();
-            savebplistDialog = new System.Windows.Forms.FolderBrowserDialog();
+            BSIMMStats = new StatusStrip();
+            BSIMMActionText = new ToolStripStatusLabel();
+            BSIMMStatusText = new ToolStripStatusLabel();
+            BSIMMProgress = new ToolStripProgressBar();
+            txtDebug = new RichTextBox();
+            BSIMMFolderBrowser = new FolderBrowserDialog();
+            btnOpenFolder = new Button();
+            btnSaveMusicPack = new Button();
+            tabMusicPackContorl = new TabControl();
+            tabSongFolder = new TabPage();
+            lblProgressText = new Label();
+            btnDeduplication = new Button();
+            lblVolumeText = new Label();
+            btnPlay = new Button();
+            trackVolume = new VolumeBarEx();
+            trackProgress = new ProgressBarEx();
+            btnExportFavor = new Button();
+            btnInfo = new Button();
+            btnSaveList = new Button();
+            btnSetImg = new Button();
+            label1 = new Label();
+            songListView = new ListView();
+            songName = new ColumnHeader();
+            bsr = new ColumnHeader();
+            bpm = new ColumnHeader();
+            musicPackListView = new ListView();
+            musicPackimg = new ImageList(components);
+            lblMap = new Label();
+            lblMusicPack = new Label();
+            tabBSVer = new TabPage();
+            tabDelicatedSong = new TabPage();
+            lblVolumeText2 = new Label();
+            lblPreviewdsong = new Label();
+            btnFullScan = new Button();
+            btnPlay2 = new Button();
+            trackProgress2 = new ProgressBarEx();
+            trackVolume2 = new VolumeBarEx();
+            btnMigrateFolder = new Button();
+            DelicatedSongListView = new ListView();
+            columnHeader1 = new ColumnHeader();
+            columnHeader2 = new ColumnHeader();
+            columnHeader3 = new ColumnHeader();
+            columnHeader4 = new ColumnHeader();
+            tabFolderandList = new TabPage();
+            lblFilterCondition = new Label();
+            lblFilterResult = new Label();
+            dataGridView1 = new DataGridView();
+            DB_bsr = new DataGridViewTextBoxColumn();
+            DB_Cover = new DataGridViewImageColumn();
+            DB_Name = new DataGridViewTextBoxColumn();
+            DB_description = new DataGridViewTextBoxColumn();
+            DB_bpm = new DataGridViewTextBoxColumn();
+            DB_levelAuthorName = new DataGridViewTextBoxColumn();
+            btnDFSelect = new Button();
+            lbldownloadFolderTip = new Label();
+            lbldownloadFolder = new Label();
+            textBox1 = new TextBox();
+            lblbplistTip = new Label();
+            PlaybackTimer = new Timer(components);
+            btnSetting = new Button();
+            comboBoxPlatform = new ComboBox();
+            lblPlatform = new Label();
+            btnInstallEverything = new Button();
+            lblExtension = new Label();
+            btnTutorial = new Button();
+            btnExit = new Button();
+            pictureBox1 = new PictureBox();
+            musicPackCoverDialog = new OpenFileDialog();
+            savebplistDialog = new FolderBrowserDialog();
             BSIMMStats.SuspendLayout();
             tabMusicPackContorl.SuspendLayout();
             tabSongFolder.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)trackVolume).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)trackProgress).BeginInit();
             tabDelicatedSong.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)trackVolume2).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)trackProgress2).BeginInit();
             tabFolderandList.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dataGridView1).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
@@ -116,41 +113,41 @@
             // BSIMMStats
             // 
             BSIMMStats.ImageScalingSize = new System.Drawing.Size(24, 24);
-            BSIMMStats.Items.AddRange(new System.Windows.Forms.ToolStripItem[] { BSIMMActionText, BSIMMStatusText, BSIMMProgress });
-            BSIMMStats.LayoutStyle = System.Windows.Forms.ToolStripLayoutStyle.HorizontalStackWithOverflow;
-            BSIMMStats.Location = new System.Drawing.Point(0, 577);
+            BSIMMStats.Items.AddRange(new ToolStripItem[] { BSIMMActionText, BSIMMStatusText, BSIMMProgress });
+            BSIMMStats.LayoutStyle = ToolStripLayoutStyle.HorizontalStackWithOverflow;
+            BSIMMStats.Location = new System.Drawing.Point(0, 818);
             BSIMMStats.Name = "BSIMMStats";
-            BSIMMStats.Padding = new System.Windows.Forms.Padding(1, 0, 16, 0);
-            BSIMMStats.Size = new System.Drawing.Size(821, 29);
+            BSIMMStats.Padding = new Padding(2, 0, 25, 0);
+            BSIMMStats.Size = new System.Drawing.Size(1290, 38);
             BSIMMStats.TabIndex = 1;
             BSIMMStats.Text = "statusStrip1";
             // 
             // BSIMMActionText
             // 
             BSIMMActionText.Name = "BSIMMActionText";
-            BSIMMActionText.Size = new System.Drawing.Size(32, 24);
+            BSIMMActionText.Size = new System.Drawing.Size(46, 31);
             BSIMMActionText.Text = "信息";
             // 
             // BSIMMStatusText
             // 
             BSIMMStatusText.Name = "BSIMMStatusText";
-            BSIMMStatusText.Size = new System.Drawing.Size(0, 24);
+            BSIMMStatusText.Size = new System.Drawing.Size(0, 31);
             // 
             // BSIMMProgress
             // 
-            BSIMMProgress.Alignment = System.Windows.Forms.ToolStripItemAlignment.Right;
+            BSIMMProgress.Alignment = ToolStripItemAlignment.Right;
             BSIMMProgress.AutoSize = false;
-            BSIMMProgress.Margin = new System.Windows.Forms.Padding(50, 3, 1, 3);
+            BSIMMProgress.Margin = new Padding(50, 3, 1, 3);
             BSIMMProgress.Name = "BSIMMProgress";
-            BSIMMProgress.Size = new System.Drawing.Size(192, 23);
+            BSIMMProgress.Size = new System.Drawing.Size(302, 32);
             // 
             // txtDebug
             // 
-            txtDebug.Location = new System.Drawing.Point(0, 501);
-            txtDebug.Margin = new System.Windows.Forms.Padding(4);
+            txtDebug.Location = new System.Drawing.Point(0, 707);
+            txtDebug.Margin = new Padding(6);
             txtDebug.Name = "txtDebug";
             txtDebug.ReadOnly = true;
-            txtDebug.Size = new System.Drawing.Size(693, 75);
+            txtDebug.Size = new System.Drawing.Size(1087, 104);
             txtDebug.TabIndex = 4;
             txtDebug.Text = "";
             // 
@@ -160,10 +157,10 @@
             // 
             // btnOpenFolder
             // 
-            btnOpenFolder.Location = new System.Drawing.Point(24, 429);
-            btnOpenFolder.Margin = new System.Windows.Forms.Padding(4);
+            btnOpenFolder.Location = new System.Drawing.Point(38, 606);
+            btnOpenFolder.Margin = new Padding(6);
             btnOpenFolder.Name = "btnOpenFolder";
-            btnOpenFolder.Size = new System.Drawing.Size(100, 30);
+            btnOpenFolder.Size = new System.Drawing.Size(157, 42);
             btnOpenFolder.TabIndex = 5;
             btnOpenFolder.Text = "添加曲包目录";
             btnOpenFolder.UseVisualStyleBackColor = true;
@@ -171,10 +168,10 @@
             // 
             // btnSaveMusicPack
             // 
-            btnSaveMusicPack.Location = new System.Drawing.Point(132, 429);
-            btnSaveMusicPack.Margin = new System.Windows.Forms.Padding(4);
+            btnSaveMusicPack.Location = new System.Drawing.Point(207, 606);
+            btnSaveMusicPack.Margin = new Padding(6);
             btnSaveMusicPack.Name = "btnSaveMusicPack";
-            btnSaveMusicPack.Size = new System.Drawing.Size(100, 30);
+            btnSaveMusicPack.Size = new System.Drawing.Size(157, 42);
             btnSaveMusicPack.TabIndex = 7;
             btnSaveMusicPack.Text = "保存曲包目录";
             btnSaveMusicPack.UseVisualStyleBackColor = true;
@@ -188,21 +185,20 @@
             tabMusicPackContorl.Controls.Add(tabDelicatedSong);
             tabMusicPackContorl.Controls.Add(tabFolderandList);
             tabMusicPackContorl.Location = new System.Drawing.Point(0, 0);
-            tabMusicPackContorl.Margin = new System.Windows.Forms.Padding(4);
+            tabMusicPackContorl.Margin = new Padding(6);
             tabMusicPackContorl.Name = "tabMusicPackContorl";
             tabMusicPackContorl.SelectedIndex = 0;
-            tabMusicPackContorl.Size = new System.Drawing.Size(697, 497);
+            tabMusicPackContorl.Size = new System.Drawing.Size(1095, 702);
             tabMusicPackContorl.TabIndex = 8;
             tabMusicPackContorl.SelectedIndexChanged += tabMusicPackContorl_SelectedIndexChanged;
             // 
             // tabSongFolder
             // 
-            tabSongFolder.Controls.Add(label2);
-            tabSongFolder.Controls.Add(axWMPMusicPack);
+            tabSongFolder.Controls.Add(lblProgressText);
             tabSongFolder.Controls.Add(btnDeduplication);
-            tabSongFolder.Controls.Add(label3);
-            tabSongFolder.Controls.Add(trackVolume);
+            tabSongFolder.Controls.Add(lblVolumeText);
             tabSongFolder.Controls.Add(btnPlay);
+            tabSongFolder.Controls.Add(trackVolume);
             tabSongFolder.Controls.Add(trackProgress);
             tabSongFolder.Controls.Add(btnExportFavor);
             tabSongFolder.Controls.Add(btnInfo);
@@ -215,97 +211,84 @@
             tabSongFolder.Controls.Add(lblMusicPack);
             tabSongFolder.Controls.Add(btnSaveMusicPack);
             tabSongFolder.Controls.Add(btnOpenFolder);
-            tabSongFolder.Location = new System.Drawing.Point(4, 26);
-            tabSongFolder.Margin = new System.Windows.Forms.Padding(4);
+            tabSongFolder.Location = new System.Drawing.Point(4, 33);
+            tabSongFolder.Margin = new Padding(6);
             tabSongFolder.Name = "tabSongFolder";
-            tabSongFolder.Padding = new System.Windows.Forms.Padding(4);
-            tabSongFolder.Size = new System.Drawing.Size(689, 467);
+            tabSongFolder.Padding = new Padding(6);
+            tabSongFolder.Size = new System.Drawing.Size(1087, 665);
             tabSongFolder.TabIndex = 0;
             tabSongFolder.Text = "曲包目录管理";
             tabSongFolder.UseVisualStyleBackColor = true;
             // 
-            // label2
+            // lblProgressText
             // 
-            label2.AutoSize = true;
-            label2.Location = new System.Drawing.Point(366, 393);
-            label2.Name = "label2";
-            label2.Size = new System.Drawing.Size(68, 17);
-            label2.TabIndex = 26;
-            label2.Text = "歌曲预览：";
-            // 
-            // axWMPMusicPack
-            // 
-            axWMPMusicPack.Enabled = true;
-            axWMPMusicPack.Location = new System.Drawing.Point(366, 414);
-            axWMPMusicPack.Name = "axWMPMusicPack";
-            axWMPMusicPack.OcxState = (System.Windows.Forms.AxHost.State)resources.GetObject("axWMPMusicPack.OcxState");
-            axWMPMusicPack.Size = new System.Drawing.Size(212, 45);
-            axWMPMusicPack.TabIndex = 25;
+            lblProgressText.AutoSize = true;
+            lblProgressText.Location = new System.Drawing.Point(559, 569);
+            lblProgressText.Margin = new Padding(6, 0, 6, 0);
+            lblProgressText.Name = "lblProgressText";
+            lblProgressText.Size = new System.Drawing.Size(50, 24);
+            lblProgressText.TabIndex = 26;
+            lblProgressText.Text = "进度:";
             // 
             // btnDeduplication
             // 
-            btnDeduplication.Location = new System.Drawing.Point(585, 397);
-            btnDeduplication.Margin = new System.Windows.Forms.Padding(4);
+            btnDeduplication.Location = new System.Drawing.Point(919, 560);
+            btnDeduplication.Margin = new Padding(6);
             btnDeduplication.Name = "btnDeduplication";
-            btnDeduplication.Size = new System.Drawing.Size(100, 30);
+            btnDeduplication.Size = new System.Drawing.Size(157, 42);
             btnDeduplication.TabIndex = 24;
             btnDeduplication.Text = "一键去重";
             btnDeduplication.UseVisualStyleBackColor = true;
             btnDeduplication.Click += btnDeduplication_Click;
             // 
-            // label3
+            // lblVolumeText
             // 
-            label3.AutoSize = true;
-            label3.Location = new System.Drawing.Point(369, 404);
-            label3.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
-            label3.Name = "label3";
-            label3.Size = new System.Drawing.Size(35, 17);
-            label3.TabIndex = 23;
-            label3.Text = "音量:";
+            lblVolumeText.AutoSize = true;
+            lblVolumeText.Location = new System.Drawing.Point(559, 615);
+            lblVolumeText.Margin = new Padding(6, 0, 6, 0);
+            lblVolumeText.Name = "lblVolumeText";
+            lblVolumeText.Size = new System.Drawing.Size(50, 24);
+            lblVolumeText.TabIndex = 23;
+            lblVolumeText.Text = "音量:";
             // 
-            // trackVolume
-            // 
-            trackVolume.BackColor = System.Drawing.Color.White;
-            trackVolume.Location = new System.Drawing.Point(412, 402);
-            trackVolume.Margin = new System.Windows.Forms.Padding(4);
-            trackVolume.Maximum = 100;
-            trackVolume.MaximumSize = new System.Drawing.Size(155, 30);
-            trackVolume.Name = "trackVolume";
-            trackVolume.Size = new System.Drawing.Size(155, 30);
-            trackVolume.TabIndex = 22;
-            trackVolume.TickStyle = System.Windows.Forms.TickStyle.None;
-            trackVolume.Value = 20;
-            trackVolume.Scroll += trackVolume_Scroll;
-            //
-            // trackProgress
-            //
-            trackProgress.BackColor = System.Drawing.Color.White;
-            trackProgress.Location = new System.Drawing.Point(364, 402);
-            trackProgress.Margin = new System.Windows.Forms.Padding(4);
-            trackProgress.Maximum = 100;
-            trackProgress.Name = "trackProgress";
-            trackProgress.Size = new System.Drawing.Size(155, 30);
-            trackProgress.TabIndex = 25;
-            trackProgress.TickStyle = System.Windows.Forms.TickStyle.None;
-            trackProgress.Scroll += trackProgress_Scroll;
-            //
             // btnPlay
             // 
-            btnPlay.Location = new System.Drawing.Point(364, 435);
-            btnPlay.Margin = new System.Windows.Forms.Padding(4);
+            btnPlay.Location = new System.Drawing.Point(750, 606);
+            btnPlay.Margin = new Padding(6);
             btnPlay.Name = "btnPlay";
-            btnPlay.Size = new System.Drawing.Size(100, 30);
+            btnPlay.Size = new System.Drawing.Size(157, 42);
             btnPlay.TabIndex = 21;
             btnPlay.Text = "播放";
             btnPlay.UseVisualStyleBackColor = true;
             btnPlay.Click += btnPlay_Click;
             // 
+            // trackVolume
+            // 
+            trackVolume.BackColor = System.Drawing.Color.Transparent;
+            trackVolume.Location = new System.Drawing.Point(621, 615);
+            trackVolume.Margin = new Padding(6);
+            trackVolume.Name = "trackVolume";
+            trackVolume.Size = new System.Drawing.Size(117, 28);
+            trackVolume.TabIndex = 22;
+            trackVolume.VolumeColor = System.Drawing.Color.FromArgb(46, 139, 87);
+            trackVolume.ValueChanged += trackVolume_ValueChanged;
+            // 
+            // trackProgress
+            // 
+            trackProgress.BackColor = System.Drawing.Color.Transparent;
+            trackProgress.Location = new System.Drawing.Point(621, 566);
+            trackProgress.Margin = new Padding(6);
+            trackProgress.Name = "trackProgress";
+            trackProgress.Size = new System.Drawing.Size(286, 28);
+            trackProgress.TabIndex = 25;
+            trackProgress.ValueChanged += trackProgress_ValueChanged;
+            // 
             // btnExportFavor
             // 
-            btnExportFavor.Location = new System.Drawing.Point(585, 429);
-            btnExportFavor.Margin = new System.Windows.Forms.Padding(4);
+            btnExportFavor.Location = new System.Drawing.Point(919, 606);
+            btnExportFavor.Margin = new Padding(6);
             btnExportFavor.Name = "btnExportFavor";
-            btnExportFavor.Size = new System.Drawing.Size(100, 30);
+            btnExportFavor.Size = new System.Drawing.Size(157, 42);
             btnExportFavor.TabIndex = 20;
             btnExportFavor.Text = "导出收藏";
             btnExportFavor.UseVisualStyleBackColor = true;
@@ -313,10 +296,10 @@
             // btnInfo
             // 
             btnInfo.BackColor = System.Drawing.Color.Transparent;
-            btnInfo.Location = new System.Drawing.Point(240, 429);
-            btnInfo.Margin = new System.Windows.Forms.Padding(4);
+            btnInfo.Location = new System.Drawing.Point(377, 606);
+            btnInfo.Margin = new Padding(6);
             btnInfo.Name = "btnInfo";
-            btnInfo.Size = new System.Drawing.Size(100, 30);
+            btnInfo.Size = new System.Drawing.Size(157, 42);
             btnInfo.TabIndex = 18;
             btnInfo.Text = "详细信息";
             btnInfo.UseVisualStyleBackColor = false;
@@ -324,10 +307,10 @@
             // 
             // btnSaveList
             // 
-            btnSaveList.Location = new System.Drawing.Point(240, 397);
-            btnSaveList.Margin = new System.Windows.Forms.Padding(4);
+            btnSaveList.Location = new System.Drawing.Point(377, 560);
+            btnSaveList.Margin = new Padding(6);
             btnSaveList.Name = "btnSaveList";
-            btnSaveList.Size = new System.Drawing.Size(100, 30);
+            btnSaveList.Size = new System.Drawing.Size(157, 42);
             btnSaveList.TabIndex = 16;
             btnSaveList.Text = "保存列表";
             btnSaveList.UseVisualStyleBackColor = true;
@@ -335,10 +318,10 @@
             // 
             // btnSetImg
             // 
-            btnSetImg.Location = new System.Drawing.Point(132, 397);
-            btnSetImg.Margin = new System.Windows.Forms.Padding(4);
+            btnSetImg.Location = new System.Drawing.Point(207, 560);
+            btnSetImg.Margin = new Padding(6);
             btnSetImg.Name = "btnSetImg";
-            btnSetImg.Size = new System.Drawing.Size(100, 30);
+            btnSetImg.Size = new System.Drawing.Size(157, 42);
             btnSetImg.TabIndex = 15;
             btnSetImg.Text = "选择图片";
             btnSetImg.UseVisualStyleBackColor = true;
@@ -347,25 +330,25 @@
             // label1
             // 
             label1.AutoSize = true;
-            label1.Location = new System.Drawing.Point(28, 404);
-            label1.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            label1.Location = new System.Drawing.Point(44, 570);
+            label1.Margin = new Padding(6, 0, 6, 0);
             label1.Name = "label1";
-            label1.Size = new System.Drawing.Size(104, 17);
+            label1.Size = new System.Drawing.Size(154, 24);
             label1.TabIndex = 14;
             label1.Text = "自定义曲包图片：";
             // 
             // songListView
             // 
             songListView.AllowDrop = true;
-            songListView.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] { songName, bsr, bpm });
-            songListView.HeaderStyle = System.Windows.Forms.ColumnHeaderStyle.Nonclickable;
-            songListView.Location = new System.Drawing.Point(356, 41);
-            songListView.Margin = new System.Windows.Forms.Padding(4);
+            songListView.Columns.AddRange(new ColumnHeader[] { songName, bsr, bpm });
+            songListView.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+            songListView.Location = new System.Drawing.Point(559, 58);
+            songListView.Margin = new Padding(6);
             songListView.Name = "songListView";
-            songListView.Size = new System.Drawing.Size(328, 348);
+            songListView.Size = new System.Drawing.Size(513, 490);
             songListView.TabIndex = 13;
             songListView.UseCompatibleStateImageBehavior = false;
-            songListView.View = System.Windows.Forms.View.Details;
+            songListView.View = View.Details;
             songListView.SelectedIndexChanged += songListView_SelectedIndexChanged;
             // 
             // songName
@@ -388,11 +371,11 @@
             musicPackListView.AllowDrop = true;
             musicPackListView.LabelEdit = true;
             musicPackListView.LargeImageList = musicPackimg;
-            musicPackListView.Location = new System.Drawing.Point(9, 41);
-            musicPackListView.Margin = new System.Windows.Forms.Padding(4);
+            musicPackListView.Location = new System.Drawing.Point(14, 58);
+            musicPackListView.Margin = new Padding(6);
             musicPackListView.MultiSelect = false;
             musicPackListView.Name = "musicPackListView";
-            musicPackListView.Size = new System.Drawing.Size(339, 348);
+            musicPackListView.Size = new System.Drawing.Size(530, 490);
             musicPackListView.TabIndex = 12;
             musicPackListView.UseCompatibleStateImageBehavior = false;
             musicPackListView.AfterLabelEdit += musicPackListView_AfterLabelEdit;
@@ -403,7 +386,7 @@
             // 
             // musicPackimg
             // 
-            musicPackimg.ColorDepth = System.Windows.Forms.ColorDepth.Depth8Bit;
+            musicPackimg.ColorDepth = ColorDepth.Depth8Bit;
             musicPackimg.ImageSize = new System.Drawing.Size(110, 110);
             musicPackimg.TransparentColor = System.Drawing.Color.Transparent;
             // 
@@ -411,10 +394,10 @@
             // 
             lblMap.AutoSize = true;
             lblMap.Font = new System.Drawing.Font("黑体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, 134);
-            lblMap.Location = new System.Drawing.Point(356, 8);
-            lblMap.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            lblMap.Location = new System.Drawing.Point(559, 11);
+            lblMap.Margin = new Padding(6, 0, 6, 0);
             lblMap.Name = "lblMap";
-            lblMap.Size = new System.Drawing.Size(103, 16);
+            lblMap.Size = new System.Drawing.Size(154, 24);
             lblMap.TabIndex = 10;
             lblMap.Text = "曲包歌曲列表";
             // 
@@ -422,66 +405,68 @@
             // 
             lblMusicPack.AutoSize = true;
             lblMusicPack.Font = new System.Drawing.Font("黑体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, 134);
-            lblMusicPack.Location = new System.Drawing.Point(12, 8);
-            lblMusicPack.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            lblMusicPack.Location = new System.Drawing.Point(19, 11);
+            lblMusicPack.Margin = new Padding(6, 0, 6, 0);
             lblMusicPack.Name = "lblMusicPack";
-            lblMusicPack.Size = new System.Drawing.Size(103, 16);
+            lblMusicPack.Size = new System.Drawing.Size(154, 24);
             lblMusicPack.TabIndex = 9;
             lblMusicPack.Text = "曲包目录列表";
             // 
             // tabBSVer
             // 
-            tabBSVer.Location = new System.Drawing.Point(4, 26);
-            tabBSVer.Margin = new System.Windows.Forms.Padding(4);
+            tabBSVer.Location = new System.Drawing.Point(4, 33);
+            tabBSVer.Margin = new Padding(6);
             tabBSVer.Name = "tabBSVer";
-            tabBSVer.Padding = new System.Windows.Forms.Padding(4);
-            tabBSVer.Size = new System.Drawing.Size(689, 467);
+            tabBSVer.Padding = new Padding(6);
+            tabBSVer.Size = new System.Drawing.Size(1087, 665);
             tabBSVer.TabIndex = 1;
             tabBSVer.Text = "节奏光剑版本管理";
             tabBSVer.UseVisualStyleBackColor = true;
             // 
             // tabDelicatedSong
             // 
+            tabDelicatedSong.Controls.Add(lblVolumeText2);
             tabDelicatedSong.Controls.Add(lblPreviewdsong);
-            tabDelicatedSong.Controls.Add(axWMPDelicatedSong);
             tabDelicatedSong.Controls.Add(btnFullScan);
             tabDelicatedSong.Controls.Add(btnPlay2);
             tabDelicatedSong.Controls.Add(trackProgress2);
-            tabDelicatedSong.Controls.Add(label2);
             tabDelicatedSong.Controls.Add(trackVolume2);
             tabDelicatedSong.Controls.Add(btnMigrateFolder);
             tabDelicatedSong.Controls.Add(DelicatedSongListView);
-            tabDelicatedSong.Location = new System.Drawing.Point(4, 26);
-            tabDelicatedSong.Margin = new System.Windows.Forms.Padding(4);
+            tabDelicatedSong.Location = new System.Drawing.Point(4, 33);
+            tabDelicatedSong.Margin = new Padding(6);
             tabDelicatedSong.Name = "tabDelicatedSong";
-            tabDelicatedSong.Size = new System.Drawing.Size(689, 467);
+            tabDelicatedSong.Size = new System.Drawing.Size(1087, 665);
             tabDelicatedSong.TabIndex = 2;
             tabDelicatedSong.Text = "散装歌曲列表";
             tabDelicatedSong.UseVisualStyleBackColor = true;
             // 
+            // lblVolumeText2
+            // 
+            lblVolumeText2.AutoSize = true;
+            lblVolumeText2.Location = new System.Drawing.Point(790, 606);
+            lblVolumeText2.Margin = new Padding(5, 0, 5, 0);
+            lblVolumeText2.Name = "lblVolumeText2";
+            lblVolumeText2.Size = new System.Drawing.Size(64, 24);
+            lblVolumeText2.TabIndex = 30;
+            lblVolumeText2.Text = "音量：";
+            // 
             // lblPreviewdsong
             // 
             lblPreviewdsong.AutoSize = true;
-            lblPreviewdsong.Location = new System.Drawing.Point(397, 429);
+            lblPreviewdsong.Location = new System.Drawing.Point(363, 606);
+            lblPreviewdsong.Margin = new Padding(5, 0, 5, 0);
             lblPreviewdsong.Name = "lblPreviewdsong";
-            lblPreviewdsong.Size = new System.Drawing.Size(44, 17);
+            lblPreviewdsong.Size = new System.Drawing.Size(64, 24);
             lblPreviewdsong.TabIndex = 29;
-            lblPreviewdsong.Text = "预览：";
-            // 
-            // axWMPDelicatedSong
-            // 
-            axWMPDelicatedSong.Enabled = true;
-            axWMPDelicatedSong.Location = new System.Drawing.Point(447, 414);
-            axWMPDelicatedSong.Name = "axWMPDelicatedSong";
-            axWMPDelicatedSong.OcxState = (System.Windows.Forms.AxHost.State)resources.GetObject("axWMPDelicatedSong.OcxState");
-            axWMPDelicatedSong.Size = new System.Drawing.Size(238, 45);
-            axWMPDelicatedSong.TabIndex = 28;
+            lblPreviewdsong.Text = "进度：";
             // 
             // btnFullScan
             // 
-            btnFullScan.Location = new System.Drawing.Point(173, 422);
+            btnFullScan.Location = new System.Drawing.Point(10, 597);
+            btnFullScan.Margin = new Padding(5, 4, 5, 4);
             btnFullScan.Name = "btnFullScan";
-            btnFullScan.Size = new System.Drawing.Size(112, 30);
+            btnFullScan.Size = new System.Drawing.Size(176, 42);
             btnFullScan.TabIndex = 27;
             btnFullScan.Text = "全盘扫描（增强）";
             btnFullScan.UseVisualStyleBackColor = true;
@@ -489,56 +474,42 @@
             // 
             // btnPlay2
             // 
-            btnPlay2.Location = new System.Drawing.Point(379, 430);
-            btnPlay2.Margin = new System.Windows.Forms.Padding(4);
+            btnPlay2.Location = new System.Drawing.Point(681, 597);
+            btnPlay2.Margin = new Padding(6);
             btnPlay2.Name = "btnPlay2";
-            btnPlay2.Size = new System.Drawing.Size(100, 30);
+            btnPlay2.Size = new System.Drawing.Size(104, 42);
             btnPlay2.TabIndex = 26;
             btnPlay2.Text = "播放";
             btnPlay2.UseVisualStyleBackColor = true;
             btnPlay2.Click += btnPlay2_Click;
             // 
-            // label2
+            // trackProgress2
             // 
-            label2.AutoSize = true;
-            label2.Location = new System.Drawing.Point(487, 435);
-            label2.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
-            label2.Name = "label2";
-            label2.Size = new System.Drawing.Size(35, 17);
-            label2.TabIndex = 25;
-            label2.Text = "音量:";
+            trackProgress2.BackColor = System.Drawing.Color.Transparent;
+            trackProgress2.Location = new System.Drawing.Point(433, 604);
+            trackProgress2.Margin = new Padding(6);
+            trackProgress2.Name = "trackProgress2";
+            trackProgress2.Size = new System.Drawing.Size(236, 28);
+            trackProgress2.TabIndex = 28;
+            trackProgress2.ValueChanged += trackProgress2_ValueChanged;
             // 
             // trackVolume2
             // 
-            trackVolume2.BackColor = System.Drawing.Color.White;
-            trackVolume2.Location = new System.Drawing.Point(530, 433);
-            trackVolume2.Margin = new System.Windows.Forms.Padding(4);
-            trackVolume2.Maximum = 100;
-            trackVolume2.MaximumSize = new System.Drawing.Size(155, 30);
+            trackVolume2.BackColor = System.Drawing.Color.Transparent;
+            trackVolume2.Location = new System.Drawing.Point(859, 604);
+            trackVolume2.Margin = new Padding(6);
             trackVolume2.Name = "trackVolume2";
-            trackVolume2.Size = new System.Drawing.Size(155, 30);
+            trackVolume2.Size = new System.Drawing.Size(108, 28);
             trackVolume2.TabIndex = 24;
-            trackVolume2.TickStyle = System.Windows.Forms.TickStyle.None;
-            trackVolume2.Value = 20;
-            trackVolume2.Scroll += trackVolume2_Scroll;
-            //
-            // trackProgress2
-            //
-            trackProgress2.BackColor = System.Drawing.Color.White;
-            trackProgress2.Location = new System.Drawing.Point(379, 400);
-            trackProgress2.Margin = new System.Windows.Forms.Padding(4);
-            trackProgress2.Maximum = 100;
-            trackProgress2.Name = "trackProgress2";
-            trackProgress2.Size = new System.Drawing.Size(100, 30);
-            trackProgress2.TabIndex = 28;
-            trackProgress2.TickStyle = System.Windows.Forms.TickStyle.None;
-            trackProgress2.Scroll += trackProgress2_Scroll;
-            //
+            trackVolume2.VolumeColor = System.Drawing.Color.FromArgb(46, 139, 87);
+            trackVolume2.ValueChanged += trackVolume2_ValueChanged;
+            // 
             // btnMigrateFolder
             // 
-            btnMigrateFolder.Location = new System.Drawing.Point(291, 422);
+            btnMigrateFolder.Location = new System.Drawing.Point(196, 597);
+            btnMigrateFolder.Margin = new Padding(5, 4, 5, 4);
             btnMigrateFolder.Name = "btnMigrateFolder";
-            btnMigrateFolder.Size = new System.Drawing.Size(100, 30);
+            btnMigrateFolder.Size = new System.Drawing.Size(157, 42);
             btnMigrateFolder.TabIndex = 16;
             btnMigrateFolder.Text = "整合到歌曲目录";
             btnMigrateFolder.UseVisualStyleBackColor = true;
@@ -547,15 +518,15 @@
             // DelicatedSongListView
             // 
             DelicatedSongListView.AllowDrop = true;
-            DelicatedSongListView.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] { columnHeader1, columnHeader2, columnHeader3, columnHeader4 });
-            DelicatedSongListView.HeaderStyle = System.Windows.Forms.ColumnHeaderStyle.Nonclickable;
-            DelicatedSongListView.Location = new System.Drawing.Point(4, 4);
-            DelicatedSongListView.Margin = new System.Windows.Forms.Padding(4);
+            DelicatedSongListView.Columns.AddRange(new ColumnHeader[] { columnHeader1, columnHeader2, columnHeader3, columnHeader4 });
+            DelicatedSongListView.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+            DelicatedSongListView.Location = new System.Drawing.Point(6, 6);
+            DelicatedSongListView.Margin = new Padding(6);
             DelicatedSongListView.Name = "DelicatedSongListView";
-            DelicatedSongListView.Size = new System.Drawing.Size(681, 403);
+            DelicatedSongListView.Size = new System.Drawing.Size(1068, 567);
             DelicatedSongListView.TabIndex = 14;
             DelicatedSongListView.UseCompatibleStateImageBehavior = false;
-            DelicatedSongListView.View = System.Windows.Forms.View.Details;
+            DelicatedSongListView.View = View.Details;
             DelicatedSongListView.SelectedIndexChanged += DelicatedSongListView_SelectedIndexChanged;
             // 
             // columnHeader1
@@ -588,10 +559,10 @@
             tabFolderandList.Controls.Add(lbldownloadFolder);
             tabFolderandList.Controls.Add(textBox1);
             tabFolderandList.Controls.Add(lblbplistTip);
-            tabFolderandList.Location = new System.Drawing.Point(4, 26);
-            tabFolderandList.Margin = new System.Windows.Forms.Padding(4);
+            tabFolderandList.Location = new System.Drawing.Point(4, 33);
+            tabFolderandList.Margin = new Padding(6);
             tabFolderandList.Name = "tabFolderandList";
-            tabFolderandList.Size = new System.Drawing.Size(689, 467);
+            tabFolderandList.Size = new System.Drawing.Size(1087, 665);
             tabFolderandList.TabIndex = 3;
             tabFolderandList.Text = "歌单编辑";
             tabFolderandList.UseVisualStyleBackColor = true;
@@ -599,18 +570,20 @@
             // lblFilterCondition
             // 
             lblFilterCondition.AutoSize = true;
-            lblFilterCondition.Location = new System.Drawing.Point(8, 58);
+            lblFilterCondition.Location = new System.Drawing.Point(13, 82);
+            lblFilterCondition.Margin = new Padding(5, 0, 5, 0);
             lblFilterCondition.Name = "lblFilterCondition";
-            lblFilterCondition.Size = new System.Drawing.Size(56, 17);
+            lblFilterCondition.Size = new System.Drawing.Size(82, 24);
             lblFilterCondition.TabIndex = 7;
             lblFilterCondition.Text = "筛选条件";
             // 
             // lblFilterResult
             // 
             lblFilterResult.AutoSize = true;
-            lblFilterResult.Location = new System.Drawing.Point(326, 58);
+            lblFilterResult.Location = new System.Drawing.Point(512, 82);
+            lblFilterResult.Margin = new Padding(5, 0, 5, 0);
             lblFilterResult.Name = "lblFilterResult";
-            lblFilterResult.Size = new System.Drawing.Size(68, 17);
+            lblFilterResult.Size = new System.Drawing.Size(100, 24);
             lblFilterResult.TabIndex = 6;
             lblFilterResult.Text = "筛选结果：";
             // 
@@ -618,13 +591,14 @@
             // 
             dataGridView1.AllowUserToAddRows = false;
             dataGridView1.AllowUserToOrderColumns = true;
-            dataGridView1.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dataGridView1.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] { DB_bsr, DB_Cover, DB_Name, DB_description, DB_bpm, DB_levelAuthorName });
-            dataGridView1.Location = new System.Drawing.Point(326, 78);
+            dataGridView1.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            dataGridView1.Columns.AddRange(new DataGridViewColumn[] { DB_bsr, DB_Cover, DB_Name, DB_description, DB_bpm, DB_levelAuthorName });
+            dataGridView1.Location = new System.Drawing.Point(512, 110);
+            dataGridView1.Margin = new Padding(5, 4, 5, 4);
             dataGridView1.Name = "dataGridView1";
             dataGridView1.ReadOnly = true;
             dataGridView1.RowHeadersWidth = 62;
-            dataGridView1.Size = new System.Drawing.Size(344, 331);
+            dataGridView1.Size = new System.Drawing.Size(541, 467);
             dataGridView1.TabIndex = 5;
             // 
             // DB_bsr
@@ -641,8 +615,8 @@
             DB_Cover.MinimumWidth = 8;
             DB_Cover.Name = "DB_Cover";
             DB_Cover.ReadOnly = true;
-            DB_Cover.Resizable = System.Windows.Forms.DataGridViewTriState.True;
-            DB_Cover.SortMode = System.Windows.Forms.DataGridViewColumnSortMode.Automatic;
+            DB_Cover.Resizable = DataGridViewTriState.True;
+            DB_Cover.SortMode = DataGridViewColumnSortMode.Automatic;
             DB_Cover.Width = 150;
             // 
             // DB_Name
@@ -679,9 +653,10 @@
             // 
             // btnDFSelect
             // 
-            btnDFSelect.Location = new System.Drawing.Point(315, 29);
+            btnDFSelect.Location = new System.Drawing.Point(495, 41);
+            btnDFSelect.Margin = new Padding(5, 4, 5, 4);
             btnDFSelect.Name = "btnDFSelect";
-            btnDFSelect.Size = new System.Drawing.Size(75, 23);
+            btnDFSelect.Size = new System.Drawing.Size(118, 32);
             btnDFSelect.TabIndex = 4;
             btnDFSelect.Text = "浏览";
             btnDFSelect.UseVisualStyleBackColor = true;
@@ -690,43 +665,52 @@
             // lbldownloadFolderTip
             // 
             lbldownloadFolderTip.AutoSize = true;
-            lbldownloadFolderTip.Location = new System.Drawing.Point(390, 32);
+            lbldownloadFolderTip.Location = new System.Drawing.Point(613, 45);
+            lbldownloadFolderTip.Margin = new Padding(5, 0, 5, 0);
             lbldownloadFolderTip.Name = "lbldownloadFolderTip";
-            lbldownloadFolderTip.Size = new System.Drawing.Size(296, 17);
+            lbldownloadFolderTip.Size = new System.Drawing.Size(440, 24);
             lbldownloadFolderTip.TabIndex = 3;
             lbldownloadFolderTip.Text = "如留空则默认下载到软件运行目录下的Songs子目录！";
             // 
             // lbldownloadFolder
             // 
             lbldownloadFolder.AutoSize = true;
-            lbldownloadFolder.Location = new System.Drawing.Point(8, 32);
+            lbldownloadFolder.Location = new System.Drawing.Point(13, 45);
+            lbldownloadFolder.Margin = new Padding(5, 0, 5, 0);
             lbldownloadFolder.Name = "lbldownloadFolder";
-            lbldownloadFolder.Size = new System.Drawing.Size(92, 17);
+            lbldownloadFolder.Size = new System.Drawing.Size(136, 24);
             lbldownloadFolder.TabIndex = 2;
             lbldownloadFolder.Text = "歌曲下载目录：";
             // 
             // textBox1
             // 
-            textBox1.Location = new System.Drawing.Point(106, 29);
+            textBox1.Location = new System.Drawing.Point(167, 41);
+            textBox1.Margin = new Padding(5, 4, 5, 4);
             textBox1.Name = "textBox1";
-            textBox1.Size = new System.Drawing.Size(203, 23);
+            textBox1.Size = new System.Drawing.Size(317, 30);
             textBox1.TabIndex = 1;
             // 
             // lblbplistTip
             // 
             lblbplistTip.AutoSize = true;
-            lblbplistTip.Location = new System.Drawing.Point(8, 9);
+            lblbplistTip.Location = new System.Drawing.Point(13, 13);
+            lblbplistTip.Margin = new Padding(5, 0, 5, 0);
             lblbplistTip.Name = "lblbplistTip";
-            lblbplistTip.Size = new System.Drawing.Size(512, 17);
+            lblbplistTip.Size = new System.Drawing.Size(766, 24);
             lblbplistTip.TabIndex = 0;
             lblbplistTip.Text = "注：如需要快速从目录生成歌单请使用曲包目录管理中的生成歌单功能！此页面为歌单细化编辑\r\n";
             // 
+            // PlaybackTimer
+            // 
+            PlaybackTimer.Interval = 1000;
+            PlaybackTimer.Tick += PlaybackTimer_Tick;
+            // 
             // btnSetting
             // 
-            btnSetting.Location = new System.Drawing.Point(705, 463);
-            btnSetting.Margin = new System.Windows.Forms.Padding(4);
+            btnSetting.Location = new System.Drawing.Point(1108, 654);
+            btnSetting.Margin = new Padding(6);
             btnSetting.Name = "btnSetting";
-            btnSetting.Size = new System.Drawing.Size(100, 30);
+            btnSetting.Size = new System.Drawing.Size(157, 42);
             btnSetting.TabIndex = 9;
             btnSetting.Text = "程序设置";
             btnSetting.UseVisualStyleBackColor = true;
@@ -736,29 +720,29 @@
             // 
             comboBoxPlatform.FormattingEnabled = true;
             comboBoxPlatform.Items.AddRange(new object[] { "PC-Steam", "PC-Oculus", "Quest" });
-            comboBoxPlatform.Location = new System.Drawing.Point(705, 425);
-            comboBoxPlatform.Margin = new System.Windows.Forms.Padding(4);
+            comboBoxPlatform.Location = new System.Drawing.Point(1108, 600);
+            comboBoxPlatform.Margin = new Padding(6);
             comboBoxPlatform.Name = "comboBoxPlatform";
-            comboBoxPlatform.Size = new System.Drawing.Size(97, 25);
+            comboBoxPlatform.Size = new System.Drawing.Size(150, 32);
             comboBoxPlatform.TabIndex = 10;
             comboBoxPlatform.SelectedIndexChanged += comboBoxPlatform_SelectedIndexChanged;
             // 
             // lblPlatform
             // 
             lblPlatform.AutoSize = true;
-            lblPlatform.Location = new System.Drawing.Point(718, 398);
-            lblPlatform.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            lblPlatform.Location = new System.Drawing.Point(1128, 562);
+            lblPlatform.Margin = new Padding(6, 0, 6, 0);
             lblPlatform.Name = "lblPlatform";
-            lblPlatform.Size = new System.Drawing.Size(68, 17);
+            lblPlatform.Size = new System.Drawing.Size(100, 24);
             lblPlatform.TabIndex = 11;
             lblPlatform.Text = "平台选择：";
             // 
             // btnInstallEverything
             // 
-            btnInstallEverything.Location = new System.Drawing.Point(705, 349);
-            btnInstallEverything.Margin = new System.Windows.Forms.Padding(4);
+            btnInstallEverything.Location = new System.Drawing.Point(1108, 493);
+            btnInstallEverything.Margin = new Padding(6);
             btnInstallEverything.Name = "btnInstallEverything";
-            btnInstallEverything.Size = new System.Drawing.Size(100, 30);
+            btnInstallEverything.Size = new System.Drawing.Size(157, 42);
             btnInstallEverything.TabIndex = 12;
             btnInstallEverything.Text = "安装增强扩展";
             btnInstallEverything.UseVisualStyleBackColor = true;
@@ -767,30 +751,30 @@
             // lblExtension
             // 
             lblExtension.AutoSize = true;
-            lblExtension.Location = new System.Drawing.Point(705, 132);
-            lblExtension.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
-            lblExtension.MaximumSize = new System.Drawing.Size(105, 0);
+            lblExtension.Location = new System.Drawing.Point(1108, 186);
+            lblExtension.Margin = new Padding(6, 0, 6, 0);
+            lblExtension.MaximumSize = new System.Drawing.Size(165, 0);
             lblExtension.Name = "lblExtension";
-            lblExtension.Size = new System.Drawing.Size(104, 204);
+            lblExtension.Size = new System.Drawing.Size(156, 288);
             lblExtension.TabIndex = 13;
             lblExtension.Text = "提示：软件支持Everything增强扩展，该扩展可以帮助本软件更好的管理多个版本的节奏光剑，同时可以更快速的搜寻歌曲文件，如果想使用本软件的增强功能，可点击安装增强扩展下载安装（已安装请忽略本提示）";
             // 
             // btnTutorial
             // 
-            btnTutorial.Location = new System.Drawing.Point(705, 501);
-            btnTutorial.Margin = new System.Windows.Forms.Padding(4);
+            btnTutorial.Location = new System.Drawing.Point(1108, 707);
+            btnTutorial.Margin = new Padding(6);
             btnTutorial.Name = "btnTutorial";
-            btnTutorial.Size = new System.Drawing.Size(100, 30);
+            btnTutorial.Size = new System.Drawing.Size(157, 42);
             btnTutorial.TabIndex = 14;
             btnTutorial.Text = "操作指南";
             btnTutorial.UseVisualStyleBackColor = true;
             // 
             // btnExit
             // 
-            btnExit.Location = new System.Drawing.Point(705, 543);
-            btnExit.Margin = new System.Windows.Forms.Padding(4);
+            btnExit.Location = new System.Drawing.Point(1108, 767);
+            btnExit.Margin = new Padding(6);
             btnExit.Name = "btnExit";
-            btnExit.Size = new System.Drawing.Size(100, 30);
+            btnExit.Size = new System.Drawing.Size(157, 42);
             btnExit.TabIndex = 15;
             btnExit.Text = "退出";
             btnExit.UseVisualStyleBackColor = true;
@@ -799,11 +783,11 @@
             // pictureBox1
             // 
             pictureBox1.Image = Properties.Resources.everything;
-            pictureBox1.Location = new System.Drawing.Point(718, 26);
-            pictureBox1.Margin = new System.Windows.Forms.Padding(4);
+            pictureBox1.Location = new System.Drawing.Point(1128, 37);
+            pictureBox1.Margin = new Padding(6);
             pictureBox1.Name = "pictureBox1";
-            pictureBox1.Size = new System.Drawing.Size(75, 75);
-            pictureBox1.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
+            pictureBox1.Size = new System.Drawing.Size(118, 106);
+            pictureBox1.SizeMode = PictureBoxSizeMode.StretchImage;
             pictureBox1.TabIndex = 16;
             pictureBox1.TabStop = false;
             // 
@@ -818,10 +802,10 @@
             // MainForm
             // 
             AllowDrop = true;
-            AutoScaleDimensions = new System.Drawing.SizeF(7F, 17F);
-            AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            AutoScaleDimensions = new System.Drawing.SizeF(11F, 24F);
+            AutoScaleMode = AutoScaleMode.Font;
             AutoSize = true;
-            ClientSize = new System.Drawing.Size(821, 606);
+            ClientSize = new System.Drawing.Size(1290, 856);
             Controls.Add(pictureBox1);
             Controls.Add(btnExit);
             Controls.Add(btnTutorial);
@@ -833,12 +817,12 @@
             Controls.Add(tabMusicPackContorl);
             Controls.Add(txtDebug);
             Controls.Add(BSIMMStats);
-            FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
+            FormBorderStyle = FormBorderStyle.FixedSingle;
             Icon = (System.Drawing.Icon)resources.GetObject("$this.Icon");
-            Margin = new System.Windows.Forms.Padding(4);
+            Margin = new Padding(6);
             MaximizeBox = false;
             Name = "MainForm";
-            StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
+            StartPosition = FormStartPosition.CenterScreen;
             Text = "BSIMM-独立曲包管理/编辑器 v1.0.0 @万毒不侵";
             FormClosing += MainForm_FormClosing;
             Load += MainForm_Load;
@@ -847,12 +831,8 @@
             tabMusicPackContorl.ResumeLayout(false);
             tabSongFolder.ResumeLayout(false);
             tabSongFolder.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)trackVolume).EndInit();
-            ((System.ComponentModel.ISupportInitialize)trackProgress).EndInit();
             tabDelicatedSong.ResumeLayout(false);
             tabDelicatedSong.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)trackVolume2).EndInit();
-            ((System.ComponentModel.ISupportInitialize)trackProgress2).EndInit();
             tabFolderandList.ResumeLayout(false);
             tabFolderandList.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)dataGridView1).EndInit();
@@ -896,8 +876,8 @@
         private System.Windows.Forms.Button btnSaveList;
         private System.Windows.Forms.Button btnSetImg;
         private System.Windows.Forms.Button btnExportFavor;
-        private System.Windows.Forms.TrackBar trackVolume;
-        private System.Windows.Forms.TrackBar trackProgress;
+        private VolumeBarEx trackVolume;
+        private ProgressBarEx trackProgress;
         private System.Windows.Forms.Label label3;
         private System.Windows.Forms.OpenFileDialog musicPackCoverDialog;
         private System.Windows.Forms.Button btnDeduplication;
@@ -906,10 +886,12 @@
         private System.Windows.Forms.ColumnHeader columnHeader1;
         private System.Windows.Forms.ColumnHeader columnHeader2;
         private System.Windows.Forms.ColumnHeader columnHeader3;
+        private System.Windows.Forms.Button btnPlay;
+        private System.Windows.Forms.Timer PlaybackTimer;
         private System.Windows.Forms.Button btnPlay2;
-        private System.Windows.Forms.Label label2;
-        private System.Windows.Forms.TrackBar trackVolume2;
-        private System.Windows.Forms.TrackBar trackProgress2;
+        private System.Windows.Forms.Label lblVolumeText2;
+        private VolumeBarEx trackVolume2;
+        private ProgressBarEx trackProgress2;
         private System.Windows.Forms.Button btnMigrateFolder;
         private System.Windows.Forms.ColumnHeader columnHeader4;
         private System.Windows.Forms.Button btnFullScan;
@@ -928,8 +910,7 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn DB_bpm;
         private System.Windows.Forms.DataGridViewTextBoxColumn DB_levelAuthorName;
         private System.Windows.Forms.Label lblPreviewdsong;
-        private AxWMPLib.AxWindowsMediaPlayer axWMPDelicatedSong;
-        private AxWMPLib.AxWindowsMediaPlayer axWMPMusicPack;
-        private System.Windows.Forms.Label label2;
+        private System.Windows.Forms.Label lblProgressText;
+        private Label lblVolumeText;
     }
 }

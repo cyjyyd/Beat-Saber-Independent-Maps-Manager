@@ -410,24 +410,6 @@ namespace BeatSaberIndependentMapsManager
         }
         #endregion
         #region 工具方法
-        void switchWMP(string playPath)
-        {
-            Invoke(new System.Windows.Forms.MethodInvoker(delegate
-            {
-                if (tabMusicPackContorl.SelectedIndex == 0)
-                {
-                    axWMPMusicPack.URL = playPath;
-                    Thread.Sleep(50);
-                    axWMPMusicPack.Ctlcontrols.stop();
-                }
-                else if (tabMusicPackContorl.SelectedIndex == 2)
-                {
-                    axWMPDelicatedSong.URL = playPath;
-                    Thread.Sleep(50);
-                    axWMPDelicatedSong.Ctlcontrols.stop();
-                }
-            }));
-        }
         void AudioPlayer(SongMap playSong)
         {
             try
@@ -447,10 +429,6 @@ namespace BeatSaberIndependentMapsManager
                     {
                         currentAudioReader = new VorbisWaveReader(playPath);
                     }
-                    else if(playSong._songFilename.EndsWith("wav"))
-                    {
-                        switchWMP(playPath);
-                    }
                     else
                     {
                         debugLog("播放失败！文件：" + playSong._songFilename + "格式不被支持！");
@@ -466,9 +444,9 @@ namespace BeatSaberIndependentMapsManager
 
                     // 设置进度条
                     trackProgress.Maximum = (int)currentAudioReader.TotalTime.TotalSeconds;
-                    trackProgress.Value = 0;
+                    trackProgress.SetValueSilent(0);
                     trackProgress2.Maximum = trackProgress.Maximum;
-                    trackProgress2.Value = 0;
+                    trackProgress2.SetValueSilent(0);
                 }
                 else
                 {
@@ -1374,91 +1352,142 @@ namespace BeatSaberIndependentMapsManager
         }
         private void songListView_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (songListView.SelectedItems.Count == 0)
-            {
-                return;
-            }
-            else
-            {
-                int index = songListView.SelectedItems[0].Index;
-                if (index != -1)
-                {
-                    string playKey = songListView.SelectedItems[0].SubItems[1].Text;
-                    if (musicPackListView.SelectedItems.Count > 0)
-                    {
-                        string selectedItemText = musicPackListView.SelectedItems[0].Text;
-                        if (musicPackInfo.TryGetValue(selectedItemText, out Dictionary<string, SongMap> innerDictionary))
-                        {
-                            if (innerDictionary.TryGetValue(playKey, out SongMap Songdetails))
-                            {
-                                playSong = Songdetails;
-                            }
-                            else
-                            {
-                                debugLog("未找到" + playKey + "对应的歌曲，可能已经被删除，请点击曲包刷新列表后再试！");
-                            }
-                        }
-                        else
-                        {
-                            debugLog("错误，曲包名称不一致");
-                        }
-                    }
-                    else
-                    {
-                        foreach (Dictionary<string, SongMap> musicPack in musicPackInfo.Values)
-                        {
-                            if (musicPack.ContainsKey(playKey))
-                            {
-                                playSong = musicPack[playKey];
-                            }
-                        }
-                    }
-                    if (playSong == null)
-                    {
-                        debugLog("未找到" + playKey + "对应的歌曲，请检查该key是否存在！");
-                    }
-                    else
-                    {
-                        debugLog("未找到" + playKey + "对应的歌曲，请检查该key是否存在！");
-                    }
-                }
-            }
-        }
-        private void songListView_SelectedIndexChanged(object sender, EventArgs e)
-        {
+            // 停止当前播放
             PlaybackTimer.Enabled = false;
             waveOut.Stop();
             btnPlay.Text = "播放";
-            BSIMMStatusUpdate("播放器：", "已停止", 0);
-            // 重置进度条
-            trackProgress.Value = 0;
-            trackProgress2.Value = 0;
+            trackProgress.SetValueSilent(0);
+            trackProgress2.SetValueSilent(0);
+
+            if (songListView.SelectedItems.Count == 0)
+            {
+                playSong = null;
+                return;
+            }
+
+            int index = songListView.SelectedItems[0].Index;
+            if (index == -1)
+            {
+                playSong = null;
+                return;
+            }
+
+            string playKey = songListView.SelectedItems[0].SubItems[1].Text;
+
+            // 优先从选中的曲包中查找
+            if (musicPackListView.SelectedItems.Count > 0)
+            {
+                string selectedItemText = musicPackListView.SelectedItems[0].Text;
+                if (musicPackInfo.TryGetValue(selectedItemText, out Dictionary<string, SongMap> innerDictionary))
+                {
+                    if (innerDictionary.TryGetValue(playKey, out SongMap Songdetails))
+                    {
+                        playSong = Songdetails;
+                        return;
+                    }
+                    else
+                    {
+                        debugLog("未找到" + playKey + "对应的歌曲，可能已经被删除，请点击曲包刷新列表后再试！");
+                        playSong = null;
+                        return;
+                    }
+                }
+                else
+                {
+                    debugLog("错误，曲包名称不一致");
+                    playSong = null;
+                    return;
+                }
+            }
+
+            // 没有选中曲包时，从所有曲包中查找
+            foreach (Dictionary<string, SongMap> musicPack in musicPackInfo.Values)
+            {
+                if (musicPack.TryGetValue(playKey, out SongMap foundSong))
+                {
+                    playSong = foundSong;
+                    return;
+                }
+            }
+
+            debugLog("未找到" + playKey + "对应的歌曲，请检查该key是否存在！");
+            playSong = null;
         }
 
-        private void trackVolume_Scroll(object sender, EventArgs e)
+        private void trackVolume_ValueChanged(object sender, EventArgs e)
         {
             waveOut.Volume = (float)trackVolume.Value / 100;
         }
-        private void trackVolume2_Scroll(object sender, EventArgs e)
+        private void trackVolume2_ValueChanged(object sender, EventArgs e)
         {
             waveOut.Volume = (float)trackVolume2.Value / 100;
         }
 
-        private void trackProgress_Scroll(object sender, EventArgs e)
+        private void trackProgress_ValueChanged(object sender, EventArgs e)
         {
             if (currentAudioReader != null && waveOut.PlaybackState != PlaybackState.Stopped)
             {
                 currentAudioReader.CurrentTime = TimeSpan.FromSeconds(trackProgress.Value);
-                trackProgress2.Value = trackProgress.Value;
+                trackProgress2.SetValueSilent(trackProgress.Value);
             }
         }
 
-        private void trackProgress2_Scroll(object sender, EventArgs e)
+        private void trackProgress2_ValueChanged(object sender, EventArgs e)
         {
             if (currentAudioReader != null && waveOut.PlaybackState != PlaybackState.Stopped)
             {
                 currentAudioReader.CurrentTime = TimeSpan.FromSeconds(trackProgress2.Value);
-                trackProgress.Value = trackProgress2.Value;
+                trackProgress.SetValueSilent(trackProgress2.Value);
+            }
+        }
+
+        private void btnPlay_Click(object sender, EventArgs e)
+        {
+            if (btnPlay.Text == "播放")
+            {
+                if (playSong != null)
+                {
+                    AudioPlayer(playSong);
+                }
+            }
+            else
+            {
+                // 暂停
+                if (waveOut.PlaybackState == PlaybackState.Playing)
+                {
+                    waveOut.Pause();
+                    btnPlay.Text = btnPlay2.Text = "播放";
+                    BSIMMStatusUpdate("播放器：", "已暂停", 0);
+                }
+            }
+        }
+
+        private void btnPlay2_Click(object sender, EventArgs e)
+        {
+            if (btnPlay2.Text == "播放")
+            {
+                if (DelicatedSongListView.SelectedItems.Count != 0)
+                {
+                    int index = DelicatedSongListView.SelectedItems[0].Index;
+                    if (index != -1)
+                    {
+                        string playKey = DelicatedSongListView.SelectedItems[0].SubItems[1].Text;
+                        if (delicatedSongList.TryGetValue(playKey, out SongMap selectedSong))
+                        {
+                            AudioPlayer(selectedSong);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // 暂停
+                if (waveOut.PlaybackState == PlaybackState.Playing)
+                {
+                    waveOut.Pause();
+                    btnPlay.Text = btnPlay2.Text = "播放";
+                    BSIMMStatusUpdate("播放器：", "已暂停", 0);
+                }
             }
         }
 
@@ -1475,8 +1504,8 @@ namespace BeatSaberIndependentMapsManager
                 BSIMMStatusUpdate("播放器：", "已停止", 0);
                 PlaybackTimer.Enabled = false;
                 // 重置进度条
-                trackProgress.Value = 0;
-                trackProgress2.Value = 0;
+                trackProgress.SetValueSilent(0);
+                trackProgress2.SetValueSilent(0);
             }
             else if (currentAudioReader != null)
             {
@@ -1484,8 +1513,8 @@ namespace BeatSaberIndependentMapsManager
                 int currentPos = (int)currentAudioReader.CurrentTime.TotalSeconds;
                 if (currentPos <= trackProgress.Maximum)
                 {
-                    trackProgress.Value = currentPos;
-                    trackProgress2.Value = currentPos;
+                    trackProgress.SetValueSilent(currentPos);
+                    trackProgress2.SetValueSilent(currentPos);
                 }
             }
         }
@@ -1577,21 +1606,6 @@ namespace BeatSaberIndependentMapsManager
                 e.Cancel = true;
                 return;
             }
-            string[] files = Directory.GetFiles(Application.StartupPath + "assets\\temp\\");
-            await Task.Run(() =>
-            {
-                foreach (string file in files)
-                {
-                    try
-                    {
-                        File.Delete(file);
-                    }
-                    catch (IOException ex)
-                    {
-                        debugLog($"删除文件 {file} 失败: {ex.Message} 清尝试手动清理临时文件夹asset\temp");
-                    }
-                }
-            });
         }
 
         private void btnDeduplication_Click(object sender, EventArgs e)
@@ -1825,29 +1839,37 @@ namespace BeatSaberIndependentMapsManager
         }
         private void DelicatedSongListView_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (DelicatedSongListView.SelectedItems.Count!=0)
-            {
-                int index = DelicatedSongListView.SelectedItems[0].Index;
-                if (index != -1)
-                {
-                    string playKey = DelicatedSongListView.SelectedItems[0].SubItems[1].Text;
-                    SongMap playSong = delicatedSongList[playKey];
-                    if (btnPlay2.Text == "播放")
-                    {
-                        AudioPlayer(playSong);
-                    }
-                }
-            }
-        }
-        private void DelicatedSongListView_SelectedIndexChanged(object sender, EventArgs e)
-        {
+            // 停止当前播放
             PlaybackTimer.Enabled = false;
             waveOut.Stop();
+            btnPlay.Text = "播放";
             btnPlay2.Text = "播放";
-            BSIMMStatusUpdate("播放器：", "已停止", 0);
-            // 重置进度条
-            trackProgress.Value = 0;
-            trackProgress2.Value = 0;
+            trackProgress.SetValueSilent(0);
+            trackProgress2.SetValueSilent(0);
+
+            if (DelicatedSongListView.SelectedItems.Count == 0)
+            {
+                playSong = null;
+                return;
+            }
+
+            int index = DelicatedSongListView.SelectedItems[0].Index;
+            if (index == -1)
+            {
+                playSong = null;
+                return;
+            }
+
+            string playKey = DelicatedSongListView.SelectedItems[0].SubItems[1].Text;
+            if (delicatedSongList.TryGetValue(playKey, out SongMap selectedSong))
+            {
+                playSong = selectedSong;
+            }
+            else
+            {
+                debugLog("未找到" + playKey + "对应的歌曲！");
+                playSong = null;
+            }
         }
 
         private void btnMigrateFolder_Click(object sender, EventArgs e)
@@ -1902,7 +1924,7 @@ namespace BeatSaberIndependentMapsManager
                         bool excluded = false;
                         foreach (string MusicPackDir in musicPackPath.Values)
                         {
-                            string partpath = musicPackDir.ToString();
+                            string partpath = MusicPackDir.ToString();
                             if (path.Contains(partpath))
                             {
                                 excluded = true;
