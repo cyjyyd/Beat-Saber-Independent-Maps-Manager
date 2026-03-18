@@ -45,6 +45,7 @@
             label3 = new System.Windows.Forms.Label();
             trackVolume = new System.Windows.Forms.TrackBar();
             btnPlay = new System.Windows.Forms.Button();
+            trackProgress = new System.Windows.Forms.TrackBar();
             btnExportFavor = new System.Windows.Forms.Button();
             btnInfo = new System.Windows.Forms.Button();
             btnSaveList = new System.Windows.Forms.Button();
@@ -64,6 +65,7 @@
             btnPlay2 = new System.Windows.Forms.Button();
             label2 = new System.Windows.Forms.Label();
             trackVolume2 = new System.Windows.Forms.TrackBar();
+            trackProgress2 = new System.Windows.Forms.TrackBar();
             btnMigrateFolder = new System.Windows.Forms.Button();
             DelicatedSongListView = new System.Windows.Forms.ListView();
             columnHeader1 = new System.Windows.Forms.ColumnHeader();
@@ -100,8 +102,10 @@
             tabMusicPackContorl.SuspendLayout();
             tabSongFolder.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)trackVolume).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)trackProgress).BeginInit();
             tabDelicatedSong.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)trackVolume2).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)trackProgress2).BeginInit();
             tabFolderandList.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dataGridView1).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
@@ -205,6 +209,7 @@
             tabSongFolder.Controls.Add(label3);
             tabSongFolder.Controls.Add(trackVolume);
             tabSongFolder.Controls.Add(btnPlay);
+            tabSongFolder.Controls.Add(trackProgress);
             tabSongFolder.Controls.Add(btnExportFavor);
             tabSongFolder.Controls.Add(btnInfo);
             tabSongFolder.Controls.Add(btnSaveList);
@@ -260,7 +265,19 @@
             trackVolume.TickStyle = System.Windows.Forms.TickStyle.None;
             trackVolume.Value = 20;
             trackVolume.Scroll += trackVolume_Scroll;
-            // 
+            //
+            // trackProgress
+            //
+            trackProgress.BackColor = System.Drawing.Color.White;
+            trackProgress.Location = new System.Drawing.Point(364, 402);
+            trackProgress.Margin = new System.Windows.Forms.Padding(4);
+            trackProgress.Maximum = 100;
+            trackProgress.Name = "trackProgress";
+            trackProgress.Size = new System.Drawing.Size(155, 30);
+            trackProgress.TabIndex = 25;
+            trackProgress.TickStyle = System.Windows.Forms.TickStyle.None;
+            trackProgress.Scroll += trackProgress_Scroll;
+            //
             // btnPlay
             // 
             btnPlay.Location = new System.Drawing.Point(364, 435);
@@ -416,6 +433,7 @@
             // 
             tabDelicatedSong.Controls.Add(btnFullScan);
             tabDelicatedSong.Controls.Add(btnPlay2);
+            tabDelicatedSong.Controls.Add(trackProgress2);
             tabDelicatedSong.Controls.Add(label2);
             tabDelicatedSong.Controls.Add(trackVolume2);
             tabDelicatedSong.Controls.Add(btnMigrateFolder);
@@ -472,7 +490,19 @@
             trackVolume2.TickStyle = System.Windows.Forms.TickStyle.None;
             trackVolume2.Value = 20;
             trackVolume2.Scroll += trackVolume2_Scroll;
-            // 
+            //
+            // trackProgress2
+            //
+            trackProgress2.BackColor = System.Drawing.Color.White;
+            trackProgress2.Location = new System.Drawing.Point(379, 400);
+            trackProgress2.Margin = new System.Windows.Forms.Padding(4);
+            trackProgress2.Maximum = 100;
+            trackProgress2.Name = "trackProgress2";
+            trackProgress2.Size = new System.Drawing.Size(100, 30);
+            trackProgress2.TabIndex = 28;
+            trackProgress2.TickStyle = System.Windows.Forms.TickStyle.None;
+            trackProgress2.Scroll += trackProgress2_Scroll;
+            //
             // btnMigrateFolder
             // 
             btnMigrateFolder.Location = new System.Drawing.Point(272, 430);
@@ -779,9 +809,11 @@
             tabSongFolder.ResumeLayout(false);
             tabSongFolder.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)trackVolume).EndInit();
+            ((System.ComponentModel.ISupportInitialize)trackProgress).EndInit();
             tabDelicatedSong.ResumeLayout(false);
             tabDelicatedSong.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)trackVolume2).EndInit();
+            ((System.ComponentModel.ISupportInitialize)trackProgress2).EndInit();
             tabFolderandList.ResumeLayout(false);
             tabFolderandList.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)dataGridView1).EndInit();
@@ -828,6 +860,7 @@
         private System.Windows.Forms.Button btnPlay;
         private System.Windows.Forms.Button btnExportFavor;
         private System.Windows.Forms.TrackBar trackVolume;
+        private System.Windows.Forms.TrackBar trackProgress;
         private System.Windows.Forms.Label label3;
         private System.Windows.Forms.Timer PlaybackTimer;
         private System.Windows.Forms.OpenFileDialog musicPackCoverDialog;
@@ -840,6 +873,7 @@
         private System.Windows.Forms.Button btnPlay2;
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.TrackBar trackVolume2;
+        private System.Windows.Forms.TrackBar trackProgress2;
         private System.Windows.Forms.Button btnMigrateFolder;
         private System.Windows.Forms.ColumnHeader columnHeader4;
         private System.Windows.Forms.Button btnFullScan;
