@@ -1,6 +1,7 @@
 ﻿using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -87,11 +88,26 @@ namespace BeatSaberIndependentMapsManager
         public string[] GetDifficulties()
         {
             List<string> difficulties = new List<string>();
+            if (_difficultyBeatmapSets == null)
+            {
+                return difficulties.ToArray();
+            }
+
             foreach (JObject difficultyBeatmapSet in _difficultyBeatmapSets)
             {
-                foreach (JObject difficultyBeatmap in (JArray)difficultyBeatmapSet["_difficultyBeatmaps"])
+                JArray difficultyBeatmaps = difficultyBeatmapSet["_difficultyBeatmaps"] as JArray;
+                if (difficultyBeatmaps == null)
                 {
-                    difficulties.Add(difficultyBeatmap["_difficulty"].ToString());
+                    continue;
+                }
+
+                foreach (JObject difficultyBeatmap in difficultyBeatmaps)
+                {
+                    string difficulty = difficultyBeatmap["_difficulty"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(difficulty))
+                    {
+                        difficulties.Add(difficulty);
+                    }
                 }
             }
             return difficulties.ToArray();
@@ -99,11 +115,26 @@ namespace BeatSaberIndependentMapsManager
         public string[] GetDifficultiesFiles()
         {
             List<string> difficulties = new List<string>();
+            if (_difficultyBeatmapSets == null)
+            {
+                return difficulties.ToArray();
+            }
+
             foreach (JObject difficultyBeatmapSet in _difficultyBeatmapSets)
             {
-                foreach (JObject difficultyBeatmap in (JArray)difficultyBeatmapSet["_difficultyBeatmaps"])
+                JArray difficultyBeatmaps = difficultyBeatmapSet["_difficultyBeatmaps"] as JArray;
+                if (difficultyBeatmaps == null)
                 {
-                    difficulties.Add(difficultyBeatmap["_beatmapFilename"].ToString());
+                    continue;
+                }
+
+                foreach (JObject difficultyBeatmap in difficultyBeatmaps)
+                {
+                    string difficultyFile = difficultyBeatmap["_beatmapFilename"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(difficultyFile))
+                    {
+                        difficulties.Add(difficultyFile);
+                    }
                 }
             }
             return difficulties.ToArray();
