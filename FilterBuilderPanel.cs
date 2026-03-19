@@ -417,7 +417,32 @@ namespace BeatSaberIndependentMapsManager
         }
 
         /// <summary>
+        /// Checks if the current preset has any OR logic
+        /// </summary>
+        public bool HasOrLogic()
+        {
+            if (currentPreset == null) return false;
+
+            foreach (var group in currentPreset.GetActiveGroups())
+            {
+                // Check for OR between groups
+                if (group.GroupOperator == LogicOperator.Or)
+                    return true;
+
+                // Check for OR within conditions
+                foreach (var condition in group.GetActiveConditions())
+                {
+                    if (condition.Operator == LogicOperator.Or)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Converts the current filter configuration to BeatSaverSearchFilter
+        /// Note: This method only handles AND logic. For OR logic, use MainForm's BuildSearchFiltersWithOrLogic instead.
         /// </summary>
         public BeatSaverSearchFilter ToSearchFilter()
         {
@@ -426,8 +451,8 @@ namespace BeatSaberIndependentMapsManager
             if (currentPreset == null) return filter;
 
             // Collect all conditions from all groups
-            // For simplicity, we'll use AND logic between groups
-            // and apply each condition to the filter
+            // Note: This ignores OR operators - for OR logic support,
+            // use MainForm.BuildSearchFiltersWithOrLogic instead
             foreach (var group in currentPreset.GetActiveGroups())
             {
                 foreach (var condition in group.GetActiveConditions())

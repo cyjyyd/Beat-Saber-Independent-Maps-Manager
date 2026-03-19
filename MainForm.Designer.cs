@@ -101,7 +101,7 @@ namespace BeatSaberIndependentMapsManager
             lbldownloadFolder = new Label();
             textBox1 = new TextBox();
             lblbplistTip = new Label();
-            PlaybackTimer = new Timer(components);
+            PlaybackTimer = new System.Windows.Forms.Timer(components);
             btnSetting = new Button();
             comboBoxPlatform = new ComboBox();
             lblPlatform = new Label();
