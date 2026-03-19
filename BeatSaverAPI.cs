@@ -151,7 +151,7 @@ namespace BeatSaberIndependentMapsManager
     public class BeatSaverSearchFilter
     {
         public string Query { get; set; }
-        public string Order { get; set; } = "Latest";
+        public string Order { get; set; }
         public double? MinBpm { get; set; }
         public double? MaxBpm { get; set; }
         public double? MinNps { get; set; }

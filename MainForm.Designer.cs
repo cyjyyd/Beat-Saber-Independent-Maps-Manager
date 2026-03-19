@@ -1,4 +1,4 @@
-﻿using System.Windows.Forms;
+using System.Windows.Forms;
 
 namespace BeatSaberIndependentMapsManager
 {
@@ -76,56 +76,31 @@ namespace BeatSaberIndependentMapsManager
             columnHeader3 = new ColumnHeader();
             columnHeader4 = new ColumnHeader();
             tabFolderandList = new TabPage();
-            lblFilterCondition = new Label();
-            lblFilterResult = new Label();
             dataGridView1 = new DataGridView();
+            DB_Select = new DataGridViewCheckBoxColumn();
             DB_bsr = new DataGridViewTextBoxColumn();
             DB_Cover = new DataGridViewImageColumn();
             DB_Name = new DataGridViewTextBoxColumn();
             DB_description = new DataGridViewTextBoxColumn();
             DB_bpm = new DataGridViewTextBoxColumn();
             DB_levelAuthorName = new DataGridViewTextBoxColumn();
+            lblFilterResult = new Label();
+            pnlFilterButtons = new Panel();
+            btnNextPage = new Button();
+            lblPageInfo = new Label();
+            btnPrevPage = new Button();
+            btnExportAll = new Button();
+            btnExportSelected = new Button();
+            btnSelectInverse = new Button();
+            btnSelectAll = new Button();
+            filterSummaryPanel = new Panel();
+            btnOpenFilterBuilder = new Button();
+            lblFilterSummary = new Label();
             btnDFSelect = new Button();
             lbldownloadFolderTip = new Label();
             lbldownloadFolder = new Label();
             textBox1 = new TextBox();
             lblbplistTip = new Label();
-            lblSearchQuery = new Label();
-            txtSearchQuery = new TextBox();
-            btnSearch = new Button();
-            lblSortOrder = new Label();
-            cboSortOrder = new ComboBox();
-            lblBpmRange = new Label();
-            numMinBpm = new NumericUpDown();
-            numMaxBpm = new NumericUpDown();
-            lblNpsRange = new Label();
-            numMinNps = new NumericUpDown();
-            numMaxNps = new NumericUpDown();
-            lblDurationRange = new Label();
-            numMinDuration = new NumericUpDown();
-            numMaxDuration = new NumericUpDown();
-            lblSsStarsRange = new Label();
-            numMinSsStars = new NumericUpDown();
-            numMaxSsStars = new NumericUpDown();
-            lblBlStarsRange = new Label();
-            numMinBlStars = new NumericUpDown();
-            numMaxBlStars = new NumericUpDown();
-            chkChroma = new CheckBox();
-            chkNoodle = new CheckBox();
-            chkMe = new CheckBox();
-            chkCinema = new CheckBox();
-            chkVivify = new CheckBox();
-            lblAutomapper = new Label();
-            cboAutomapper = new ComboBox();
-            lblLeaderboard = new Label();
-            cboLeaderboard = new ComboBox();
-            chkCurated = new CheckBox();
-            chkVerified = new CheckBox();
-            btnResetFilter = new Button();
-            btnAddToPlaylist = new Button();
-            btnPrevPage = new Button();
-            btnNextPage = new Button();
-            lblPageInfo = new Label();
             PlaybackTimer = new Timer(components);
             btnSetting = new Button();
             comboBoxPlatform = new ComboBox();
@@ -143,16 +118,8 @@ namespace BeatSaberIndependentMapsManager
             tabDelicatedSong.SuspendLayout();
             tabFolderandList.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dataGridView1).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numMinBpm).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numMaxBpm).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numMinNps).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numMaxNps).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numMinDuration).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numMaxDuration).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numMinSsStars).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numMaxSsStars).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numMinBlStars).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numMaxBlStars).BeginInit();
+            pnlFilterButtons.SuspendLayout();
+            filterSummaryPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             SuspendLayout();
             // 
@@ -597,50 +564,15 @@ namespace BeatSaberIndependentMapsManager
             // 
             // tabFolderandList
             // 
-            tabFolderandList.Controls.Add(lblFilterCondition);
-            tabFolderandList.Controls.Add(lblFilterResult);
             tabFolderandList.Controls.Add(dataGridView1);
+            tabFolderandList.Controls.Add(lblFilterResult);
+            tabFolderandList.Controls.Add(pnlFilterButtons);
+            tabFolderandList.Controls.Add(filterSummaryPanel);
             tabFolderandList.Controls.Add(btnDFSelect);
             tabFolderandList.Controls.Add(lbldownloadFolderTip);
             tabFolderandList.Controls.Add(lbldownloadFolder);
             tabFolderandList.Controls.Add(textBox1);
             tabFolderandList.Controls.Add(lblbplistTip);
-            tabFolderandList.Controls.Add(lblSearchQuery);
-            tabFolderandList.Controls.Add(txtSearchQuery);
-            tabFolderandList.Controls.Add(btnSearch);
-            tabFolderandList.Controls.Add(lblSortOrder);
-            tabFolderandList.Controls.Add(cboSortOrder);
-            tabFolderandList.Controls.Add(lblBpmRange);
-            tabFolderandList.Controls.Add(numMinBpm);
-            tabFolderandList.Controls.Add(numMaxBpm);
-            tabFolderandList.Controls.Add(lblNpsRange);
-            tabFolderandList.Controls.Add(numMinNps);
-            tabFolderandList.Controls.Add(numMaxNps);
-            tabFolderandList.Controls.Add(lblDurationRange);
-            tabFolderandList.Controls.Add(numMinDuration);
-            tabFolderandList.Controls.Add(numMaxDuration);
-            tabFolderandList.Controls.Add(lblSsStarsRange);
-            tabFolderandList.Controls.Add(numMinSsStars);
-            tabFolderandList.Controls.Add(numMaxSsStars);
-            tabFolderandList.Controls.Add(lblBlStarsRange);
-            tabFolderandList.Controls.Add(numMinBlStars);
-            tabFolderandList.Controls.Add(numMaxBlStars);
-            tabFolderandList.Controls.Add(chkChroma);
-            tabFolderandList.Controls.Add(chkNoodle);
-            tabFolderandList.Controls.Add(chkMe);
-            tabFolderandList.Controls.Add(chkCinema);
-            tabFolderandList.Controls.Add(chkVivify);
-            tabFolderandList.Controls.Add(lblAutomapper);
-            tabFolderandList.Controls.Add(cboAutomapper);
-            tabFolderandList.Controls.Add(lblLeaderboard);
-            tabFolderandList.Controls.Add(cboLeaderboard);
-            tabFolderandList.Controls.Add(chkCurated);
-            tabFolderandList.Controls.Add(chkVerified);
-            tabFolderandList.Controls.Add(btnResetFilter);
-            tabFolderandList.Controls.Add(btnAddToPlaylist);
-            tabFolderandList.Controls.Add(btnPrevPage);
-            tabFolderandList.Controls.Add(btnNextPage);
-            tabFolderandList.Controls.Add(lblPageInfo);
             tabFolderandList.Location = new System.Drawing.Point(4, 33);
             tabFolderandList.Margin = new Padding(6);
             tabFolderandList.Name = "tabFolderandList";
@@ -649,39 +581,28 @@ namespace BeatSaberIndependentMapsManager
             tabFolderandList.Text = "歌单编辑";
             tabFolderandList.UseVisualStyleBackColor = true;
             // 
-            // lblFilterCondition
-            // 
-            lblFilterCondition.AutoSize = true;
-            lblFilterCondition.Location = new System.Drawing.Point(13, 82);
-            lblFilterCondition.Margin = new Padding(5, 0, 5, 0);
-            lblFilterCondition.Name = "lblFilterCondition";
-            lblFilterCondition.Size = new System.Drawing.Size(82, 24);
-            lblFilterCondition.TabIndex = 7;
-            lblFilterCondition.Text = "筛选条件";
-            // 
-            // lblFilterResult
-            // 
-            lblFilterResult.AutoSize = true;
-            lblFilterResult.Location = new System.Drawing.Point(512, 82);
-            lblFilterResult.Margin = new Padding(5, 0, 5, 0);
-            lblFilterResult.Name = "lblFilterResult";
-            lblFilterResult.Size = new System.Drawing.Size(100, 24);
-            lblFilterResult.TabIndex = 6;
-            lblFilterResult.Text = "筛选结果：";
-            // 
             // dataGridView1
             // 
             dataGridView1.AllowUserToAddRows = false;
             dataGridView1.AllowUserToOrderColumns = true;
+            dataGridView1.Anchor = AnchorStyles.None;
             dataGridView1.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dataGridView1.Columns.AddRange(new DataGridViewColumn[] { DB_bsr, DB_Cover, DB_Name, DB_description, DB_bpm, DB_levelAuthorName });
-            dataGridView1.Location = new System.Drawing.Point(512, 110);
+            dataGridView1.Columns.AddRange(new DataGridViewColumn[] { DB_Select, DB_bsr, DB_Cover, DB_Name, DB_description, DB_bpm, DB_levelAuthorName });
+            dataGridView1.Location = new System.Drawing.Point(13, 105);
             dataGridView1.Margin = new Padding(5, 4, 5, 4);
             dataGridView1.Name = "dataGridView1";
-            dataGridView1.ReadOnly = true;
             dataGridView1.RowHeadersWidth = 62;
-            dataGridView1.Size = new System.Drawing.Size(541, 467);
-            dataGridView1.TabIndex = 5;
+            dataGridView1.Size = new System.Drawing.Size(1040, 506);
+            dataGridView1.TabIndex = 9;
+            // 
+            // DB_Select
+            // 
+            DB_Select.FalseValue = false;
+            DB_Select.HeaderText = "选择";
+            DB_Select.MinimumWidth = 8;
+            DB_Select.Name = "DB_Select";
+            DB_Select.TrueValue = true;
+            DB_Select.Width = 50;
             // 
             // DB_bsr
             // 
@@ -689,7 +610,7 @@ namespace BeatSaberIndependentMapsManager
             DB_bsr.MinimumWidth = 8;
             DB_bsr.Name = "DB_bsr";
             DB_bsr.ReadOnly = true;
-            DB_bsr.Width = 40;
+            DB_bsr.Width = 60;
             // 
             // DB_Cover
             // 
@@ -699,7 +620,7 @@ namespace BeatSaberIndependentMapsManager
             DB_Cover.ReadOnly = true;
             DB_Cover.Resizable = DataGridViewTriState.True;
             DB_Cover.SortMode = DataGridViewColumnSortMode.Automatic;
-            DB_Cover.Width = 150;
+            DB_Cover.Width = 80;
             // 
             // DB_Name
             // 
@@ -715,7 +636,7 @@ namespace BeatSaberIndependentMapsManager
             DB_description.MinimumWidth = 8;
             DB_description.Name = "DB_description";
             DB_description.ReadOnly = true;
-            DB_description.Width = 150;
+            DB_description.Width = 200;
             // 
             // DB_bpm
             // 
@@ -723,7 +644,7 @@ namespace BeatSaberIndependentMapsManager
             DB_bpm.MinimumWidth = 8;
             DB_bpm.Name = "DB_bpm";
             DB_bpm.ReadOnly = true;
-            DB_bpm.Width = 150;
+            DB_bpm.Width = 60;
             // 
             // DB_levelAuthorName
             // 
@@ -732,6 +653,136 @@ namespace BeatSaberIndependentMapsManager
             DB_levelAuthorName.Name = "DB_levelAuthorName";
             DB_levelAuthorName.ReadOnly = true;
             DB_levelAuthorName.Width = 150;
+            // 
+            // lblFilterResult
+            // 
+            lblFilterResult.AutoSize = true;
+            lblFilterResult.Location = new System.Drawing.Point(13, 77);
+            lblFilterResult.Margin = new Padding(5, 0, 5, 0);
+            lblFilterResult.Name = "lblFilterResult";
+            lblFilterResult.Size = new System.Drawing.Size(100, 24);
+            lblFilterResult.TabIndex = 10;
+            lblFilterResult.Text = "筛选结果：";
+            // 
+            // pnlFilterButtons
+            // 
+            pnlFilterButtons.Controls.Add(btnNextPage);
+            pnlFilterButtons.Controls.Add(lblPageInfo);
+            pnlFilterButtons.Controls.Add(btnPrevPage);
+            pnlFilterButtons.Controls.Add(btnExportAll);
+            pnlFilterButtons.Controls.Add(btnExportSelected);
+            pnlFilterButtons.Controls.Add(btnSelectInverse);
+            pnlFilterButtons.Controls.Add(btnSelectAll);
+            pnlFilterButtons.Dock = DockStyle.Bottom;
+            pnlFilterButtons.Location = new System.Drawing.Point(0, 618);
+            pnlFilterButtons.Name = "pnlFilterButtons";
+            pnlFilterButtons.Size = new System.Drawing.Size(1087, 47);
+            pnlFilterButtons.TabIndex = 8;
+            // 
+            // btnNextPage
+            // 
+            btnNextPage.Anchor = AnchorStyles.Top;
+            btnNextPage.Location = new System.Drawing.Point(953, 0);
+            btnNextPage.Name = "btnNextPage";
+            btnNextPage.Size = new System.Drawing.Size(100, 47);
+            btnNextPage.TabIndex = 6;
+            btnNextPage.Text = "下一页";
+            btnNextPage.UseVisualStyleBackColor = true;
+            btnNextPage.Click += btnNextPage_Click;
+            // 
+            // lblPageInfo
+            // 
+            lblPageInfo.Anchor = AnchorStyles.None;
+            lblPageInfo.AutoSize = true;
+            lblPageInfo.Location = new System.Drawing.Point(773, 12);
+            lblPageInfo.Name = "lblPageInfo";
+            lblPageInfo.Size = new System.Drawing.Size(86, 24);
+            lblPageInfo.TabIndex = 5;
+            lblPageInfo.Text = "第 1/1 页";
+            lblPageInfo.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // btnPrevPage
+            // 
+            btnPrevPage.Anchor = AnchorStyles.Top;
+            btnPrevPage.Location = new System.Drawing.Point(587, 0);
+            btnPrevPage.Name = "btnPrevPage";
+            btnPrevPage.Size = new System.Drawing.Size(100, 47);
+            btnPrevPage.TabIndex = 4;
+            btnPrevPage.Text = "上一页";
+            btnPrevPage.UseVisualStyleBackColor = true;
+            btnPrevPage.Click += btnPrevPage_Click;
+            // 
+            // btnExportAll
+            // 
+            btnExportAll.Dock = DockStyle.Left;
+            btnExportAll.Location = new System.Drawing.Point(336, 0);
+            btnExportAll.Name = "btnExportAll";
+            btnExportAll.Size = new System.Drawing.Size(161, 47);
+            btnExportAll.TabIndex = 3;
+            btnExportAll.Text = "导出全部到歌单";
+            btnExportAll.UseVisualStyleBackColor = true;
+            // 
+            // btnExportSelected
+            // 
+            btnExportSelected.Dock = DockStyle.Left;
+            btnExportSelected.Location = new System.Drawing.Point(175, 0);
+            btnExportSelected.Name = "btnExportSelected";
+            btnExportSelected.Size = new System.Drawing.Size(161, 47);
+            btnExportSelected.TabIndex = 2;
+            btnExportSelected.Text = "导出选中到歌单";
+            btnExportSelected.UseVisualStyleBackColor = true;
+            // 
+            // btnSelectInverse
+            // 
+            btnSelectInverse.Dock = DockStyle.Left;
+            btnSelectInverse.Location = new System.Drawing.Point(80, 0);
+            btnSelectInverse.Name = "btnSelectInverse";
+            btnSelectInverse.Size = new System.Drawing.Size(95, 47);
+            btnSelectInverse.TabIndex = 1;
+            btnSelectInverse.Text = "反选";
+            btnSelectInverse.UseVisualStyleBackColor = true;
+            // 
+            // btnSelectAll
+            // 
+            btnSelectAll.Dock = DockStyle.Left;
+            btnSelectAll.Location = new System.Drawing.Point(0, 0);
+            btnSelectAll.Name = "btnSelectAll";
+            btnSelectAll.Size = new System.Drawing.Size(80, 47);
+            btnSelectAll.TabIndex = 0;
+            btnSelectAll.Text = "全选";
+            btnSelectAll.UseVisualStyleBackColor = true;
+            // 
+            // filterSummaryPanel
+            // 
+            filterSummaryPanel.Controls.Add(btnOpenFilterBuilder);
+            filterSummaryPanel.Controls.Add(lblFilterSummary);
+            filterSummaryPanel.Dock = DockStyle.Top;
+            filterSummaryPanel.Location = new System.Drawing.Point(0, 0);
+            filterSummaryPanel.Name = "filterSummaryPanel";
+            filterSummaryPanel.Padding = new Padding(5);
+            filterSummaryPanel.Size = new System.Drawing.Size(1087, 42);
+            filterSummaryPanel.TabIndex = 7;
+            // 
+            // btnOpenFilterBuilder
+            // 
+            btnOpenFilterBuilder.Anchor = AnchorStyles.Top;
+            btnOpenFilterBuilder.Location = new System.Drawing.Point(917, 5);
+            btnOpenFilterBuilder.Name = "btnOpenFilterBuilder";
+            btnOpenFilterBuilder.Size = new System.Drawing.Size(165, 32);
+            btnOpenFilterBuilder.TabIndex = 1;
+            btnOpenFilterBuilder.Text = "编辑筛选条件";
+            btnOpenFilterBuilder.UseVisualStyleBackColor = true;
+            // 
+            // lblFilterSummary
+            // 
+            lblFilterSummary.Dock = DockStyle.Fill;
+            lblFilterSummary.Font = new System.Drawing.Font("Microsoft YaHei UI", 9F);
+            lblFilterSummary.Location = new System.Drawing.Point(5, 5);
+            lblFilterSummary.Name = "lblFilterSummary";
+            lblFilterSummary.Size = new System.Drawing.Size(1077, 32);
+            lblFilterSummary.TabIndex = 0;
+            lblFilterSummary.Text = "当前筛选：无条件";
+            lblFilterSummary.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // btnDFSelect
             // 
@@ -757,7 +808,7 @@ namespace BeatSaberIndependentMapsManager
             // lbldownloadFolder
             // 
             lbldownloadFolder.AutoSize = true;
-            lbldownloadFolder.Location = new System.Drawing.Point(13, 45);
+            lbldownloadFolder.Location = new System.Drawing.Point(13, 46);
             lbldownloadFolder.Margin = new Padding(5, 0, 5, 0);
             lbldownloadFolder.Name = "lbldownloadFolder";
             lbldownloadFolder.Size = new System.Drawing.Size(136, 24);
@@ -780,379 +831,7 @@ namespace BeatSaberIndependentMapsManager
             lblbplistTip.Name = "lblbplistTip";
             lblbplistTip.Size = new System.Drawing.Size(766, 24);
             lblbplistTip.TabIndex = 0;
-            lblbplistTip.Text = "注：如需要快速从目录生成歌单请使用曲包目录管理中的生成歌单功能！此页面为歌单细化编辑\r\n";
-            // 
-            // lblSearchQuery
-            // 
-            lblSearchQuery.AutoSize = true;
-            lblSearchQuery.Location = new System.Drawing.Point(13, 110);
-            lblSearchQuery.Margin = new Padding(5, 0, 5, 0);
-            lblSearchQuery.Name = "lblSearchQuery";
-            lblSearchQuery.Size = new System.Drawing.Size(64, 24);
-            lblSearchQuery.TabIndex = 8;
-            lblSearchQuery.Text = "搜索：";
-            // 
-            // txtSearchQuery
-            // 
-            txtSearchQuery.Location = new System.Drawing.Point(87, 107);
-            txtSearchQuery.Margin = new Padding(5, 4, 5, 4);
-            txtSearchQuery.Name = "txtSearchQuery";
-            txtSearchQuery.Size = new System.Drawing.Size(260, 30);
-            txtSearchQuery.TabIndex = 9;
-            // 
-            // btnSearch
-            // 
-            btnSearch.Location = new System.Drawing.Point(357, 105);
-            btnSearch.Margin = new Padding(5, 4, 5, 4);
-            btnSearch.Name = "btnSearch";
-            btnSearch.Size = new System.Drawing.Size(100, 32);
-            btnSearch.TabIndex = 10;
-            btnSearch.Text = "搜索";
-            btnSearch.UseVisualStyleBackColor = true;
-            btnSearch.Click += btnSearch_Click;
-            // 
-            // lblSortOrder
-            // 
-            lblSortOrder.AutoSize = true;
-            lblSortOrder.Location = new System.Drawing.Point(13, 150);
-            lblSortOrder.Margin = new Padding(5, 0, 5, 0);
-            lblSortOrder.Name = "lblSortOrder";
-            lblSortOrder.Size = new System.Drawing.Size(64, 24);
-            lblSortOrder.TabIndex = 11;
-            lblSortOrder.Text = "排序：";
-            // 
-            // cboSortOrder
-            // 
-            cboSortOrder.FormattingEnabled = true;
-            cboSortOrder.Items.AddRange(new object[] { "Latest", "Relevance", "Rating", "Curated", "Random", "Duration" });
-            cboSortOrder.Location = new System.Drawing.Point(86, 147);
-            cboSortOrder.Margin = new Padding(5, 4, 5, 4);
-            cboSortOrder.Name = "cboSortOrder";
-            cboSortOrder.Size = new System.Drawing.Size(120, 32);
-            cboSortOrder.TabIndex = 12;
-            // 
-            // lblBpmRange
-            // 
-            lblBpmRange.AutoSize = true;
-            lblBpmRange.Location = new System.Drawing.Point(13, 190);
-            lblBpmRange.Margin = new Padding(5, 0, 5, 0);
-            lblBpmRange.Name = "lblBpmRange";
-            lblBpmRange.Size = new System.Drawing.Size(68, 24);
-            lblBpmRange.TabIndex = 13;
-            lblBpmRange.Text = "BPM：";
-            // 
-            // numMinBpm
-            // 
-            numMinBpm.Location = new System.Drawing.Point(89, 187);
-            numMinBpm.Margin = new Padding(5, 4, 5, 4);
-            numMinBpm.Maximum = new decimal(new int[] { 500, 0, 0, 0 });
-            numMinBpm.Name = "numMinBpm";
-            numMinBpm.Size = new System.Drawing.Size(80, 30);
-            numMinBpm.TabIndex = 14;
-            // 
-            // numMaxBpm
-            // 
-            numMaxBpm.Location = new System.Drawing.Point(181, 187);
-            numMaxBpm.Margin = new Padding(5, 4, 5, 4);
-            numMaxBpm.Maximum = new decimal(new int[] { 500, 0, 0, 0 });
-            numMaxBpm.Name = "numMaxBpm";
-            numMaxBpm.Size = new System.Drawing.Size(80, 30);
-            numMaxBpm.TabIndex = 15;
-            // 
-            // lblNpsRange
-            // 
-            lblNpsRange.AutoSize = true;
-            lblNpsRange.Location = new System.Drawing.Point(13, 230);
-            lblNpsRange.Margin = new Padding(5, 0, 5, 0);
-            lblNpsRange.Name = "lblNpsRange";
-            lblNpsRange.Size = new System.Drawing.Size(64, 24);
-            lblNpsRange.TabIndex = 16;
-            lblNpsRange.Text = "NPS：";
-            // 
-            // numMinNps
-            // 
-            numMinNps.DecimalPlaces = 1;
-            numMinNps.Increment = new decimal(new int[] { 1, 0, 0, 65536 });
-            numMinNps.Location = new System.Drawing.Point(89, 227);
-            numMinNps.Margin = new Padding(5, 4, 5, 4);
-            numMinNps.Maximum = new decimal(new int[] { 20, 0, 0, 0 });
-            numMinNps.Name = "numMinNps";
-            numMinNps.Size = new System.Drawing.Size(80, 30);
-            numMinNps.TabIndex = 17;
-            // 
-            // numMaxNps
-            // 
-            numMaxNps.DecimalPlaces = 1;
-            numMaxNps.Increment = new decimal(new int[] { 1, 0, 0, 65536 });
-            numMaxNps.Location = new System.Drawing.Point(181, 227);
-            numMaxNps.Margin = new Padding(5, 4, 5, 4);
-            numMaxNps.Maximum = new decimal(new int[] { 20, 0, 0, 0 });
-            numMaxNps.Name = "numMaxNps";
-            numMaxNps.Size = new System.Drawing.Size(80, 30);
-            numMaxNps.TabIndex = 18;
-            // 
-            // lblDurationRange
-            // 
-            lblDurationRange.AutoSize = true;
-            lblDurationRange.Location = new System.Drawing.Point(13, 270);
-            lblDurationRange.Margin = new Padding(5, 0, 5, 0);
-            lblDurationRange.Name = "lblDurationRange";
-            lblDurationRange.Size = new System.Drawing.Size(94, 24);
-            lblDurationRange.TabIndex = 19;
-            lblDurationRange.Text = "时长(秒)：";
-            // 
-            // numMinDuration
-            // 
-            numMinDuration.Location = new System.Drawing.Point(117, 267);
-            numMinDuration.Margin = new Padding(5, 4, 5, 4);
-            numMinDuration.Maximum = new decimal(new int[] { 1800, 0, 0, 0 });
-            numMinDuration.Name = "numMinDuration";
-            numMinDuration.Size = new System.Drawing.Size(80, 30);
-            numMinDuration.TabIndex = 20;
-            // 
-            // numMaxDuration
-            // 
-            numMaxDuration.Location = new System.Drawing.Point(207, 267);
-            numMaxDuration.Margin = new Padding(5, 4, 5, 4);
-            numMaxDuration.Maximum = new decimal(new int[] { 1800, 0, 0, 0 });
-            numMaxDuration.Name = "numMaxDuration";
-            numMaxDuration.Size = new System.Drawing.Size(80, 30);
-            numMaxDuration.TabIndex = 21;
-            // 
-            // lblSsStarsRange
-            // 
-            lblSsStarsRange.AutoSize = true;
-            lblSsStarsRange.Location = new System.Drawing.Point(13, 310);
-            lblSsStarsRange.Margin = new Padding(5, 0, 5, 0);
-            lblSsStarsRange.Name = "lblSsStarsRange";
-            lblSsStarsRange.Size = new System.Drawing.Size(84, 24);
-            lblSsStarsRange.TabIndex = 22;
-            lblSsStarsRange.Text = "SS星级：";
-            // 
-            // numMinSsStars
-            // 
-            numMinSsStars.DecimalPlaces = 1;
-            numMinSsStars.Increment = new decimal(new int[] { 1, 0, 0, 65536 });
-            numMinSsStars.Location = new System.Drawing.Point(118, 307);
-            numMinSsStars.Margin = new Padding(5, 4, 5, 4);
-            numMinSsStars.Maximum = new decimal(new int[] { 20, 0, 0, 0 });
-            numMinSsStars.Name = "numMinSsStars";
-            numMinSsStars.Size = new System.Drawing.Size(80, 30);
-            numMinSsStars.TabIndex = 23;
-            // 
-            // numMaxSsStars
-            // 
-            numMaxSsStars.DecimalPlaces = 1;
-            numMaxSsStars.Increment = new decimal(new int[] { 1, 0, 0, 65536 });
-            numMaxSsStars.Location = new System.Drawing.Point(210, 307);
-            numMaxSsStars.Margin = new Padding(5, 4, 5, 4);
-            numMaxSsStars.Maximum = new decimal(new int[] { 20, 0, 0, 0 });
-            numMaxSsStars.Name = "numMaxSsStars";
-            numMaxSsStars.Size = new System.Drawing.Size(80, 30);
-            numMaxSsStars.TabIndex = 24;
-            // 
-            // lblBlStarsRange
-            // 
-            lblBlStarsRange.AutoSize = true;
-            lblBlStarsRange.Location = new System.Drawing.Point(13, 350);
-            lblBlStarsRange.Margin = new Padding(5, 0, 5, 0);
-            lblBlStarsRange.Name = "lblBlStarsRange";
-            lblBlStarsRange.Size = new System.Drawing.Size(84, 24);
-            lblBlStarsRange.TabIndex = 25;
-            lblBlStarsRange.Text = "BL星级：";
-            // 
-            // numMinBlStars
-            // 
-            numMinBlStars.DecimalPlaces = 1;
-            numMinBlStars.Increment = new decimal(new int[] { 1, 0, 0, 65536 });
-            numMinBlStars.Location = new System.Drawing.Point(118, 347);
-            numMinBlStars.Margin = new Padding(5, 4, 5, 4);
-            numMinBlStars.Maximum = new decimal(new int[] { 20, 0, 0, 0 });
-            numMinBlStars.Name = "numMinBlStars";
-            numMinBlStars.Size = new System.Drawing.Size(80, 30);
-            numMinBlStars.TabIndex = 26;
-            // 
-            // numMaxBlStars
-            // 
-            numMaxBlStars.DecimalPlaces = 1;
-            numMaxBlStars.Increment = new decimal(new int[] { 1, 0, 0, 65536 });
-            numMaxBlStars.Location = new System.Drawing.Point(210, 347);
-            numMaxBlStars.Margin = new Padding(5, 4, 5, 4);
-            numMaxBlStars.Maximum = new decimal(new int[] { 20, 0, 0, 0 });
-            numMaxBlStars.Name = "numMaxBlStars";
-            numMaxBlStars.Size = new System.Drawing.Size(80, 30);
-            numMaxBlStars.TabIndex = 27;
-            // 
-            // chkChroma
-            // 
-            chkChroma.AutoSize = true;
-            chkChroma.Location = new System.Drawing.Point(11, 390);
-            chkChroma.Margin = new Padding(5, 4, 5, 4);
-            chkChroma.Name = "chkChroma";
-            chkChroma.Size = new System.Drawing.Size(104, 28);
-            chkChroma.TabIndex = 28;
-            chkChroma.Text = "Chroma";
-            chkChroma.UseVisualStyleBackColor = true;
-            // 
-            // chkNoodle
-            // 
-            chkNoodle.AutoSize = true;
-            chkNoodle.Location = new System.Drawing.Point(131, 390);
-            chkNoodle.Margin = new Padding(5, 4, 5, 4);
-            chkNoodle.Name = "chkNoodle";
-            chkNoodle.Size = new System.Drawing.Size(100, 28);
-            chkNoodle.TabIndex = 29;
-            chkNoodle.Text = "Noodle";
-            chkNoodle.UseVisualStyleBackColor = true;
-            // 
-            // chkMe
-            // 
-            chkMe.AutoSize = true;
-            chkMe.Location = new System.Drawing.Point(246, 390);
-            chkMe.Margin = new Padding(5, 4, 5, 4);
-            chkMe.Name = "chkMe";
-            chkMe.Size = new System.Drawing.Size(64, 28);
-            chkMe.TabIndex = 30;
-            chkMe.Text = "ME";
-            chkMe.UseVisualStyleBackColor = true;
-            // 
-            // chkCinema
-            // 
-            chkCinema.AutoSize = true;
-            chkCinema.Location = new System.Drawing.Point(10, 425);
-            chkCinema.Margin = new Padding(5, 4, 5, 4);
-            chkCinema.Name = "chkCinema";
-            chkCinema.Size = new System.Drawing.Size(101, 28);
-            chkCinema.TabIndex = 31;
-            chkCinema.Text = "Cinema";
-            chkCinema.UseVisualStyleBackColor = true;
-            // 
-            // chkVivify
-            // 
-            chkVivify.AutoSize = true;
-            chkVivify.Location = new System.Drawing.Point(131, 425);
-            chkVivify.Margin = new Padding(5, 4, 5, 4);
-            chkVivify.Name = "chkVivify";
-            chkVivify.Size = new System.Drawing.Size(83, 28);
-            chkVivify.TabIndex = 32;
-            chkVivify.Text = "Vivify";
-            chkVivify.UseVisualStyleBackColor = true;
-            // 
-            // lblAutomapper
-            // 
-            lblAutomapper.AutoSize = true;
-            lblAutomapper.Location = new System.Drawing.Point(11, 465);
-            lblAutomapper.Margin = new Padding(5, 0, 5, 0);
-            lblAutomapper.Name = "lblAutomapper";
-            lblAutomapper.Size = new System.Drawing.Size(64, 24);
-            lblAutomapper.TabIndex = 33;
-            lblAutomapper.Text = "AI谱：";
-            // 
-            // cboAutomapper
-            // 
-            cboAutomapper.FormattingEnabled = true;
-            cboAutomapper.Items.AddRange(new object[] { "全部", "仅AI谱", "排除AI谱" });
-            cboAutomapper.Location = new System.Drawing.Point(80, 462);
-            cboAutomapper.Margin = new Padding(5, 4, 5, 4);
-            cboAutomapper.Name = "cboAutomapper";
-            cboAutomapper.Size = new System.Drawing.Size(100, 32);
-            cboAutomapper.TabIndex = 34;
-            // 
-            // lblLeaderboard
-            // 
-            lblLeaderboard.AutoSize = true;
-            lblLeaderboard.Location = new System.Drawing.Point(189, 465);
-            lblLeaderboard.Margin = new Padding(5, 0, 5, 0);
-            lblLeaderboard.Name = "lblLeaderboard";
-            lblLeaderboard.Size = new System.Drawing.Size(64, 24);
-            lblLeaderboard.TabIndex = 35;
-            lblLeaderboard.Text = "排行：";
-            // 
-            // cboLeaderboard
-            // 
-            cboLeaderboard.FormattingEnabled = true;
-            cboLeaderboard.Items.AddRange(new object[] { "All", "Ranked", "BeatLeader", "ScoreSaber" });
-            cboLeaderboard.Location = new System.Drawing.Point(258, 462);
-            cboLeaderboard.Margin = new Padding(5, 4, 5, 4);
-            cboLeaderboard.Name = "cboLeaderboard";
-            cboLeaderboard.Size = new System.Drawing.Size(110, 32);
-            cboLeaderboard.TabIndex = 36;
-            // 
-            // chkCurated
-            // 
-            chkCurated.AutoSize = true;
-            chkCurated.Location = new System.Drawing.Point(13, 505);
-            chkCurated.Margin = new Padding(5, 4, 5, 4);
-            chkCurated.Name = "chkCurated";
-            chkCurated.Size = new System.Drawing.Size(72, 28);
-            chkCurated.TabIndex = 37;
-            chkCurated.Text = "精选";
-            chkCurated.UseVisualStyleBackColor = true;
-            // 
-            // chkVerified
-            // 
-            chkVerified.AutoSize = true;
-            chkVerified.Location = new System.Drawing.Point(100, 505);
-            chkVerified.Margin = new Padding(5, 4, 5, 4);
-            chkVerified.Name = "chkVerified";
-            chkVerified.Size = new System.Drawing.Size(108, 28);
-            chkVerified.TabIndex = 38;
-            chkVerified.Text = "认证谱师";
-            chkVerified.UseVisualStyleBackColor = true;
-            // 
-            // btnResetFilter
-            // 
-            btnResetFilter.Location = new System.Drawing.Point(13, 545);
-            btnResetFilter.Margin = new Padding(5, 4, 5, 4);
-            btnResetFilter.Name = "btnResetFilter";
-            btnResetFilter.Size = new System.Drawing.Size(100, 32);
-            btnResetFilter.TabIndex = 39;
-            btnResetFilter.Text = "重置筛选";
-            btnResetFilter.UseVisualStyleBackColor = true;
-            btnResetFilter.Click += btnResetFilter_Click;
-            // 
-            // btnAddToPlaylist
-            // 
-            btnAddToPlaylist.Location = new System.Drawing.Point(125, 545);
-            btnAddToPlaylist.Margin = new Padding(5, 4, 5, 4);
-            btnAddToPlaylist.Name = "btnAddToPlaylist";
-            btnAddToPlaylist.Size = new System.Drawing.Size(120, 32);
-            btnAddToPlaylist.TabIndex = 40;
-            btnAddToPlaylist.Text = "添加到歌单";
-            btnAddToPlaylist.UseVisualStyleBackColor = true;
-            btnAddToPlaylist.Click += btnAddToPlaylist_Click;
-            // 
-            // btnPrevPage
-            // 
-            btnPrevPage.Location = new System.Drawing.Point(515, 600);
-            btnPrevPage.Margin = new Padding(5, 4, 5, 4);
-            btnPrevPage.Name = "btnPrevPage";
-            btnPrevPage.Size = new System.Drawing.Size(98, 32);
-            btnPrevPage.TabIndex = 41;
-            btnPrevPage.Text = "上一页";
-            btnPrevPage.UseVisualStyleBackColor = true;
-            btnPrevPage.Click += btnPrevPage_Click;
-            // 
-            // btnNextPage
-            // 
-            btnNextPage.Location = new System.Drawing.Point(637, 600);
-            btnNextPage.Margin = new Padding(5, 4, 5, 4);
-            btnNextPage.Name = "btnNextPage";
-            btnNextPage.Size = new System.Drawing.Size(101, 32);
-            btnNextPage.TabIndex = 42;
-            btnNextPage.Text = "下一页";
-            btnNextPage.UseVisualStyleBackColor = true;
-            btnNextPage.Click += btnNextPage_Click;
-            // 
-            // lblPageInfo
-            // 
-            lblPageInfo.AutoSize = true;
-            lblPageInfo.Location = new System.Drawing.Point(738, 604);
-            lblPageInfo.Margin = new Padding(5, 0, 5, 0);
-            lblPageInfo.Name = "lblPageInfo";
-            lblPageInfo.Size = new System.Drawing.Size(86, 24);
-            lblPageInfo.TabIndex = 43;
-            lblPageInfo.Text = "第 1/1 页";
+            lblbplistTip.Text = "注：如需要快速从目录生成歌单请使用曲包目录管理中的生成歌单功能！此页面为歌单细化编辑";
             // 
             // PlaybackTimer
             // 
@@ -1290,16 +969,9 @@ namespace BeatSaberIndependentMapsManager
             tabFolderandList.ResumeLayout(false);
             tabFolderandList.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)dataGridView1).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numMinBpm).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numMaxBpm).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numMinNps).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numMaxNps).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numMinDuration).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numMaxDuration).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numMinSsStars).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numMaxSsStars).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numMinBlStars).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numMaxBlStars).EndInit();
+            pnlFilterButtons.ResumeLayout(false);
+            pnlFilterButtons.PerformLayout();
+            filterSummaryPanel.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             ResumeLayout(false);
             PerformLayout();
@@ -1342,7 +1014,6 @@ namespace BeatSaberIndependentMapsManager
         private System.Windows.Forms.Button btnExportFavor;
         private VolumeBarEx trackVolume;
         private ProgressBarEx trackProgress;
-        private System.Windows.Forms.Label label3;
         private System.Windows.Forms.OpenFileDialog musicPackCoverDialog;
         private System.Windows.Forms.Button btnDeduplication;
         private System.Windows.Forms.FolderBrowserDialog savebplistDialog;
@@ -1365,7 +1036,6 @@ namespace BeatSaberIndependentMapsManager
         private System.Windows.Forms.TextBox textBox1;
         private System.Windows.Forms.Button btnDFSelect;
         private System.Windows.Forms.DataGridView dataGridView1;
-        private System.Windows.Forms.Label lblFilterCondition;
         private System.Windows.Forms.Label lblFilterResult;
         private System.Windows.Forms.DataGridViewTextBoxColumn DB_bsr;
         private System.Windows.Forms.DataGridViewImageColumn DB_Cover;
@@ -1373,42 +1043,19 @@ namespace BeatSaberIndependentMapsManager
         private System.Windows.Forms.DataGridViewTextBoxColumn DB_description;
         private System.Windows.Forms.DataGridViewTextBoxColumn DB_bpm;
         private System.Windows.Forms.DataGridViewTextBoxColumn DB_levelAuthorName;
+        private System.Windows.Forms.DataGridViewCheckBoxColumn DB_Select;
         private System.Windows.Forms.Label lblPreviewdsong;
         private System.Windows.Forms.Label lblProgressText;
         private Label lblVolumeText;
-        private System.Windows.Forms.Label lblSearchQuery;
-        private System.Windows.Forms.TextBox txtSearchQuery;
-        private System.Windows.Forms.Button btnSearch;
-        private System.Windows.Forms.Label lblSortOrder;
-        private System.Windows.Forms.ComboBox cboSortOrder;
-        private System.Windows.Forms.Label lblBpmRange;
-        private System.Windows.Forms.NumericUpDown numMinBpm;
-        private System.Windows.Forms.NumericUpDown numMaxBpm;
-        private System.Windows.Forms.Label lblNpsRange;
-        private System.Windows.Forms.NumericUpDown numMinNps;
-        private System.Windows.Forms.NumericUpDown numMaxNps;
-        private System.Windows.Forms.Label lblDurationRange;
-        private System.Windows.Forms.NumericUpDown numMinDuration;
-        private System.Windows.Forms.NumericUpDown numMaxDuration;
-        private System.Windows.Forms.Label lblSsStarsRange;
-        private System.Windows.Forms.NumericUpDown numMinSsStars;
-        private System.Windows.Forms.NumericUpDown numMaxSsStars;
-        private System.Windows.Forms.Label lblBlStarsRange;
-        private System.Windows.Forms.NumericUpDown numMinBlStars;
-        private System.Windows.Forms.NumericUpDown numMaxBlStars;
-        private System.Windows.Forms.CheckBox chkChroma;
-        private System.Windows.Forms.CheckBox chkNoodle;
-        private System.Windows.Forms.CheckBox chkMe;
-        private System.Windows.Forms.CheckBox chkCinema;
-        private System.Windows.Forms.CheckBox chkVivify;
-        private System.Windows.Forms.Label lblAutomapper;
-        private System.Windows.Forms.ComboBox cboAutomapper;
-        private System.Windows.Forms.Label lblLeaderboard;
-        private System.Windows.Forms.ComboBox cboLeaderboard;
-        private System.Windows.Forms.CheckBox chkCurated;
-        private System.Windows.Forms.CheckBox chkVerified;
-        private System.Windows.Forms.Button btnResetFilter;
-        private System.Windows.Forms.Button btnAddToPlaylist;
+        // 歌单编辑页签 - 筛选构建器相关控件
+        private System.Windows.Forms.Panel filterSummaryPanel;
+        private System.Windows.Forms.Label lblFilterSummary;
+        private System.Windows.Forms.Button btnOpenFilterBuilder;
+        private System.Windows.Forms.Panel pnlFilterButtons;
+        private System.Windows.Forms.Button btnSelectAll;
+        private System.Windows.Forms.Button btnSelectInverse;
+        private System.Windows.Forms.Button btnExportSelected;
+        private System.Windows.Forms.Button btnExportAll;
         private System.Windows.Forms.Button btnPrevPage;
         private System.Windows.Forms.Button btnNextPage;
         private System.Windows.Forms.Label lblPageInfo;

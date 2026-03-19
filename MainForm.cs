@@ -52,6 +52,9 @@ namespace BeatSaberIndependentMapsManager
         private List<BeatSaverMap> currentSearchResults = new List<BeatSaverMap>();
         private int currentPage = 0;
         private int totalPages = 0;
+        // 筛选构建器相关
+        private FilterPreset currentFilterPreset;
+        private FilterBuilderForm filterBuilderForm;
         #endregion
         #region 动态库引用
         [DllImport("Everything64.dll", CharSet = CharSet.Unicode)]
@@ -78,7 +81,6 @@ namespace BeatSaberIndependentMapsManager
         private void MainForm_Load(object sender, EventArgs e)
         {
             comboBoxPlatform.SelectedIndex = 0;
-            cboAutomapper.SelectedIndex = -1; // 默认不选择，不带参数搜索
             string language = cultureInfo.TwoLetterISOLanguageName;
             this.Text = "BSIMM-独立曲包管理/编辑器 " + version + " " + author;
             debugLog("程序日志将自动同步到程序目录：" + Application.StartupPath + "BSIMM-" + DateTime.Now.ToString("yyyy-MM-dd") + ".log");
@@ -132,6 +134,8 @@ namespace BeatSaberIndependentMapsManager
             {
                 readHash();
             }
+            // 初始化新的筛选构建器面板
+            InitializeFilterBuilderPanel();
         }
         #endregion
         #region 检查更新
@@ -833,7 +837,7 @@ namespace BeatSaberIndependentMapsManager
             string musicFile = map._songFilename;
             if (!File.Exists(mapDir + "\\" + coverImg))
             {
-                debugLog("警告:检测到缺失封面文件：" + coverImg +"目录：" + mapDir);
+                debugLog("警告:检测到缺失封面文件：" + coverImg + "目录：" + mapDir);
                 return false;
             }
             if (!File.Exists(mapDir + "\\" + musicFile))
@@ -878,7 +882,8 @@ namespace BeatSaberIndependentMapsManager
                     {
                         debugLog("实例：" + instance + "安装mod后未启动游戏，将不会保存曲包列表！");
                     }
-                };
+                }
+                ;
             }
         }
         private void addMusicPack(string path)
@@ -960,7 +965,7 @@ namespace BeatSaberIndependentMapsManager
             }
             GC.Collect();
         }
-        public async Task HashCachePack(string musicPackName) 
+        public async Task HashCachePack(string musicPackName)
         {
             Stopwatch stopwatch = Stopwatch.StartNew();
             int count = 0;
@@ -1126,8 +1131,9 @@ namespace BeatSaberIndependentMapsManager
                         tasks.Add(Task.Run(() => saveMusicPackSonginfo(currentBplistName, path)));
                     }
                     await Task.WhenAll(tasks);
-                }).ContinueWith(t => { 
-                    if(config.HashCache)
+                }).ContinueWith(t =>
+                {
+                    if (config.HashCache)
                     {
                         string HashResults = JsonConvert.SerializeObject(SongsHash, Formatting.None);
                         File.WriteAllText("hash.cache", Convert.ToBase64String(Encoding.UTF8.GetBytes(HashResults)));
@@ -1982,136 +1988,6 @@ namespace BeatSaberIndependentMapsManager
         #region BeatSaver 搜索
 
         /// <summary>
-        /// 搜索按钮点击事件
-        /// </summary>
-        private async void btnSearch_Click(object sender, EventArgs e)
-        {
-            currentPage = 0; // 新搜索从第一页开始
-            await SearchMaps();
-        }
-
-        /// <summary>
-        /// 执行搜索
-        /// </summary>
-        private async Task SearchMaps()
-        {
-            try
-            {
-                btnSearch.Enabled = false;
-                BSIMMActionText.Text = "搜索中...";
-                dataGridView1.Rows.Clear();
-                currentSearchResults.Clear();
-
-                var filter = BuildSearchFilter();
-                var response = await beatSaverClient.SearchMapsAsync(filter, currentPage);
-
-                if (response?.Maps != null && response.Maps.Count > 0)
-                {
-                    currentSearchResults = response.Maps;
-
-                    // 优先使用 info 字段，新版API格式
-                    if (response.Info != null)
-                    {
-                        // 注意：不要用 API 返回的 page 覆盖 currentPage，因为可能导致页码混乱
-                        totalPages = response.Info.Pages;
-                        BSIMMActionText.Text = $"找到 {response.Info.Total} 个结果";
-                    }
-                    else if (response.Metadata != null)
-                    {
-                        // 旧版API格式
-                        totalPages = (response.Metadata.Total + response.Metadata.PageSize - 1) / response.Metadata.PageSize;
-                        BSIMMActionText.Text = $"找到 {response.Metadata.Total} 个结果";
-                    }
-                    else
-                    {
-                        totalPages = 1;
-                        BSIMMActionText.Text = $"找到 {response.Maps.Count} 个结果";
-                    }
-
-                    // 更新分页控件状态
-                    UpdatePaginationControls();
-
-                    await DisplaySearchResults(response.Maps);
-                }
-                else
-                {
-                    BSIMMActionText.Text = "未找到匹配的结果";
-                    // 禁用分页按钮
-                    btnPrevPage.Enabled = false;
-                    btnNextPage.Enabled = false;
-                    lblPageInfo.Text = "第 0/0 页";
-                }
-            }
-            catch (Exception ex)
-            {
-                debugLog($"搜索失败: {ex.Message}");
-                BSIMMActionText.Text = "搜索失败";
-            }
-            finally
-            {
-                btnSearch.Enabled = true;
-            }
-        }
-
-        /// <summary>
-        /// 构建搜索筛选条件
-        /// </summary>
-        private BeatSaverSearchFilter BuildSearchFilter()
-        {
-            var filter = new BeatSaverSearchFilter
-            {
-                Query = txtSearchQuery.Text.Trim(),
-                Order = cboSortOrder.SelectedItem?.ToString() ?? "Latest"
-            };
-
-            // BPM 范围
-            if (numMinBpm.Value > 0) filter.MinBpm = (double)numMinBpm.Value;
-            if (numMaxBpm.Value > 0) filter.MaxBpm = (double)numMaxBpm.Value;
-
-            // NPS 范围
-            if (numMinNps.Value > 0) filter.MinNps = (double)numMinNps.Value;
-            if (numMaxNps.Value > 0) filter.MaxNps = (double)numMaxNps.Value;
-
-            // 时长范围
-            if (numMinDuration.Value > 0) filter.MinDuration = (int)numMinDuration.Value;
-            if (numMaxDuration.Value > 0) filter.MaxDuration = (int)numMaxDuration.Value;
-
-            // SS 星级
-            if (numMinSsStars.Value > 0) filter.MinSsStars = (double)numMinSsStars.Value;
-            if (numMaxSsStars.Value > 0) filter.MaxSsStars = (double)numMaxSsStars.Value;
-
-            // BL 星级
-            if (numMinBlStars.Value > 0) filter.MinBlStars = (double)numMinBlStars.Value;
-            if (numMaxBlStars.Value > 0) filter.MaxBlStars = (double)numMaxBlStars.Value;
-
-            // Mod 支持
-            if (chkChroma.Checked) filter.Chroma = true;
-            if (chkNoodle.Checked) filter.Noodle = true;
-            if (chkMe.Checked) filter.Me = true;
-            if (chkCinema.Checked) filter.Cinema = true;
-            if (chkVivify.Checked) filter.Vivify = true;
-
-            // AI 谱面
-            // Index: -1=未选择, 0=全部, 1=仅AI谱, 2=排除AI谱
-            // 未选择或"全部"时不带参数，让API使用默认行为
-            if (cboAutomapper.SelectedIndex == 1) filter.Automapper = true;  // 仅 AI
-            else if (cboAutomapper.SelectedIndex == 2) filter.Automapper = false;  // 排除 AI
-            // Index == -1 或 0 时不设置参数
-
-            // 排行榜
-            if (cboLeaderboard.SelectedIndex > 0)
-            {
-                filter.Leaderboard = cboLeaderboard.SelectedItem.ToString();
-            }
-
-            // 精选/认证
-            if (chkCurated.Checked) filter.Curated = true;
-            if (chkVerified.Checked) filter.Verified = true;
-
-            return filter;
-        }
-
-        /// <summary>
         /// 显示搜索结果
         /// </summary>
         private async Task DisplaySearchResults(List<BeatSaverMap> maps)
@@ -2123,7 +1999,9 @@ namespace BeatSaberIndependentMapsManager
                     var row = new DataGridViewRow();
                     row.CreateCells(dataGridView1);
 
-                    row.Cells[0].Value = map.Id;  // bsr
+                    // 列顺序: 0=Select, 1=bsr, 2=Cover, 3=Name, 4=description, 5=bpm, 6=levelAuthorName
+                    row.Cells[0].Value = false;  // 选择框默认不选中
+                    row.Cells[1].Value = map.Id;  // bsr
 
                     // 加载封面图片
                     try
@@ -2135,104 +2013,25 @@ namespace BeatSaberIndependentMapsManager
                             using (var ms = new MemoryStream(imageData))
                             {
                                 var img = Image.FromStream(ms);
-                                row.Cells[1].Value = new Bitmap(img, new Size(100, 100));
+                                row.Cells[2].Value = new Bitmap(img, new Size(100, 100));
                             }
                         }
                     }
                     catch
                     {
                         // 封面加载失败时使用默认图片
-                        row.Cells[1].Value = null;
+                        row.Cells[2].Value = null;
                     }
 
-                    row.Cells[2].Value = map.Name;  // 名称
-                    row.Cells[3].Value = map.Description;  // 简介
-                    row.Cells[4].Value = map.Metadata?.Bpm.ToString("F1") ?? "N/A";  // BPM
-                    row.Cells[5].Value = map.Metadata?.LevelAuthorName ?? map.Uploader?.Name ?? "N/A";  // 谱面作者
+                    row.Cells[3].Value = map.Name;  // 名称
+                    row.Cells[4].Value = map.Description;  // 简介
+                    row.Cells[5].Value = map.Metadata?.Bpm.ToString("F1") ?? "N/A";  // BPM
+                    row.Cells[6].Value = map.Metadata?.LevelAuthorName ?? map.Uploader?.Name ?? "N/A";  // 谱面作者
 
                     row.Tag = map;  // 存储完整数据
                     dataGridView1.Rows.Add(row);
                 }
             }
-        }
-
-        /// <summary>
-        /// 重置筛选按钮点击事件
-        /// </summary>
-        private void btnResetFilter_Click(object sender, EventArgs e)
-        {
-            txtSearchQuery.Clear();
-            cboSortOrder.SelectedIndex = -1;
-            numMinBpm.Value = 0;
-            numMaxBpm.Value = 0;
-            numMinNps.Value = 0;
-            numMaxNps.Value = 0;
-            numMinDuration.Value = 0;
-            numMaxDuration.Value = 0;
-            numMinSsStars.Value = 0;
-            numMaxSsStars.Value = 0;
-            numMinBlStars.Value = 0;
-            numMaxBlStars.Value = 0;
-            chkChroma.Checked = false;
-            chkNoodle.Checked = false;
-            chkMe.Checked = false;
-            chkCinema.Checked = false;
-            chkVivify.Checked = false;
-            cboAutomapper.SelectedIndex = -1; // 重置为空值，不带参数搜索
-            cboLeaderboard.SelectedIndex = -1;
-            chkCurated.Checked = false;
-            chkVerified.Checked = false;
-            currentPage = 0;
-            totalPages = 0;
-            dataGridView1.Rows.Clear();
-            currentSearchResults.Clear();
-            btnPrevPage.Enabled = false;
-            btnNextPage.Enabled = false;
-            lblPageInfo.Text = "第 0/0 页";
-            BSIMMActionText.Text = "筛选条件已重置";
-        }
-
-        /// <summary>
-        /// 添加到歌单按钮点击事件
-        /// </summary>
-        private void btnAddToPlaylist_Click(object sender, EventArgs e)
-        {
-            if (dataGridView1.SelectedRows.Count == 0)
-            {
-                MessageBox.Show("请先选择要添加的歌曲！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            var selectedMaps = new List<BeatSaverMap>();
-            foreach (DataGridViewRow row in dataGridView1.SelectedRows)
-            {
-                if (row.Tag is BeatSaverMap map)
-                {
-                    selectedMaps.Add(map);
-                }
-            }
-
-            if (selectedMaps.Count == 0)
-            {
-                MessageBox.Show("未找到有效的歌曲数据！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            // 显示添加成功提示
-            var sb = new StringBuilder();
-            sb.AppendLine($"已选择 {selectedMaps.Count} 首歌曲：");
-            foreach (var map in selectedMaps.Take(5))
-            {
-                sb.AppendLine($"- {map.Name} ({map.Id})");
-            }
-            if (selectedMaps.Count > 5)
-            {
-                sb.AppendLine($"... 还有 {selectedMaps.Count - 5} 首");
-            }
-            sb.AppendLine("\n请使用下载功能下载这些歌曲，然后将它们添加到歌单。");
-
-            MessageBox.Show(sb.ToString(), "已选择歌曲", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            debugLog($"用户选择了 {selectedMaps.Count} 首歌曲准备添加到歌单");
         }
 
         /// <summary>
@@ -2253,7 +2052,7 @@ namespace BeatSaberIndependentMapsManager
             if (currentPage > 0)
             {
                 currentPage--;
-                await SearchMaps();
+                await SearchMapsWithFilter(currentFilterPreset);
             }
         }
 
@@ -2265,12 +2064,491 @@ namespace BeatSaberIndependentMapsManager
             if (currentPage < totalPages - 1)
             {
                 currentPage++;
-                await SearchMaps();
+                await SearchMapsWithFilter(currentFilterPreset);
             }
         }
 
         #endregion
 
+        #region 筛选构建器面板初始化
+
+        /// <summary>
+        /// 初始化筛选构建器UI（使用子窗口模式）
+        /// </summary>
+        private void InitializeFilterBuilderPanel()
+        {
+            // 创建默认预设
+            currentFilterPreset = new FilterPreset("新建筛选");
+            currentFilterPreset.AddGroup(new FilterGroup("条件组1"));
+
+            // 绑定按钮事件（Designer不处理事件绑定）
+            btnOpenFilterBuilder.Click += BtnOpenFilterBuilder_Click;
+            btnSelectAll.Click += BtnSelectAll_Click;
+            btnSelectInverse.Click += BtnSelectInverse_Click;
+            btnExportSelected.Click += BtnExportSelected_Click;
+            btnExportAll.Click += BtnExportAll_Click;
+
+            // 更新筛选概要显示
+            UpdateFilterSummary();
+        }
+
+        /// <summary>
+        /// 打开筛选构建器窗口
+        /// </summary>
+        private void BtnOpenFilterBuilder_Click(object sender, EventArgs e)
+        {
+            if (filterBuilderForm == null || filterBuilderForm.IsDisposed)
+            {
+                filterBuilderForm = new FilterBuilderForm(currentFilterPreset);
+                filterBuilderForm.SearchRequested += FilterBuilderForm_SearchRequested;
+            }
+            filterBuilderForm.ShowDialog(this);
+        }
+
+        /// <summary>
+        /// 筛选构建器窗口请求搜索
+        /// </summary>
+        private async void FilterBuilderForm_SearchRequested(object sender, FilterPreset preset)
+        {
+            currentFilterPreset = preset;
+            UpdateFilterSummary();
+            currentPage = 0;
+            await SearchMapsWithFilter(preset);
+        }
+
+        /// <summary>
+        /// 更新筛选条件概要显示
+        /// </summary>
+        private void UpdateFilterSummary()
+        {
+            if (currentFilterPreset == null || !currentFilterPreset.Groups.Any(g => g.HasActiveConditions()))
+            {
+                lblFilterSummary.Text = "当前筛选：无条件";
+                return;
+            }
+
+            var summaryParts = new System.Collections.Generic.List<string>();
+            foreach (var group in currentFilterPreset.GetActiveGroups())
+            {
+                var conditionSummaries = group.GetActiveConditions()
+                    .Select(c => $"{c.DisplayName}={c.Value}")
+                    .ToList();
+
+                if (conditionSummaries.Any())
+                {
+                    summaryParts.Add($"[{string.Join(" AND ", conditionSummaries)}]");
+                }
+            }
+
+            lblFilterSummary.Text = "当前筛选：" + string.Join(" AND ", summaryParts);
+        }
+
+        #endregion
+
+        #region 筛选构建器事件处理
+
+        /// <summary>
+        /// 使用筛选预设执行搜索
+        /// </summary>
+        private async Task SearchMapsWithFilter(FilterPreset preset)
+        {
+            try
+            {
+                BSIMMActionText.Text = "搜索中...";
+                dataGridView1.Rows.Clear();
+                currentSearchResults.Clear();
+
+                // 从预设构建搜索过滤器
+                var filter = BuildSearchFilterFromPreset(preset);
+                var response = await beatSaverClient.SearchMapsAsync(filter, currentPage);
+
+                if (response?.Maps != null && response.Maps.Count > 0)
+                {
+                    currentSearchResults = response.Maps;
+
+                    if (response.Info != null)
+                    {
+                        totalPages = response.Info.Pages;
+                        BSIMMActionText.Text = $"找到 {response.Info.Total} 个结果";
+                    }
+                    else if (response.Metadata != null)
+                    {
+                        totalPages = (response.Metadata.Total + response.Metadata.PageSize - 1) / response.Metadata.PageSize;
+                        BSIMMActionText.Text = $"找到 {response.Metadata.Total} 个结果";
+                    }
+                    else
+                    {
+                        totalPages = 1;
+                        BSIMMActionText.Text = $"找到 {response.Maps.Count} 个结果";
+                    }
+
+                    UpdatePaginationControls();
+                    await DisplaySearchResults(response.Maps);
+                }
+                else
+                {
+                    BSIMMActionText.Text = "未找到匹配的结果";
+                    btnPrevPage.Enabled = false;
+                    btnNextPage.Enabled = false;
+                    lblPageInfo.Text = "第 0/0 页";
+                }
+            }
+            catch (Exception ex)
+            {
+                debugLog($"搜索失败: {ex.Message}");
+                BSIMMActionText.Text = "搜索失败";
+            }
+        }
+
+        /// <summary>
+        /// 从筛选预设构建搜索过滤器
+        /// </summary>
+        private BeatSaverSearchFilter BuildSearchFilterFromPreset(FilterPreset preset)
+        {
+            var filter = new BeatSaverSearchFilter();
+
+            if (preset == null) return filter;
+
+            foreach (var group in preset.GetActiveGroups())
+            {
+                foreach (var condition in group.GetActiveConditions())
+                {
+                    ApplyConditionToFilter(filter, condition);
+                }
+            }
+
+            return filter;
+        }
+
+        /// <summary>
+        /// 将条件应用到搜索过滤器
+        /// </summary>
+        private void ApplyConditionToFilter(BeatSaverSearchFilter filter, FilterCondition condition)
+        {
+            if (condition.Value == null) return;
+
+            switch (condition.Type)
+            {
+                case FilterConditionType.Custom:
+                    // 自定义条件：将自定义名称和值组合作为额外搜索关键词
+                    if (!string.IsNullOrWhiteSpace(condition.CustomName) && !string.IsNullOrWhiteSpace(condition.Value?.ToString()))
+                    {
+                        // 追加到现有查询中
+                        filter.Query = string.IsNullOrWhiteSpace(filter.Query)
+                            ? $"{condition.CustomName}:{condition.Value}"
+                            : $"{filter.Query} {condition.CustomName}:{condition.Value}";
+                    }
+                    break;
+                case FilterConditionType.Query:
+                    filter.Query = condition.Value.ToString();
+                    break;
+                case FilterConditionType.Order:
+                    filter.Order = condition.Value.ToString();
+                    break;
+                case FilterConditionType.MinBpm:
+                    if (double.TryParse(condition.Value.ToString(), out double minBpm))
+                        filter.MinBpm = minBpm;
+                    break;
+                case FilterConditionType.MaxBpm:
+                    if (double.TryParse(condition.Value.ToString(), out double maxBpm))
+                        filter.MaxBpm = maxBpm;
+                    break;
+                case FilterConditionType.MinNps:
+                    if (double.TryParse(condition.Value.ToString(), out double minNps))
+                        filter.MinNps = minNps;
+                    break;
+                case FilterConditionType.MaxNps:
+                    if (double.TryParse(condition.Value.ToString(), out double maxNps))
+                        filter.MaxNps = maxNps;
+                    break;
+                case FilterConditionType.MinDuration:
+                    if (int.TryParse(condition.Value.ToString(), out int minDur))
+                        filter.MinDuration = minDur;
+                    break;
+                case FilterConditionType.MaxDuration:
+                    if (int.TryParse(condition.Value.ToString(), out int maxDur))
+                        filter.MaxDuration = maxDur;
+                    break;
+                case FilterConditionType.MinSsStars:
+                    if (double.TryParse(condition.Value.ToString(), out double minSs))
+                        filter.MinSsStars = minSs;
+                    break;
+                case FilterConditionType.MaxSsStars:
+                    if (double.TryParse(condition.Value.ToString(), out double maxSs))
+                        filter.MaxSsStars = maxSs;
+                    break;
+                case FilterConditionType.MinBlStars:
+                    if (double.TryParse(condition.Value.ToString(), out double minBl))
+                        filter.MinBlStars = minBl;
+                    break;
+                case FilterConditionType.MaxBlStars:
+                    if (double.TryParse(condition.Value.ToString(), out double maxBl))
+                        filter.MaxBlStars = maxBl;
+                    break;
+                case FilterConditionType.Chroma:
+                    filter.Chroma = Convert.ToBoolean(condition.Value);
+                    break;
+                case FilterConditionType.Noodle:
+                    filter.Noodle = Convert.ToBoolean(condition.Value);
+                    break;
+                case FilterConditionType.Me:
+                    filter.Me = Convert.ToBoolean(condition.Value);
+                    break;
+                case FilterConditionType.Cinema:
+                    filter.Cinema = Convert.ToBoolean(condition.Value);
+                    break;
+                case FilterConditionType.Vivify:
+                    filter.Vivify = Convert.ToBoolean(condition.Value);
+                    break;
+                case FilterConditionType.Automapper:
+                    var autoVal = condition.Value.ToString();
+                    if (autoVal == "仅AI谱")
+                        filter.Automapper = true;
+                    else if (autoVal == "排除AI谱")
+                        filter.Automapper = false;
+                    break;
+                case FilterConditionType.Leaderboard:
+                    filter.Leaderboard = condition.Value.ToString();
+                    break;
+                case FilterConditionType.Curated:
+                    filter.Curated = Convert.ToBoolean(condition.Value);
+                    break;
+                case FilterConditionType.Verified:
+                    filter.Verified = Convert.ToBoolean(condition.Value);
+                    break;
+            }
+        }
+
+        #endregion
+
+        #region 选择和导出功能
+
+        private void BtnSelectAll_Click(object sender, EventArgs e)
+        {
+            foreach (DataGridViewRow row in dataGridView1.Rows)
+            {
+                row.Cells["DB_Select"].Value = true;
+            }
+        }
+
+        private void BtnSelectInverse_Click(object sender, EventArgs e)
+        {
+            foreach (DataGridViewRow row in dataGridView1.Rows)
+            {
+                row.Cells["DB_Select"].Value = !(row.Cells["DB_Select"].Value as bool? ?? false);
+            }
+        }
+
+        private void BtnExportSelected_Click(object sender, EventArgs e)
+        {
+            var selectedMaps = GetSelectedMaps();
+            if (selectedMaps.Count == 0)
+            {
+                MessageBox.Show("请先选择要导出的歌曲！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            ExportMapsToPlaylist(selectedMaps);
+        }
+
+        private void BtnExportAll_Click(object sender, EventArgs e)
+        {
+            if (currentSearchResults.Count == 0)
+            {
+                MessageBox.Show("当前没有搜索结果！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            _ = ExportAllPagesToPlaylistAsync();
+        }
+
+        /// <summary>
+        /// 异步获取所有页面结果并导出到歌单
+        /// </summary>
+        private async Task ExportAllPagesToPlaylistAsync()
+        {
+            // 如果只有一页，直接导出当前结果
+            if (totalPages <= 1)
+            {
+                ExportMapsToPlaylist(currentSearchResults);
+                return;
+            }
+
+            var result = MessageBox.Show(
+                $"当前共 {totalPages} 页结果\n" +
+                $"导出全部将从第一页开始重新请求所有页面\n" +
+                "是否继续？",
+                "导出全部确认",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+            if (result != DialogResult.Yes)
+                return;
+
+            try
+            {
+                BSIMMActionText.Text = "正在获取所有结果...";
+                btnExportAll.Enabled = false;
+                btnExportSelected.Enabled = false;
+
+                var allMaps = new List<BeatSaverMap>();
+                var filter = BuildSearchFilterFromPreset(currentFilterPreset);
+
+                // 从第一页开始请求所有页面
+                for (int page = 0; page < totalPages; page++)
+                {
+                    BSIMMActionText.Text = $"正在获取第 {page + 1}/{totalPages} 页...";
+
+                    var response = await beatSaverClient.SearchMapsAsync(filter, page);
+                    if (response?.Maps != null && response.Maps.Count > 0)
+                    {
+                        allMaps.AddRange(response.Maps);
+                    }
+
+                    // 更新进度条
+                    BSIMMProgressUpdate((page + 1) * 100 / totalPages);
+
+                    // 添加小延迟避免请求过快
+                    if (page < totalPages - 1)
+                        await Task.Delay(150);
+                }
+
+                BSIMMActionText.Text = $"已获取 {allMaps.Count} 首歌曲";
+                debugLog($"导出全部：成功获取 {allMaps.Count} 首歌曲（共 {totalPages} 页）");
+
+                // 导出所有结果
+                ExportMapsToPlaylist(allMaps);
+            }
+            catch (Exception ex)
+            {
+                debugLog($"导出全部失败: {ex.Message}");
+                MessageBox.Show($"导出失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                BSIMMActionText.Text = "导出失败";
+            }
+            finally
+            {
+                btnExportAll.Enabled = true;
+                btnExportSelected.Enabled = true;
+            }
+        }
+
+        /// <summary>
+        /// 获取选中的谱面列表
+        /// </summary>
+        private List<BeatSaverMap> GetSelectedMaps()
+        {
+            var selectedMaps = new List<BeatSaverMap>();
+            foreach (DataGridViewRow row in dataGridView1.Rows)
+            {
+                if (row.Cells["DB_Select"].Value as bool? == true && row.Tag is BeatSaverMap map)
+                {
+                    selectedMaps.Add(map);
+                }
+            }
+            return selectedMaps;
+        }
+
+        /// <summary>
+        /// 将谱面列表导出为歌单
+        /// </summary>
+        private void ExportMapsToPlaylist(List<BeatSaverMap> maps)
+        {
+            using (var saveDialog = new SaveFileDialog())
+            {
+                saveDialog.Filter = "Beat Saber Playlist (*.bplist)|*.bplist";
+                saveDialog.Title = "保存歌单";
+                saveDialog.FileName = "新歌单";
+
+                if (saveDialog.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        string playlistName = System.IO.Path.GetFileNameWithoutExtension(saveDialog.FileName);
+
+                        // 生成带有文件名的封面图片
+                        Image coverImage = GeneratePlaylistCover(playlistName);
+                        string imgBytes = "data:image/jpg;base64," + ImageToBase64(coverImage, ImageFormat.Jpeg);
+
+                        // 使用与曲包导出一致的格式
+                        string author = Environment.UserName + "使用BSIMM@万毒不侵 生成";
+                        string description = "本歌单由" + Environment.UserName + "使用BSIMM生成\r\nBSIMM由万毒不侵开发，开源且免费，如果你是购买的请要求商家退款\r\n项目地址：https://github.com/cyjyyd/Beat-Saber-Independent-Maps-Manager";
+
+                        JsonSerializerSettings settings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
+                        PlayList playlist = new PlayList(playlistName, author, description, imgBytes);
+
+                        foreach (var map in maps)
+                        {
+                            string hash = map.GetHash();
+                            if (!string.IsNullOrEmpty(hash))
+                            {
+                                playlist.AddSongHash(hash);
+                            }
+                        }
+
+                        string json = JsonConvert.SerializeObject(playlist, Formatting.None, settings);
+                        File.WriteAllText(saveDialog.FileName, json);
+
+                        MessageBox.Show($"歌单已保存！\n共 {maps.Count} 首歌曲", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        debugLog($"歌单已导出: {saveDialog.FileName}");
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"导出失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        debugLog($"歌单导出失败: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 生成歌单封面图片（带有歌单名称）
+        /// </summary>
+        private Image GeneratePlaylistCover(string playlistName)
+        {
+            int width = 256;
+            int height = 256;
+            Bitmap bitmap = new Bitmap(width, height);
+
+            using (Graphics g = Graphics.FromImage(bitmap))
+            {
+                // 背景渐变
+                using (System.Drawing.Drawing2D.LinearGradientBrush brush = new System.Drawing.Drawing2D.LinearGradientBrush(
+                    new Rectangle(0, 0, width, height),
+                    Color.FromArgb(64, 64, 128),
+                    Color.FromArgb(32, 32, 64),
+                    System.Drawing.Drawing2D.LinearGradientMode.Vertical))
+                {
+                    g.FillRectangle(brush, 0, 0, width, height);
+                }
+
+                // 绘制歌单名称
+                using (Font font = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold))
+                {
+                    StringFormat format = new StringFormat
+                    {
+                        Alignment = StringAlignment.Center,
+                        LineAlignment = StringAlignment.Center
+                    };
+
+                    // 自动换行绘制文本
+                    RectangleF textRect = new RectangleF(10, 10, width - 20, height - 20);
+                    g.DrawString(playlistName, font, Brushes.White, textRect, format);
+                }
+
+                // 底部添加BSIMM标识
+                using (Font smallFont = new Font("Microsoft YaHei UI", 8f))
+                {
+                    StringFormat format = new StringFormat
+                    {
+                        Alignment = StringAlignment.Center,
+                        LineAlignment = StringAlignment.Far
+                    };
+                    g.DrawString("BSIMM", smallFont, Brushes.Gray, new RectangleF(0, height - 30, width, 25), format);
+                }
+            }
+
+            return bitmap;
+        }
+
+        #endregion
     }
 }
 

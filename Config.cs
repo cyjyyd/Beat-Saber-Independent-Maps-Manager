@@ -92,10 +92,17 @@ namespace BeatSaberIndependentMapsManager
             { get; set; }
         public void readset()
         {
-            HashCache = Convert.ToBoolean(ReadIniData("Settings", "HashCache", "false", iniFilePath));
-            LastFolder = Convert.ToBoolean(ReadIniData("Settings", "LastFolder", "false", iniFilePath));
-            DownProxy = Convert.ToBoolean(ReadIniData("Settings", "DownProxy", "false", iniFilePath));
-            LocalCaChe = Convert.ToBoolean(ReadIniData("Settings", "LocalCache", "false", iniFilePath));
+            HashCache = SafeParseBoolean(ReadIniData("Settings", "HashCache", "false", iniFilePath));
+            LastFolder = SafeParseBoolean(ReadIniData("Settings", "LastFolder", "false", iniFilePath));
+            DownProxy = SafeParseBoolean(ReadIniData("Settings", "DownProxy", "false", iniFilePath));
+            LocalCaChe = SafeParseBoolean(ReadIniData("Settings", "LocalCache", "false", iniFilePath));
+        }
+
+        private bool SafeParseBoolean(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+            return Convert.ToBoolean(value);
         }
         private void writeset()
         {
