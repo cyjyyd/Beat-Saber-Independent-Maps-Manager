@@ -269,6 +269,25 @@ namespace BeatSaberIndependentMapsManager
         [JsonConverter(typeof(FlexibleBooleanConverter))]
         public bool? DeclaredAi { get; set; }
 
+        // Local cache-specific fields
+        [JsonProperty("ranked")]
+        public bool Ranked { get; set; }
+
+        [JsonProperty("qualified")]
+        public bool Qualified { get; set; }
+
+        [JsonProperty("blRanked")]
+        public bool BlRanked { get; set; }
+
+        [JsonProperty("blQualified")]
+        public bool BlQualified { get; set; }
+
+        [JsonProperty("tags")]
+        public List<string> Tags { get; set; }
+
+        [JsonProperty("uploaded")]
+        public DateTime Uploaded { get; set; }
+
         /// <summary>
         /// 获取最新版本的封面图片URL
         /// </summary>
@@ -514,5 +533,65 @@ namespace BeatSaberIndependentMapsManager
 
         [JsonProperty("tag")]
         public string Tag { get; set; }
+
+        [JsonProperty("diffs")]
+        public List<BeatSaverVersionDiff> Diffs { get; set; }
+    }
+
+    /// <summary>
+    /// 难度信息（在versions[].diffs中）
+    /// </summary>
+    public class BeatSaverVersionDiff
+    {
+        [JsonProperty("njs")]
+        public double Njs { get; set; }
+
+        [JsonProperty("offset")]
+        public double Offset { get; set; }
+
+        [JsonProperty("notes")]
+        public int Notes { get; set; }
+
+        [JsonProperty("bombs")]
+        public int Bombs { get; set; }
+
+        [JsonProperty("obstacles")]
+        public int Obstacles { get; set; }
+
+        [JsonProperty("nps")]
+        public double Nps { get; set; }
+
+        [JsonProperty("length")]
+        public double Length { get; set; }
+
+        [JsonProperty("characteristic")]
+        public string Characteristic { get; set; }
+
+        [JsonProperty("difficulty")]
+        public string Difficulty { get; set; }
+
+        [JsonProperty("events")]
+        public int Events { get; set; }
+
+        [JsonProperty("chroma")]
+        public bool Chroma { get; set; }
+
+        [JsonProperty("me")]
+        public bool Me { get; set; }
+
+        [JsonProperty("ne")]
+        public bool Ne { get; set; }
+
+        [JsonProperty("cinema")]
+        public bool Cinema { get; set; }
+
+        [JsonProperty("vivify")]
+        public bool Vivify { get; set; }
+
+        [JsonProperty("stars")]
+        public double? Stars { get; set; }
+
+        [JsonProperty("blStars")]
+        public double? BlStars { get; set; }
     }
 }

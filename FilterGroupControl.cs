@@ -14,11 +14,11 @@ namespace BeatSaberIndependentMapsManager
     {
         private Panel headerPanel;
         private CheckBox chkEnabled;
+        private CheckBox chkUseLocalCache;
         private TextBox txtGroupName;
         private ComboBox cboGroupOperator;
         private Button btnRemoveGroup;
         private Panel conditionsPanel;
-        private Button btnAddCondition;
         private ComboBox cboAddCondition;
 
         private FilterGroup group;
@@ -78,10 +78,28 @@ namespace BeatSaberIndependentMapsManager
                 GroupChanged?.Invoke(this, group);
             };
 
+            // Use Local Cache checkbox
+            chkUseLocalCache = new CheckBox
+            {
+                Width = 90,
+                Dock = DockStyle.Left,
+                Margin = new Padding(5, 2, 5, 2),
+                Text = "本地缓存",
+                Checked = false,
+                ForeColor = Color.FromArgb(70, 130, 180)
+            };
+            chkUseLocalCache.CheckedChanged += (s, e) =>
+            {
+                if (group != null)
+                    group.UseLocalCache = chkUseLocalCache.Checked;
+                PopulateConditionTypes();
+                GroupChanged?.Invoke(this, group);
+            };
+
             // Group name text box
             txtGroupName = new TextBox
             {
-                Width = 150,
+                Width = 120,
                 Dock = DockStyle.Left,
                 Margin = new Padding(5, 2, 5, 2),
                 Text = "条件组"
@@ -146,6 +164,7 @@ namespace BeatSaberIndependentMapsManager
             headerPanel.Controls.Add(btnRemoveGroup);
             headerPanel.Controls.Add(cboAddCondition);
             headerPanel.Controls.Add(cboGroupOperator);
+            headerPanel.Controls.Add(chkUseLocalCache);
             headerPanel.Controls.Add(txtGroupName);
             headerPanel.Controls.Add(chkEnabled);
 
@@ -167,11 +186,20 @@ namespace BeatSaberIndependentMapsManager
             cboAddCondition.Items.Add(new FilterConditionTypeItem { DisplayName = "-- 添加条件 --", Type = FilterConditionType.None });
             cboAddCondition.Items.Add(new FilterConditionTypeItem { DisplayName = "[自定义] 自定义条件", Type = FilterConditionType.Custom });
 
+            bool useLocalCache = chkUseLocalCache.Checked;
             var grouped = FilterConditionMetadata.GetGroupedConditions();
             foreach (var kvp in grouped)
             {
+                // Skip local cache group if not enabled
+                if (kvp.Key == "本地缓存专属" && !useLocalCache)
+                    continue;
+
                 foreach (var type in kvp.Value)
                 {
+                    // Skip local cache-specific conditions if not enabled
+                    if (FilterConditionMetadata.RequiresLocalCache(type) && !useLocalCache)
+                        continue;
+
                     cboAddCondition.Items.Add(new FilterConditionTypeItem
                     {
                         DisplayName = $"[{kvp.Key}] {FilterConditionMetadata.GetDisplayName(type)}",
@@ -187,8 +215,12 @@ namespace BeatSaberIndependentMapsManager
             if (group == null) return;
 
             chkEnabled.Checked = group.IsEnabled;
+            chkUseLocalCache.Checked = group.UseLocalCache;
             txtGroupName.Text = group.Name;
             cboGroupOperator.SelectedIndex = group.GroupOperator == LogicOperator.And ? 0 : 1;
+
+            // Update condition types dropdown based on UseLocalCache setting
+            PopulateConditionTypes();
 
             // Clear existing condition controls
             foreach (var ctrl in conditionControls)

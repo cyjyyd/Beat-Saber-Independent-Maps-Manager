@@ -54,10 +54,17 @@ namespace BeatSaberIndependentMapsManager
         private int totalPages = 0;
         private const int PageSize = 20; // 每页显示数量
         private bool isOrModeSearch = false; // 是否是 OR 模式搜索
+        private bool isLocalCacheSearch = false; // 是否是本地缓存搜索模式
         private List<BeatSaverMap> allOrSearchResults = new List<BeatSaverMap>(); // OR 模式下缓存的所有结果
+        private System.Threading.CancellationTokenSource searchCts; // 用于取消搜索任务
+        private System.Threading.CancellationTokenSource imageLoadCts; // 用于取消图片加载任务
+        private static readonly System.Net.Http.HttpClient imageHttpClient = new System.Net.Http.HttpClient(); // 静态HttpClient用于图片加载
+        private Dictionary<string, Image> coverImageCache = new Dictionary<string, Image>(); // 图片缓存
         // 筛选构建器相关
         private FilterPreset currentFilterPreset;
         private FilterBuilderForm filterBuilderForm;
+        // 本地缓存管理器
+        private LocalCacheManager localCacheManager;
         #endregion
         #region 动态库引用
         [DllImport("Everything64.dll", CharSet = CharSet.Unicode)]
@@ -1645,8 +1652,10 @@ namespace BeatSaberIndependentMapsManager
                 {
                     if (MessageBox.Show("一键去重将默认保留检索到的第一个曲目，确认继续吗（可在设置中开启高级模式选择要保留的曲目）", "提示", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                     {
-                        foreach (ListViewItem list in songListView.Items)
+                        // 使用倒序循环避免"Collection was modified"错误
+                        for (int i = songListView.Items.Count - 1; i >= 0; i--)
                         {
+                            ListViewItem list = songListView.Items[i];
                             if (isDuplicate(list.SubItems[1].Text))
                             {
                                 string currentFolder = musicPackInfo[currentMusicPack][list.SubItems[1].Text].songFolder;
@@ -1654,7 +1663,7 @@ namespace BeatSaberIndependentMapsManager
                                 {
                                     Directory.Delete(currentFolder, true);
                                     debugLog("删除歌曲：" + list.SubItems[1].Text + " 所在文件夹：" + currentFolder + "成功！");
-                                    songListView.Items.Remove(list);
+                                    songListView.Items.RemoveAt(i);
                                 }
                                 catch (Exception)
                                 {
@@ -1991,49 +2000,140 @@ namespace BeatSaberIndependentMapsManager
         #region BeatSaver 搜索
 
         /// <summary>
-        /// 显示搜索结果
+        /// 显示搜索结果（支持懒加载和取消）
         /// </summary>
         private async Task DisplaySearchResults(List<BeatSaverMap> maps)
         {
-            using (var httpClient = new System.Net.Http.HttpClient())
+            // 取消之前的图片加载任务
+            if (imageLoadCts != null && !imageLoadCts.IsCancellationRequested)
             {
-                foreach (var map in maps)
+                imageLoadCts.Cancel();
+                imageLoadCts.Dispose();
+            }
+            imageLoadCts = new System.Threading.CancellationTokenSource();
+            var cancellationToken = imageLoadCts.Token;
+
+            // 先快速添加所有行的基本信息（不含图片）
+            for (int i = 0; i < maps.Count; i++)
+            {
+                var map = maps[i];
+                var row = new DataGridViewRow();
+                row.CreateCells(dataGridView1);
+
+                // 列顺序: 0=Select, 1=bsr, 2=Cover, 3=Name, 4=description, 5=bpm, 6=levelAuthorName
+                row.Cells[0].Value = false;  // 选择框默认不选中
+                row.Cells[1].Value = map.Id;  // bsr
+                row.Cells[2].Value = null;  // 封面图片稍后加载
+                row.Cells[3].Value = map.Name;  // 名称
+                row.Cells[4].Value = map.Description;  // 简介
+                row.Cells[5].Value = map.Metadata?.Bpm.ToString("F1") ?? "N/A";  // BPM
+                row.Cells[6].Value = map.Metadata?.LevelAuthorName ?? map.Uploader?.Name ?? "N/A";  // 谱面作者
+
+                row.Tag = map;  // 存储完整数据
+                dataGridView1.Rows.Add(row);
+            }
+
+            // 异步加载封面图片
+            await LoadCoverImagesAsync(maps, cancellationToken);
+        }
+
+        /// <summary>
+        /// 异步加载封面图片（带缓存和取消支持）
+        /// </summary>
+        private async Task LoadCoverImagesAsync(List<BeatSaverMap> maps, System.Threading.CancellationToken cancellationToken)
+        {
+            var tasks = new List<Task>();
+
+            for (int i = 0; i < maps.Count && i < dataGridView1.Rows.Count; i++)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    break;
+
+                var map = maps[i];
+                var row = dataGridView1.Rows[i];
+                var coverUrl = map.GetCoverUrl();
+
+                if (string.IsNullOrEmpty(coverUrl))
+                    continue;
+
+                // 检查缓存
+                if (coverImageCache.TryGetValue(coverUrl, out var cachedImage))
                 {
-                    var row = new DataGridViewRow();
-                    row.CreateCells(dataGridView1);
+                    if (!row.IsNewRow && row.Cells.Count > 2)
+                    {
+                        row.Cells[2].Value = cachedImage;
+                    }
+                    continue;
+                }
 
-                    // 列顺序: 0=Select, 1=bsr, 2=Cover, 3=Name, 4=description, 5=bpm, 6=levelAuthorName
-                    row.Cells[0].Value = false;  // 选择框默认不选中
-                    row.Cells[1].Value = map.Id;  // bsr
+                // 捕获当前索引用于闭包
+                int rowIndex = i;
+                string url = coverUrl;
 
-                    // 加载封面图片
+                var task = Task.Run(async () =>
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        return;
+
                     try
                     {
-                        var coverUrl = map.GetCoverUrl();
-                        if (!string.IsNullOrEmpty(coverUrl))
+                        var imageData = await imageHttpClient.GetByteArrayAsync(url, cancellationToken);
+                        if (cancellationToken.IsCancellationRequested)
+                            return;
+
+                        Image? img = null;
+                        using (var ms = new MemoryStream(imageData))
                         {
-                            var imageData = await httpClient.GetByteArrayAsync(coverUrl);
-                            using (var ms = new MemoryStream(imageData))
+                            var originalImg = Image.FromStream(ms);
+                            img = new Bitmap(originalImg, new Size(100, 100));
+                        }
+
+                        // 添加到缓存
+                        lock (coverImageCache)
+                        {
+                            if (!coverImageCache.ContainsKey(url) && coverImageCache.Count < 500) // 限制缓存大小
                             {
-                                var img = Image.FromStream(ms);
-                                row.Cells[2].Value = new Bitmap(img, new Size(100, 100));
+                                coverImageCache[url] = img;
                             }
                         }
+
+                        // 更新UI
+                        if (!cancellationToken.IsCancellationRequested)
+                        {
+                            this.BeginInvoke(() =>
+                            {
+                                if (rowIndex < dataGridView1.Rows.Count && !dataGridView1.Rows[rowIndex].IsNewRow)
+                                {
+                                    var targetRow = dataGridView1.Rows[rowIndex];
+                                    if (targetRow.Cells.Count > 2)
+                                    {
+                                        targetRow.Cells[2].Value = img;
+                                    }
+                                }
+                            });
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // 取消，忽略
                     }
                     catch
                     {
-                        // 封面加载失败时使用默认图片
-                        row.Cells[2].Value = null;
+                        // 加载失败，忽略
                     }
+                }, cancellationToken);
 
-                    row.Cells[3].Value = map.Name;  // 名称
-                    row.Cells[4].Value = map.Description;  // 简介
-                    row.Cells[5].Value = map.Metadata?.Bpm.ToString("F1") ?? "N/A";  // BPM
-                    row.Cells[6].Value = map.Metadata?.LevelAuthorName ?? map.Uploader?.Name ?? "N/A";  // 谱面作者
+                tasks.Add(task);
+            }
 
-                    row.Tag = map;  // 存储完整数据
-                    dataGridView1.Rows.Add(row);
-                }
+            // 等待所有图片加载完成（或被取消）
+            try
+            {
+                await Task.WhenAll(tasks);
+            }
+            catch (OperationCanceledException)
+            {
+                // 被取消，忽略
             }
         }
 
@@ -2044,7 +2144,8 @@ namespace BeatSaberIndependentMapsManager
         {
             btnPrevPage.Enabled = currentPage > 0;
             btnNextPage.Enabled = currentPage < totalPages - 1;
-            if (isOrModeSearch)
+            // 只有真正是OR逻辑搜索时才显示(OR)，本地缓存搜索不显示
+            if (isOrModeSearch && !isLocalCacheSearch)
             {
                 lblPageInfo.Text = $"第 {currentPage + 1}/{totalPages} 页 (OR)";
             }
@@ -2136,13 +2237,30 @@ namespace BeatSaberIndependentMapsManager
         /// </summary>
         private async void FilterBuilderForm_SearchRequested(object sender, FilterPreset preset)
         {
+            // 取消之前的搜索任务
+            if (searchCts != null && !searchCts.IsCancellationRequested)
+            {
+                searchCts.Cancel();
+                searchCts.Dispose();
+            }
+            searchCts = new System.Threading.CancellationTokenSource();
+
             currentFilterPreset = preset;
             UpdateFilterSummary();
             currentPage = 0;
             // 清除之前的 OR 搜索缓存
             isOrModeSearch = false;
+            isLocalCacheSearch = false;
             allOrSearchResults.Clear();
-            await SearchMapsWithFilter(preset);
+
+            try
+            {
+                await SearchMapsWithFilter(preset, searchCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                BSIMMActionText.Text = "搜索已取消";
+            }
         }
 
         /// <summary>
@@ -2200,13 +2318,20 @@ namespace BeatSaberIndependentMapsManager
         /// <summary>
         /// 使用筛选预设执行搜索
         /// </summary>
-        private async Task SearchMapsWithFilter(FilterPreset preset)
+        private async Task SearchMapsWithFilter(FilterPreset preset, System.Threading.CancellationToken cancellationToken = default)
         {
             try
             {
                 BSIMMActionText.Text = "搜索中...";
                 dataGridView1.Rows.Clear();
                 currentSearchResults.Clear();
+
+                // 检查是否需要本地缓存
+                if (RequiresLocalCache(preset))
+                {
+                    await SearchWithLocalCache(preset, cancellationToken);
+                    return;
+                }
 
                 // 检查是否有 OR 逻辑需要处理
                 bool hasOrLogic = HasOrLogic(preset);
@@ -2220,6 +2345,7 @@ namespace BeatSaberIndependentMapsManager
                 {
                     // 纯 AND 逻辑：清除 OR 模式标志
                     isOrModeSearch = false;
+                    isLocalCacheSearch = false;
                     allOrSearchResults.Clear();
 
                     var filter = BuildSearchFilterFromPreset(preset);
@@ -2261,6 +2387,189 @@ namespace BeatSaberIndependentMapsManager
             {
                 debugLog($"搜索失败: {ex.Message}");
                 BSIMMActionText.Text = "搜索失败";
+            }
+        }
+
+        /// <summary>
+        /// 检查预设是否需要本地缓存
+        /// </summary>
+        private bool RequiresLocalCache(FilterPreset preset)
+        {
+            if (preset == null) return false;
+
+            foreach (var group in preset.GetActiveGroups())
+            {
+                // Check if group has UseLocalCache enabled
+                if (group.UseLocalCache)
+                    return true;
+
+                // Also check individual conditions for backward compatibility
+                foreach (var condition in group.GetActiveConditions())
+                {
+                    if (FilterConditionMetadata.RequiresLocalCache(condition.Type))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 使用本地缓存执行搜索
+        /// </summary>
+        private async Task SearchWithLocalCache(FilterPreset preset, System.Threading.CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                // 初始化本地缓存管理器
+                if (localCacheManager == null)
+                    localCacheManager = new LocalCacheManager();
+
+                // 检查缓存是否可用
+                if (!localCacheManager.IsCacheAvailable)
+                {
+                    // 提示用户下载缓存
+                    var result = MessageBox.Show(
+                        "本地缓存未下载或已过期。缓存文件约230MB，是否立即下载？\n\n下载后可使用更丰富的筛选条件（排行榜收录、统计数据等）",
+                        "需要本地缓存",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question);
+
+                    if (result != DialogResult.Yes)
+                    {
+                        BSIMMStatusUpdate("取消", "已取消", 0);
+                        return;
+                    }
+
+                    // 下载缓存
+                    localCacheManager.DownloadProgress += (s, progress) =>
+                    {
+                        this.BeginInvoke(() =>
+                        {
+                            if (!string.IsNullOrEmpty(progress.Status))
+                            {
+                                BSIMMProgress.ProgressBar.Value = Math.Min(100, (int)progress.Percentage);
+                                BSIMMActionText.Text = "下载";
+                                BSIMMStatusText.Text = progress.Status.StartsWith("正在下载")
+                                    ? $"{progress.Status} {progress.Percentage:F1}%"
+                                    : progress.Status;
+                            }
+                        });
+                    };
+
+                    BSIMMStatusUpdate("下载", "正在下载本地缓存...", 0);
+                    bool downloaded = await localCacheManager.DownloadCacheAsync();
+
+                    if (!downloaded)
+                    {
+                        MessageBox.Show("无法下载本地缓存，请检查网络连接", "下载失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        BSIMMStatusUpdate("错误", "下载失败", 0);
+                        return;
+                    }
+                }
+
+                BSIMMActionText.Text = "正在筛选本地缓存...";
+                BSIMMStatusText.Text = "读取本地缓存...";
+                currentPage = 0;
+                isOrModeSearch = true; // 本地缓存模式使用分页显示（复用OR模式的分页逻辑）
+                isLocalCacheSearch = true; // 标记为本地缓存搜索
+
+                List<BeatSaverMap> results;
+
+                // 检查是否有数量限制条件
+                bool hasResultLimit = preset.HasResultLimit();
+
+                if (hasResultLimit)
+                {
+                    // 使用 ParallelFilterMaps 方法（支持数量限制和排序）
+                    results = await Task.Run(() =>
+                    {
+                        var progress = new Progress<int>(percent =>
+                        {
+                            this.BeginInvoke(() =>
+                            {
+                                BSIMMProgress.ProgressBar.Value = percent;
+                                BSIMMActionText.Text = "搜索";
+                                BSIMMStatusText.Text = $"正在筛选... {percent}%";
+                            });
+                        });
+                        return localCacheManager.ParallelFilterMaps(preset, progress, cancellationToken);
+                    }, cancellationToken);
+                }
+                else
+                {
+                    // 使用流式筛选（更快，更省内存）
+                    results = await Task.Run(() =>
+                    {
+                        var tempList = new List<BeatSaverMap>();
+                        int lastPercent = 0;
+                        int processedCount = 0;
+
+                        foreach (var map in localCacheManager.StreamFilterMaps(preset, null, cancellationToken))
+                        {
+                            if (cancellationToken.IsCancellationRequested)
+                                break;
+
+                            tempList.Add(map);
+                            processedCount++;
+
+                            // 每5000首报告一次进度
+                            if (processedCount % 5000 == 0)
+                            {
+                                int percent = Math.Min(95, processedCount / 500); // 估算进度
+                                if (percent > lastPercent)
+                                {
+                                    lastPercent = percent;
+                                    this.BeginInvoke(() =>
+                                    {
+                                        BSIMMProgress.ProgressBar.Value = percent;
+                                        BSIMMActionText.Text = "搜索";
+                                        BSIMMStatusText.Text = $"正在筛选... 已处理 {processedCount} 首，找到 {tempList.Count} 首";
+                                    });
+                                }
+                            }
+                        }
+
+                        return tempList;
+                    }, cancellationToken);
+                }
+
+                // 检查是否被取消
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    BSIMMActionText.Text = "搜索已取消";
+                    return;
+                }
+
+                // 更新UI
+                BSIMMProgress.ProgressBar.Value = 100;
+                allOrSearchResults = results;
+
+                if (results.Count > 0)
+                {
+                    totalPages = (results.Count + PageSize - 1) / PageSize;
+                    BSIMMStatusUpdate("搜索", $"找到 {results.Count} 个结果", 100);
+
+                    UpdatePaginationControls();
+                    await DisplayOrSearchPage();
+                }
+                else
+                {
+                    BSIMMStatusUpdate("搜索", "未找到匹配的结果", 100);
+                    btnPrevPage.Enabled = false;
+                    btnNextPage.Enabled = false;
+                    lblPageInfo.Text = "第 0/0 页";
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                BSIMMActionText.Text = "搜索已取消";
+            }
+            catch (Exception ex)
+            {
+                debugLog($"本地缓存筛选失败: {ex.Message}");
+                MessageBox.Show($"筛选失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                BSIMMStatusUpdate("错误", "筛选失败", 0);
             }
         }
 
@@ -2360,6 +2669,7 @@ namespace BeatSaberIndependentMapsManager
             // 缓存所有结果
             allOrSearchResults = allResults.Values.ToList();
             isOrModeSearch = true;
+            isLocalCacheSearch = false; // OR逻辑搜索不是本地缓存搜索
             currentPage = 0;
 
             // 计算总页数

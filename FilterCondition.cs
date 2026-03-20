@@ -101,10 +101,17 @@ namespace BeatSaberIndependentMapsManager
                     Value = 0.0;
                     break;
                 case FilterValueType.Boolean:
-                    Value = false;
+                    // Default to null (不限) - tri-state: null/true/false
+                    Value = null;
                     break;
                 case FilterValueType.Selection:
                     Value = Options != null && Options.Count > 0 ? Options[0] : "";
+                    break;
+                case FilterValueType.Date:
+                    Value = DateTime.Now.AddDays(-30); // Default to 30 days ago
+                    break;
+                case FilterValueType.NumberWithSort:
+                    Value = new ResultLimitValue(100, ResultSortOption.Newest);
                     break;
             }
         }
@@ -123,9 +130,18 @@ namespace BeatSaberIndependentMapsManager
                 case FilterValueType.Number:
                     return Value != null && Convert.ToDouble(Value) > 0;
                 case FilterValueType.Boolean:
-                    return Value != null && Convert.ToBoolean(Value);
+                    // Boolean uses tri-state: null = 不限, true = 是, false = 否
+                    // Only filter when value is explicitly set (not null)
+                    return Value != null;
                 case FilterValueType.Selection:
                     return !string.IsNullOrWhiteSpace(Value?.ToString());
+                case FilterValueType.Date:
+                    return Value != null;
+                case FilterValueType.NumberWithSort:
+                    if (Value == null) return false;
+                    if (Value is ResultLimitValue resultLimit)
+                        return resultLimit.Count > 0;
+                    return true;
                 default:
                     return false;
             }

@@ -219,20 +219,33 @@ namespace BeatSaberIndependentMapsManager
                         break;
 
                     case FilterValueType.Boolean:
-                        var chkBox = new CheckBox
+                        var cboBool = new ComboBox
                         {
                             Width = 80,
                             Dock = DockStyle.Fill,
-                            Margin = new Padding(2),
-                            Text = "启用",
-                            Checked = condition.Value != null && Convert.ToBoolean(condition.Value)
+                            DropDownStyle = ComboBoxStyle.DropDownList,
+                            Margin = new Padding(2)
                         };
-                        chkBox.CheckedChanged += (s, e) =>
+                        cboBool.Items.AddRange(new object[] { "不限", "是", "否" });
+                        // Set initial value based on condition
+                        if (condition.Value == null)
+                            cboBool.SelectedIndex = 0; // 不限
+                        else if (Convert.ToBoolean(condition.Value))
+                            cboBool.SelectedIndex = 1; // 是
+                        else
+                            cboBool.SelectedIndex = 2; // 否
+                        cboBool.SelectedIndexChanged += (s, e) =>
                         {
-                            condition.Value = chkBox.Checked;
+                            // 0 = 不限 (null), 1 = 是 (true), 2 = 否 (false)
+                            condition.Value = cboBool.SelectedIndex switch
+                            {
+                                1 => true,
+                                2 => false,
+                                _ => null
+                            };
                             ConditionChanged?.Invoke(this, condition);
                         };
-                        valueControl = chkBox;
+                        valueControl = cboBool;
                         break;
 
                     case FilterValueType.Selection:
@@ -262,6 +275,85 @@ namespace BeatSaberIndependentMapsManager
                             ConditionChanged?.Invoke(this, condition);
                         };
                         valueControl = cbo;
+                        break;
+
+                    case FilterValueType.Date:
+                        var datePicker = new DateTimePicker
+                        {
+                            Width = 180,
+                            Dock = DockStyle.Fill,
+                            Margin = new Padding(2),
+                            Format = DateTimePickerFormat.Short,
+                            MaxDate = DateTime.Now
+                        };
+                        if (condition.Value != null && condition.Value is DateTime dt)
+                            datePicker.Value = dt;
+                        else
+                            datePicker.Value = DateTime.Now.AddDays(-30); // Default to 30 days ago
+                        datePicker.ValueChanged += (s, e) =>
+                        {
+                            condition.Value = datePicker.Value;
+                            ConditionChanged?.Invoke(this, condition);
+                        };
+                        valueControl = datePicker;
+                        break;
+
+                    case FilterValueType.NumberWithSort:
+                        // Create a panel with number input and sort dropdown
+                        var panel = new Panel
+                        {
+                            Width = 220,
+                            Height = 28,
+                            Dock = DockStyle.Fill,
+                            Margin = new Padding(2)
+                        };
+
+                        var numInput = new NumericUpDown
+                        {
+                            Width = 70,
+                            Dock = DockStyle.Left,
+                            Minimum = 1,
+                            Maximum = 1000,
+                            Value = 100
+                        };
+
+                        var sortCombo = new ComboBox
+                        {
+                            Width = 100,
+                            Dock = DockStyle.Right,
+                            DropDownStyle = ComboBoxStyle.DropDownList
+                        };
+                        sortCombo.Items.AddRange(new object[] { "最新上传", "最早上传", "随机" });
+                        sortCombo.SelectedIndex = 0;
+
+                        // Initialize from existing value
+                        if (condition.Value is ResultLimitValue existingLimit)
+                        {
+                            numInput.Value = existingLimit.Count;
+                            sortCombo.SelectedIndex = (int)existingLimit.SortOption;
+                        }
+                        else if (condition.Value != null)
+                        {
+                            // Try to parse from int (backward compatibility)
+                            if (int.TryParse(condition.Value.ToString(), out int count))
+                                numInput.Value = count;
+                        }
+
+                        numInput.ValueChanged += (s, e) =>
+                        {
+                            condition.Value = new ResultLimitValue((int)numInput.Value, (ResultSortOption)sortCombo.SelectedIndex);
+                            ConditionChanged?.Invoke(this, condition);
+                        };
+
+                        sortCombo.SelectedIndexChanged += (s, e) =>
+                        {
+                            condition.Value = new ResultLimitValue((int)numInput.Value, (ResultSortOption)sortCombo.SelectedIndex);
+                            ConditionChanged?.Invoke(this, condition);
+                        };
+
+                        panel.Controls.Add(sortCombo);
+                        panel.Controls.Add(numInput);
+                        valueControl = panel;
                         break;
                 }
             }

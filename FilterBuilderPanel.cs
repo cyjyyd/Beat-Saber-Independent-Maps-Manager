@@ -25,7 +25,6 @@ namespace BeatSaberIndependentMapsManager
         private Panel groupsPanel;
         private Button btnAddGroup;
         private Panel buttonsPanel;
-        private Button btnSearch;
         private Button btnReset;
         private Label lblResultCount;
 
@@ -159,17 +158,6 @@ namespace BeatSaberIndependentMapsManager
             };
             btnAddGroup.Click += (s, e) => AddGroup();
 
-            btnSearch = new Button
-            {
-                Text = "搜索",
-                Width = 80,
-                Dock = DockStyle.Right,
-                Margin = new Padding(2),
-                BackColor = Color.FromArgb(46, 139, 87),
-                ForeColor = Color.White
-            };
-            btnSearch.Click += (s, e) => OnSearchRequested();
-
             btnReset = new Button
             {
                 Text = "重置",
@@ -187,7 +175,6 @@ namespace BeatSaberIndependentMapsManager
                 Margin = new Padding(10, 8, 10, 0)
             };
 
-            buttonsPanel.Controls.Add(btnSearch);
             buttonsPanel.Controls.Add(lblResultCount);
             buttonsPanel.Controls.Add(btnReset);
             buttonsPanel.Controls.Add(btnAddGroup);
