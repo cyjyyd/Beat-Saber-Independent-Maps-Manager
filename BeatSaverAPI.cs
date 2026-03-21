@@ -119,6 +119,12 @@ namespace BeatSaberIndependentMapsManager
             if (filter.MaxBlStars.HasValue)
                 sb.Append($"maxBlStars={filter.MaxBlStars.Value}&");
 
+            // Rating (用户输入0-100，API需要0-1)
+            if (filter.MinRating.HasValue)
+                sb.Append($"minRating={filter.MinRating.Value / 100.0}&");
+            if (filter.MaxRating.HasValue)
+                sb.Append($"maxRating={filter.MaxRating.Value / 100.0}&");
+
             // Mod 支持
             if (filter.Chroma == true) sb.Append("chroma=true&");
             if (filter.Noodle == true) sb.Append("noodle=true&");
@@ -162,6 +168,8 @@ namespace BeatSaberIndependentMapsManager
         public double? MaxSsStars { get; set; }
         public double? MinBlStars { get; set; }
         public double? MaxBlStars { get; set; }
+        public double? MinRating { get; set; }
+        public double? MaxRating { get; set; }
         public bool? Chroma { get; set; }
         public bool? Noodle { get; set; }
         public bool? Me { get; set; }
@@ -564,6 +572,9 @@ namespace BeatSaberIndependentMapsManager
         [JsonProperty("length")]
         public double Length { get; set; }
 
+        [JsonProperty("seconds")]
+        public double Seconds { get; set; }
+
         [JsonProperty("characteristic")]
         public string Characteristic { get; set; }
 
@@ -593,5 +604,26 @@ namespace BeatSaberIndependentMapsManager
 
         [JsonProperty("blStars")]
         public double? BlStars { get; set; }
+
+        [JsonProperty("paritySummary")]
+        public BeatSaverParitySummary ParitySummary { get; set; }
+
+        [JsonProperty("maxScore")]
+        public int? MaxScore { get; set; }
+    }
+
+    /// <summary>
+    /// 校验摘要信息（在versions[].diffs[].paritySummary中）
+    /// </summary>
+    public class BeatSaverParitySummary
+    {
+        [JsonProperty("errors")]
+        public int Errors { get; set; }
+
+        [JsonProperty("warns")]
+        public int Warns { get; set; }
+
+        [JsonProperty("resets")]
+        public int Resets { get; set; }
     }
 }

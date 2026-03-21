@@ -16,10 +16,11 @@ namespace BeatSaberIndependentMapsManager
         // Preset controls
         private Panel presetPanel;
         private ComboBox cboPreset;
-        private Button btnLoadPreset;
         private Button btnSavePreset;
         private Button btnNewPreset;
         private Button btnDeletePreset;
+        private Button btnImportPreset;
+        private Button btnExportPreset;
 
         // Filter builder controls
         private Panel groupsPanel;
@@ -62,7 +63,7 @@ namespace BeatSaberIndependentMapsManager
             // Preset panel
             presetPanel = new Panel
             {
-                Height = 40,
+                Height = 45,
                 Dock = DockStyle.Top,
                 Padding = new Padding(2)
             };
@@ -89,15 +90,6 @@ namespace BeatSaberIndependentMapsManager
                     LoadPreset(preset);
                 }
             };
-
-            btnLoadPreset = new Button
-            {
-                Text = "加载",
-                Width = 60,
-                Dock = DockStyle.Left,
-                Margin = new Padding(2)
-            };
-            btnLoadPreset.Click += (s, e) => LoadSelectedPreset();
 
             btnSavePreset = new Button
             {
@@ -126,10 +118,29 @@ namespace BeatSaberIndependentMapsManager
             };
             btnDeletePreset.Click += (s, e) => DeleteSelectedPreset();
 
+            btnImportPreset = new Button
+            {
+                Text = "导入",
+                Width = 60,
+                Dock = DockStyle.Left,
+                Margin = new Padding(2)
+            };
+            btnImportPreset.Click += (s, e) => ImportPreset();
+
+            btnExportPreset = new Button
+            {
+                Text = "导出",
+                Width = 60,
+                Dock = DockStyle.Left,
+                Margin = new Padding(2)
+            };
+            btnExportPreset.Click += (s, e) => ExportCurrentPreset();
+
+            presetPanel.Controls.Add(btnExportPreset);
+            presetPanel.Controls.Add(btnImportPreset);
             presetPanel.Controls.Add(btnDeletePreset);
             presetPanel.Controls.Add(btnNewPreset);
             presetPanel.Controls.Add(btnSavePreset);
-            presetPanel.Controls.Add(btnLoadPreset);
             presetPanel.Controls.Add(cboPreset);
             presetPanel.Controls.Add(lblPreset);
 
@@ -321,15 +332,6 @@ namespace BeatSaberIndependentMapsManager
                 cboPreset.SelectedIndex = 0;
         }
 
-        private void LoadSelectedPreset()
-        {
-            if (cboPreset.SelectedItem is FilterPreset preset)
-            {
-                currentPreset = preset.Clone();
-                UpdateGroupControls();
-            }
-        }
-
         private void LoadPreset(FilterPreset preset)
         {
             currentPreset = preset.Clone();
@@ -377,18 +379,266 @@ namespace BeatSaberIndependentMapsManager
 
         private void DeleteSelectedPreset()
         {
-            if (cboPreset.SelectedItem is FilterPreset preset && preset != currentPreset)
+            if (!(cboPreset.SelectedItem is FilterPreset selectedPreset))
+                return;
+
+            // 查找 presets 列表中对应的预设
+            var presetToDelete = presets.FirstOrDefault(p => p.Name == selectedPreset.Name);
+            if (presetToDelete == null)
             {
-                if (MessageBox.Show($"确定删除预设 '{preset.Name}' 吗？", "确认",
-                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                MessageBox.Show("无法删除当前正在编辑的预设。", "提示",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (MessageBox.Show($"确定删除预设 '{presetToDelete.Name}' 吗？", "确认",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+            {
+                // 删除文件
+                string presetDir = Path.Combine(Application.StartupPath, "presets");
+                string filePath = Path.Combine(presetDir, $"{presetToDelete.Name}.bsf");
+                if (File.Exists(filePath))
+                    File.Delete(filePath);
+
+                // 从列表中移除
+                presets.Remove(presetToDelete);
+
+                // 如果当前编辑的就是被删除的预设，创建新预设
+                if (currentPreset.Name == presetToDelete.Name)
+                {
+                    CreateDefaultPreset();
+                }
+                else
+                {
+                    UpdatePresetCombo();
+                }
+
+                MessageBox.Show("预设已删除。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        private void ImportPreset()
+        {
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Title = "导入筛选预设（支持多选）";
+                ofd.Filter = "筛选预设文件 (*.bsf)|*.bsf|JSON文件 (*.json)|*.json|所有文件 (*.*)|*.*";
+                ofd.DefaultExt = ".bsf";
+                ofd.RestoreDirectory = true;
+                ofd.Multiselect = true;  // 启用多选
+
+                if (ofd.ShowDialog() == DialogResult.OK)
                 {
                     string presetDir = Path.Combine(Application.StartupPath, "presets");
-                    string filePath = Path.Combine(presetDir, $"{preset.Name}.bsf");
-                    if (File.Exists(filePath))
-                        File.Delete(filePath);
+                    if (!Directory.Exists(presetDir))
+                        Directory.CreateDirectory(presetDir);
 
-                    presets.Remove(preset);
-                    UpdatePresetCombo();
+                    int successCount = 0;
+                    int failCount = 0;
+                    List<string> failedFiles = new List<string>();
+                    FilterPreset lastImportedPreset = null;
+
+                    foreach (string filePath in ofd.FileNames)
+                    {
+                        try
+                        {
+                            var preset = FilterPreset.LoadFromFile(filePath);
+                            if (preset != null && preset.Groups != null)
+                            {
+                                // 检查是否已存在同名预设
+                                string presetName = preset.Name;
+                                int counter = 1;
+                                while (presets.Any(p => p.Name == presetName))
+                                {
+                                    presetName = $"{preset.Name} ({counter})";
+                                    counter++;
+                                }
+                                preset.Name = presetName;
+
+                                // 保存到本地预设目录
+                                string destPath = Path.Combine(presetDir, $"{presetName}.bsf");
+                                preset.SaveToFile(destPath);
+
+                                // 添加到列表
+                                var clonedPreset = preset.Clone();
+                                presets.Add(clonedPreset);
+                                cboPreset.Items.Add(clonedPreset);
+
+                                lastImportedPreset = preset;
+                                successCount++;
+                            }
+                            else
+                            {
+                                failCount++;
+                                failedFiles.Add(Path.GetFileName(filePath));
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            failCount++;
+                            failedFiles.Add($"{Path.GetFileName(filePath)} ({ex.Message})");
+                        }
+                    }
+
+                    // 选中最后导入的预设
+                    if (lastImportedPreset != null)
+                    {
+                        currentPreset = lastImportedPreset.Clone();
+                        cboPreset.SelectedItem = presets.LastOrDefault(p => p.Name == lastImportedPreset.Name);
+                        UpdateGroupControls();
+                    }
+
+                    // 显示结果
+                    string message = $"成功导入 {successCount} 个预设";
+                    if (failCount > 0)
+                    {
+                        message += $"\n失败 {failCount} 个";
+                        if (failedFiles.Count <= 5)
+                        {
+                            message += ":\n" + string.Join("\n", failedFiles);
+                        }
+                    }
+                    MessageBox.Show(message, "导入完成",
+                        MessageBoxButtons.OK, successCount > 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                }
+            }
+        }
+
+        private void ExportCurrentPreset()
+        {
+            if (presets.Count == 0 && currentPreset == null)
+            {
+                MessageBox.Show("没有可导出的预设。", "提示",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // 询问导出方式
+            using (var choiceForm = new Form())
+            {
+                choiceForm.Text = "导出预设";
+                choiceForm.ClientSize = new Size(300, 150);
+                choiceForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+                choiceForm.StartPosition = FormStartPosition.CenterParent;
+                choiceForm.MaximizeBox = false;
+                choiceForm.MinimizeBox = false;
+
+                var lblMessage = new Label
+                {
+                    Text = "请选择导出方式：",
+                    Location = new Point(20, 20),
+                    AutoSize = true
+                };
+
+                var btnCurrent = new Button
+                {
+                    Text = "导出当前预设",
+                    Location = new Point(20, 60),
+                    Size = new Size(120, 35),
+                    DialogResult = DialogResult.Yes
+                };
+
+                var btnAll = new Button
+                {
+                    Text = "批量导出全部",
+                    Location = new Point(160, 60),
+                    Size = new Size(120, 35),
+                    DialogResult = DialogResult.OK
+                };
+
+                var btnCancel = new Button
+                {
+                    Text = "取消",
+                    Location = new Point(100, 105),
+                    Size = new Size(100, 30),
+                    DialogResult = DialogResult.Cancel
+                };
+
+                choiceForm.Controls.Add(lblMessage);
+                choiceForm.Controls.Add(btnCurrent);
+                choiceForm.Controls.Add(btnAll);
+                choiceForm.Controls.Add(btnCancel);
+
+                var result = choiceForm.ShowDialog();
+
+                if (result == DialogResult.Yes)
+                {
+                    ExportSinglePreset(currentPreset);
+                }
+                else if (result == DialogResult.OK)
+                {
+                    ExportAllPresets();
+                }
+            }
+        }
+
+        private void ExportSinglePreset(FilterPreset preset)
+        {
+            if (preset == null)
+            {
+                MessageBox.Show("没有可导出的预设。", "提示",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using (SaveFileDialog sfd = new SaveFileDialog())
+            {
+                sfd.Title = "导出筛选预设";
+                sfd.Filter = "筛选预设文件 (*.bsf)|*.bsf|JSON文件 (*.json)|*.json";
+                sfd.DefaultExt = ".bsf";
+                sfd.FileName = preset.Name;
+                sfd.RestoreDirectory = true;
+
+                if (sfd.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        var exportPreset = preset.Clone();
+                        exportPreset.SaveToFile(sfd.FileName);
+                        MessageBox.Show($"预设已导出到：{sfd.FileName}", "成功",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"导出预设失败：{ex.Message}", "错误",
+                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
+
+        private void ExportAllPresets()
+        {
+            using (FolderBrowserDialog fbd = new FolderBrowserDialog())
+            {
+                fbd.Description = "选择导出目录";
+                fbd.ShowNewFolderButton = true;
+
+                if (fbd.ShowDialog() == DialogResult.OK)
+                {
+                    int successCount = 0;
+                    int failCount = 0;
+
+                    foreach (var preset in presets)
+                    {
+                        try
+                        {
+                            string destPath = Path.Combine(fbd.SelectedPath, $"{preset.Name}.bsf");
+                            preset.Clone().SaveToFile(destPath);
+                            successCount++;
+                        }
+                        catch
+                        {
+                            failCount++;
+                        }
+                    }
+
+                    string message = $"成功导出 {successCount} 个预设到：\n{fbd.SelectedPath}";
+                    if (failCount > 0)
+                        message += $"\n失败 {failCount} 个";
+
+                    MessageBox.Show(message, "导出完成",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
         }
@@ -455,10 +705,21 @@ namespace BeatSaberIndependentMapsManager
         {
             if (condition.Value == null) return;
 
+            // Handle range-type conditions for API
+            if (FilterConditionMetadata.IsRangeType(condition.Type))
+            {
+                ApplyRangeConditionToFilter(filter, condition);
+                return;
+            }
+
             switch (condition.Type)
             {
                 case FilterConditionType.Query:
-                    filter.Query = condition.Value.ToString();
+                    // Handle SearchQueryValue with field type
+                    if (condition.Value is SearchQueryValue queryValue)
+                        filter.Query = queryValue.ToApiQuery();
+                    else
+                        filter.Query = condition.Value.ToString();
                     break;
                 case FilterConditionType.Order:
                     filter.Order = condition.Value.ToString();
@@ -534,7 +795,66 @@ namespace BeatSaberIndependentMapsManager
                 case FilterConditionType.Verified:
                     filter.Verified = Convert.ToBoolean(condition.Value);
                     break;
+                case FilterConditionType.MinScore:
+                    if (double.TryParse(condition.Value.ToString(), out double minScore))
+                        filter.MinRating = minScore;
+                    break;
+                case FilterConditionType.MaxScore:
+                    if (double.TryParse(condition.Value.ToString(), out double maxScore))
+                        filter.MaxRating = maxScore;
+                    break;
             }
+        }
+
+        /// <summary>
+        /// Applies range-type conditions to the API filter
+        /// </summary>
+        private void ApplyRangeConditionToFilter(BeatSaverSearchFilter filter, FilterCondition condition)
+        {
+            if (!(condition.Value is RangeValue rangeVal) || !rangeVal.HasValue)
+                return;
+
+            switch (condition.Type)
+            {
+                case FilterConditionType.BpmRange:
+                    if (rangeVal.Min.HasValue) filter.MinBpm = rangeVal.Min.Value;
+                    if (rangeVal.Max.HasValue) filter.MaxBpm = rangeVal.Max.Value;
+                    break;
+
+                case FilterConditionType.NpsRange:
+                    if (rangeVal.Min.HasValue) filter.MinNps = rangeVal.Min.Value;
+                    if (rangeVal.Max.HasValue) filter.MaxNps = rangeVal.Max.Value;
+                    break;
+
+                case FilterConditionType.DurationRange:
+                    if (rangeVal.Min.HasValue) filter.MinDuration = (int)rangeVal.Min.Value;
+                    if (rangeVal.Max.HasValue) filter.MaxDuration = (int)rangeVal.Max.Value;
+                    break;
+
+                case FilterConditionType.SsStarsRange:
+                    if (rangeVal.Min.HasValue) filter.MinSsStars = rangeVal.Min.Value;
+                    if (rangeVal.Max.HasValue) filter.MaxSsStars = rangeVal.Max.Value;
+                    break;
+
+                case FilterConditionType.BlStarsRange:
+                    if (rangeVal.Min.HasValue) filter.MinBlStars = rangeVal.Min.Value;
+                    if (rangeVal.Max.HasValue) filter.MaxBlStars = rangeVal.Max.Value;
+                    break;
+
+                case FilterConditionType.ScoreRange:
+                    // User inputs 0-100, API needs 0-1
+                    if (rangeVal.Min.HasValue) filter.MinRating = rangeVal.Min.Value;
+                    if (rangeVal.Max.HasValue) filter.MaxRating = rangeVal.Max.Value;
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Gets all saved presets
+        /// </summary>
+        public List<FilterPreset> GetSavedPresets()
+        {
+            return presets.ToList();
         }
     }
 }

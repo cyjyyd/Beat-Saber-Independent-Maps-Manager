@@ -2214,6 +2214,7 @@ namespace BeatSaberIndependentMapsManager
             btnSelectInverse.Click += BtnSelectInverse_Click;
             btnExportSelected.Click += BtnExportSelected_Click;
             btnExportAll.Click += BtnExportAll_Click;
+            btnBatchOutput.Click += BtnBatchOutput_Click;
 
             // 更新筛选概要显示
             UpdateFilterSummary();
@@ -2868,7 +2869,11 @@ namespace BeatSaberIndependentMapsManager
                     }
                     break;
                 case FilterConditionType.Query:
-                    filter.Query = condition.Value.ToString();
+                    // Handle SearchQueryValue with field type
+                    if (condition.Value is SearchQueryValue queryValue)
+                        filter.Query = queryValue.ToApiQuery();
+                    else
+                        filter.Query = condition.Value.ToString();
                     break;
                 case FilterConditionType.Order:
                     filter.Order = condition.Value.ToString();
@@ -2975,7 +2980,9 @@ namespace BeatSaberIndependentMapsManager
                 MessageBox.Show("请先选择要导出的歌曲！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            ExportMapsToPlaylist(selectedMaps);
+            // 尝试从当前预设名称中提取封面文字
+            string coverText = ExtractCoverTextFromPresetName(currentFilterPreset?.Name);
+            ExportMapsToPlaylist(selectedMaps, null, coverText);
         }
 
         private void BtnExportAll_Click(object sender, EventArgs e)
@@ -2989,10 +2996,393 @@ namespace BeatSaberIndependentMapsManager
         }
 
         /// <summary>
+        /// 批处理按钮点击事件：选择预设 -> 筛选 -> 导出到歌单
+        /// </summary>
+        private async void BtnBatchOutput_Click(object sender, EventArgs e)
+        {
+            // 创建批处理窗口
+            using (var batchForm = new Form())
+            {
+                batchForm.Text = "批处理导出";
+                batchForm.ClientSize = new Size(500, 450);
+                batchForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+                batchForm.StartPosition = FormStartPosition.CenterParent;
+                batchForm.MaximizeBox = false;
+                batchForm.MinimizeBox = false;
+
+                // 提示标签
+                var lblTip = new Label
+                {
+                    Text = "提示：预设名称中可使用【】标记封面文字，如\"NPS6+【NPS6】\"将在封面显示\"NPS6\"",
+                    Location = new Point(10, 10),
+                    Size = new Size(480, 40),
+                    ForeColor = Color.Gray
+                };
+
+                // 预设列表
+                var lblPresets = new Label
+                {
+                    Text = "选择预设（可多选）：",
+                    Location = new Point(10, 55),
+                    Size = new Size(200, 20)
+                };
+
+                var chkPresets = new CheckedListBox
+                {
+                    Location = new Point(10, 80),
+                    Size = new Size(470, 200),
+                    CheckOnClick = true
+                };
+
+                // 加载预设
+                string presetDir = Path.Combine(Application.StartupPath, "presets");
+                var availablePresets = new List<FilterPreset>();
+                if (Directory.Exists(presetDir))
+                {
+                    foreach (var file in Directory.GetFiles(presetDir, "*.bsf"))
+                    {
+                        var preset = FilterPreset.LoadFromFile(file);
+                        if (preset != null && preset.Groups != null && preset.Groups.Count > 0)
+                        {
+                            availablePresets.Add(preset);
+                            chkPresets.Items.Add(preset.Name, false);
+                        }
+                    }
+                }
+
+                // 导入预设按钮
+                var btnImport = new Button
+                {
+                    Text = "导入预设文件...",
+                    Location = new Point(10, 290),
+                    Size = new Size(120, 30)
+                };
+
+                // 导入的预设列表
+                var importedPresets = new List<FilterPreset>();
+
+                btnImport.Click += (s, args) =>
+                {
+                    using (OpenFileDialog ofd = new OpenFileDialog())
+                    {
+                        ofd.Title = "导入筛选预设（支持多选）";
+                        ofd.Filter = "筛选预设文件 (*.bsf)|*.bsf|JSON文件 (*.json)|*.json|所有文件 (*.*)|*.*";
+                        ofd.Multiselect = true;
+
+                        if (ofd.ShowDialog() == DialogResult.OK)
+                        {
+                            foreach (string filePath in ofd.FileNames)
+                            {
+                                try
+                                {
+                                    var preset = FilterPreset.LoadFromFile(filePath);
+                                    if (preset != null && preset.Groups != null)
+                                    {
+                                        importedPresets.Add(preset);
+                                        chkPresets.Items.Add($"[导入] {preset.Name}", true);
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                };
+
+                // 全选按钮
+                var btnSelectAll = new Button
+                {
+                    Text = "全选",
+                    Location = new Point(140, 290),
+                    Size = new Size(60, 30)
+                };
+                btnSelectAll.Click += (s, args) =>
+                {
+                    for (int i = 0; i < chkPresets.Items.Count; i++)
+                    {
+                        chkPresets.SetItemChecked(i, true);
+                    }
+                };
+
+                // 反选按钮
+                var btnSelectInverse = new Button
+                {
+                    Text = "反选",
+                    Location = new Point(210, 290),
+                    Size = new Size(60, 30)
+                };
+                btnSelectInverse.Click += (s, args) =>
+                {
+                    for (int i = 0; i < chkPresets.Items.Count; i++)
+                    {
+                        chkPresets.SetItemChecked(i, !chkPresets.GetItemChecked(i));
+                    }
+                };
+
+                // 输出目录选择
+                var lblOutput = new Label
+                {
+                    Text = "输出目录：",
+                    Location = new Point(10, 330),
+                    Size = new Size(80, 20)
+                };
+
+                var txtOutputDir = new TextBox
+                {
+                    Location = new Point(90, 330),
+                    Size = new Size(300, 25),
+                    Text = Path.Combine(Application.StartupPath, "playlists")
+                };
+
+                var btnBrowse = new Button
+                {
+                    Text = "浏览...",
+                    Location = new Point(400, 328),
+                    Size = new Size(80, 28)
+                };
+
+                btnBrowse.Click += (s, args) =>
+                {
+                    using (var fbd = new FolderBrowserDialog())
+                    {
+                        fbd.Description = "选择歌单输出目录";
+                        fbd.ShowNewFolderButton = true;
+                        if (fbd.ShowDialog() == DialogResult.OK)
+                        {
+                            txtOutputDir.Text = fbd.SelectedPath;
+                        }
+                    }
+                };
+
+                // 开始导出按钮
+                var btnStart = new Button
+                {
+                    Text = "开始导出",
+                    Location = new Point(130, 380),
+                    Size = new Size(120, 40),
+                    BackColor = Color.FromArgb(46, 139, 87),
+                    ForeColor = Color.White,
+                    DialogResult = DialogResult.OK
+                };
+
+                // 取消按钮
+                var btnCancel = new Button
+                {
+                    Text = "取消",
+                    Location = new Point(270, 380),
+                    Size = new Size(100, 40),
+                    DialogResult = DialogResult.Cancel
+                };
+
+                batchForm.Controls.Add(lblTip);
+                batchForm.Controls.Add(lblPresets);
+                batchForm.Controls.Add(chkPresets);
+                batchForm.Controls.Add(btnImport);
+                batchForm.Controls.Add(btnSelectAll);
+                batchForm.Controls.Add(btnSelectInverse);
+                batchForm.Controls.Add(lblOutput);
+                batchForm.Controls.Add(txtOutputDir);
+                batchForm.Controls.Add(btnBrowse);
+                batchForm.Controls.Add(btnStart);
+                batchForm.Controls.Add(btnCancel);
+
+                if (batchForm.ShowDialog() == DialogResult.OK)
+                {
+                    // 获取选中的预设
+                    var selectedPresets = new List<FilterPreset>();
+                    for (int i = 0; i < chkPresets.Items.Count; i++)
+                    {
+                        if (chkPresets.GetItemChecked(i))
+                        {
+                            if (i < availablePresets.Count)
+                            {
+                                selectedPresets.Add(availablePresets[i]);
+                            }
+                            else
+                            {
+                                int importedIndex = i - availablePresets.Count;
+                                if (importedIndex < importedPresets.Count)
+                                {
+                                    selectedPresets.Add(importedPresets[importedIndex]);
+                                }
+                            }
+                        }
+                    }
+
+                    if (selectedPresets.Count == 0)
+                    {
+                        MessageBox.Show("请至少选择一个预设！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return;
+                    }
+
+                    // 开始批处理
+                    await BatchExportPresets(selectedPresets, txtOutputDir.Text);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 批量导出预设到歌单
+        /// </summary>
+        private async Task BatchExportPresets(List<FilterPreset> presets, string outputDir)
+        {
+            if (!Directory.Exists(outputDir))
+                Directory.CreateDirectory(outputDir);
+
+            int successCount = 0;
+            int failCount = 0;
+            int zeroResultCount = 0;
+
+            BSIMMActionText.Text = "批处理导出中...";
+            btnBatchOutput.Enabled = false;
+
+            foreach (var preset in presets)
+            {
+                try
+                {
+                    BSIMMStatusText.Text = $"正在处理: {preset.Name}";
+
+                    // 执行搜索获取所有结果
+                    var maps = await FetchAllMapsForPreset(preset);
+
+                    if (maps.Count == 0)
+                    {
+                        debugLog($"批处理 - {preset.Name}: 无结果");
+                        zeroResultCount++;
+                        continue;
+                    }
+
+                    // 提取封面文字
+                    string coverText = ExtractCoverTextFromPresetName(preset.Name);
+
+                    // 导出到歌单（静默模式）
+                    string filePath = Path.Combine(outputDir, $"{SanitizeFileName(preset.Name)}.bplist");
+                    bool success = ExportMapsToPlaylistInternal(maps, filePath, preset.Name, coverText, silent: true);
+
+                    if (success)
+                    {
+                        debugLog($"批处理成功 - {preset.Name}: {maps.Count} 首歌曲");
+                        successCount++;
+                    }
+                    else
+                    {
+                        failCount++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    debugLog($"批处理失败 - {preset.Name}: {ex.Message}");
+                    failCount++;
+                }
+            }
+
+            btnBatchOutput.Enabled = true;
+            BSIMMActionText.Text = $"批处理完成: 成功 {successCount}, 失败 {failCount}, 无结果 {zeroResultCount}";
+
+            // 显示结果
+            string message = $"批处理导出完成\n\n成功: {successCount}\n失败: {failCount}\n无结果: {zeroResultCount}\n\n输出目录: {outputDir}";
+            MessageBox.Show(message, "批处理结果", MessageBoxButtons.OK,
+                successCount > 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+
+        /// <summary>
+        /// 获取预设对应的所有谱面（异步）
+        /// </summary>
+        private async Task<List<BeatSaverMap>> FetchAllMapsForPreset(FilterPreset preset)
+        {
+            var allMaps = new List<BeatSaverMap>();
+
+            try
+            {
+                // 检查是否需要本地缓存
+                if (RequiresLocalCache(preset))
+                {
+                    // 使用本地缓存
+                    if (localCacheManager == null)
+                        localCacheManager = new LocalCacheManager();
+
+                    if (!localCacheManager.IsCacheAvailable)
+                    {
+                        throw new Exception("需要本地缓存但未下载");
+                    }
+
+                    allMaps = await Task.Run(() =>
+                    {
+                        var progress = new Progress<int>(percent =>
+                        {
+                            this.BeginInvoke(() =>
+                            {
+                                BSIMMProgress.ProgressBar.Value = percent;
+                            });
+                        });
+                        return localCacheManager.ParallelFilterMaps(preset, progress);
+                    });
+                }
+                else
+                {
+                    // 使用API搜索
+                    var filter = BuildSearchFilterFromPreset(preset);
+                    int page = 0;
+                    int maxPages = 100; // 限制最大页数防止无限循环
+
+                    while (page < maxPages)
+                    {
+                        var response = await beatSaverClient.SearchMapsAsync(filter, page);
+                        if (response?.Maps == null || response.Maps.Count == 0)
+                            break;
+
+                        allMaps.AddRange(response.Maps);
+
+                        // 检查是否还有下一页
+                        int totalPages = 0;
+                        if (response.Info != null)
+                            totalPages = response.Info.Pages;
+                        else if (response.Metadata != null)
+                            totalPages = (response.Metadata.Total + response.Metadata.PageSize - 1) / response.Metadata.PageSize;
+
+                        if (page >= totalPages - 1)
+                            break;
+
+                        page++;
+                        await Task.Delay(150); // 避免请求过快
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                debugLog($"FetchAllMapsForPreset失败: {ex.Message}");
+                throw;
+            }
+
+            return allMaps;
+        }
+
+        /// <summary>
+        /// 从预设名称中提取【】内的文字作为封面文字
+        /// </summary>
+        private string ExtractCoverTextFromPresetName(string presetName)
+        {
+            if (string.IsNullOrEmpty(presetName))
+                return null;
+
+            int start = presetName.IndexOf('【');
+            int end = presetName.IndexOf('】');
+
+            if (start >= 0 && end > start)
+            {
+                return presetName.Substring(start + 1, end - start - 1);
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// 异步获取所有页面结果并导出到歌单
         /// </summary>
         private async Task ExportAllPagesToPlaylistAsync()
         {
+            // 尝试从当前预设名称中提取封面文字
+            string coverText = ExtractCoverTextFromPresetName(currentFilterPreset?.Name);
+
             // OR 模式下，结果已经全部缓存
             if (isOrModeSearch && allOrSearchResults.Count > 0)
             {
@@ -3005,7 +3395,7 @@ namespace BeatSaberIndependentMapsManager
 
                 if (result == DialogResult.Yes)
                 {
-                    ExportMapsToPlaylist(allOrSearchResults);
+                    ExportMapsToPlaylist(allOrSearchResults, null, coverText);
                 }
                 return;
             }
@@ -3013,7 +3403,7 @@ namespace BeatSaberIndependentMapsManager
             // 如果只有一页，直接导出当前结果
             if (totalPages <= 1)
             {
-                ExportMapsToPlaylist(currentSearchResults);
+                ExportMapsToPlaylist(currentSearchResults, null, coverText);
                 return;
             }
 
@@ -3060,7 +3450,7 @@ namespace BeatSaberIndependentMapsManager
                 debugLog($"导出全部：成功获取 {allMaps.Count} 首歌曲（共 {totalPages} 页）");
 
                 // 导出所有结果
-                ExportMapsToPlaylist(allMaps);
+                ExportMapsToPlaylist(allMaps, null, coverText);
             }
             catch (Exception ex)
             {
@@ -3094,53 +3484,98 @@ namespace BeatSaberIndependentMapsManager
         /// <summary>
         /// 将谱面列表导出为歌单
         /// </summary>
-        private void ExportMapsToPlaylist(List<BeatSaverMap> maps)
+        private void ExportMapsToPlaylist(List<BeatSaverMap> maps, string playlistName = null, string coverText = null)
         {
-            using (var saveDialog = new SaveFileDialog())
+            // 如果没有指定歌单名称，弹出保存对话框
+            if (string.IsNullOrEmpty(playlistName))
             {
-                saveDialog.Filter = "Beat Saber Playlist (*.bplist)|*.bplist";
-                saveDialog.Title = "保存歌单";
-                saveDialog.FileName = "新歌单";
-
-                if (saveDialog.ShowDialog() == DialogResult.OK)
+                using (var saveDialog = new SaveFileDialog())
                 {
-                    try
+                    saveDialog.Filter = "Beat Saber Playlist (*.bplist)|*.bplist";
+                    saveDialog.Title = "保存歌单";
+                    saveDialog.FileName = "新歌单";
+
+                    if (saveDialog.ShowDialog() == DialogResult.OK)
                     {
-                        string playlistName = System.IO.Path.GetFileNameWithoutExtension(saveDialog.FileName);
-
-                        // 生成带有文件名的封面图片
-                        Image coverImage = GeneratePlaylistCover(playlistName);
-                        string imgBytes = "data:image/jpg;base64," + ImageToBase64(coverImage, ImageFormat.Jpeg);
-
-                        // 使用与曲包导出一致的格式
-                        string author = Environment.UserName + "使用BSIMM@万毒不侵 生成";
-                        string description = "本歌单由" + Environment.UserName + "使用BSIMM生成\r\nBSIMM由万毒不侵开发，开源且免费，如果你是购买的请要求商家退款\r\n项目地址：https://github.com/cyjyyd/Beat-Saber-Independent-Maps-Manager";
-
-                        JsonSerializerSettings settings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
-                        PlayList playlist = new PlayList(playlistName, author, description, imgBytes);
-
-                        foreach (var map in maps)
-                        {
-                            string hash = map.GetHash();
-                            if (!string.IsNullOrEmpty(hash))
-                            {
-                                playlist.AddSongHash(hash);
-                            }
-                        }
-
-                        string json = JsonConvert.SerializeObject(playlist, Formatting.None, settings);
-                        File.WriteAllText(saveDialog.FileName, json);
-
-                        MessageBox.Show($"歌单已保存！\n共 {maps.Count} 首歌曲", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        debugLog($"歌单已导出: {saveDialog.FileName}");
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"导出失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        debugLog($"歌单导出失败: {ex.Message}");
+                        string name = System.IO.Path.GetFileNameWithoutExtension(saveDialog.FileName);
+                        ExportMapsToPlaylistInternal(maps, saveDialog.FileName, name, coverText);
                     }
                 }
             }
+            else
+            {
+                // 使用指定的歌单名称，保存到预设目录
+                string presetDir = Path.Combine(Application.StartupPath, "playlists");
+                if (!Directory.Exists(presetDir))
+                    Directory.CreateDirectory(presetDir);
+
+                string filePath = Path.Combine(presetDir, $"{SanitizeFileName(playlistName)}.bplist");
+                ExportMapsToPlaylistInternal(maps, filePath, playlistName, coverText);
+            }
+        }
+
+        /// <summary>
+        /// 内部方法：将谱面列表导出为歌单
+        /// </summary>
+        private bool ExportMapsToPlaylistInternal(List<BeatSaverMap> maps, string filePath, string playlistName, string coverText = null, bool silent = false)
+        {
+            try
+            {
+                // 如果没有指定封面文字，使用歌单名称
+                if (string.IsNullOrEmpty(coverText))
+                    coverText = playlistName;
+
+                // 生成带有文件名的封面图片
+                Image coverImage = GeneratePlaylistCover(coverText);
+                string imgBytes = "data:image/jpg;base64," + ImageToBase64(coverImage, ImageFormat.Jpeg);
+
+                // 使用与曲包导出一致的格式
+                string author = Environment.UserName + "使用BSIMM@万毒不侵 生成";
+                string description = "本歌单由" + Environment.UserName + "使用BSIMM生成\r\nBSIMM由万毒不侵开发，开源且免费，如果你是购买的请要求商家退款\r\n项目地址：https://github.com/cyjyyd/Beat-Saber-Independent-Maps-Manager";
+
+                JsonSerializerSettings settings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
+                PlayList playlist = new PlayList(playlistName, author, description, imgBytes);
+
+                foreach (var map in maps)
+                {
+                    string hash = map.GetHash();
+                    if (!string.IsNullOrEmpty(hash))
+                    {
+                        playlist.AddSongHash(hash);
+                    }
+                }
+
+                string json = JsonConvert.SerializeObject(playlist, Formatting.None, settings);
+                File.WriteAllText(filePath, json);
+
+                if (!silent)
+                {
+                    MessageBox.Show($"歌单已保存！\n共 {maps.Count} 首歌曲\n保存位置：{filePath}", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                debugLog($"歌单已导出: {filePath}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                if (!silent)
+                {
+                    MessageBox.Show($"导出失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                debugLog($"歌单导出失败: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 清理文件名中的非法字符
+        /// </summary>
+        private string SanitizeFileName(string fileName)
+        {
+            foreach (char c in Path.GetInvalidFileNameChars())
+            {
+                fileName = fileName.Replace(c, '_');
+            }
+            return fileName;
         }
 
         /// <summary>
@@ -3154,14 +3589,23 @@ namespace BeatSaberIndependentMapsManager
 
             using (Graphics g = Graphics.FromImage(bitmap))
             {
-                // 背景渐变
-                using (System.Drawing.Drawing2D.LinearGradientBrush brush = new System.Drawing.Drawing2D.LinearGradientBrush(
-                    new Rectangle(0, 0, width, height),
-                    Color.FromArgb(64, 64, 128),
-                    Color.FromArgb(32, 32, 64),
-                    System.Drawing.Drawing2D.LinearGradientMode.Vertical))
+                // 使用默认背景图片
+                try
                 {
-                    g.FillRectangle(brush, 0, 0, width, height);
+                    Image bgImage = Resources.默认;
+                    g.DrawImage(bgImage, new Rectangle(0, 0, width, height));
+                }
+                catch
+                {
+                    // 如果加载失败，使用渐变背景
+                    using (System.Drawing.Drawing2D.LinearGradientBrush brush = new System.Drawing.Drawing2D.LinearGradientBrush(
+                        new Rectangle(0, 0, width, height),
+                        Color.FromArgb(64, 64, 128),
+                        Color.FromArgb(32, 32, 64),
+                        System.Drawing.Drawing2D.LinearGradientMode.Vertical))
+                    {
+                        g.FillRectangle(brush, 0, 0, width, height);
+                    }
                 }
 
                 // 绘制歌单名称
@@ -3186,7 +3630,7 @@ namespace BeatSaberIndependentMapsManager
                         Alignment = StringAlignment.Center,
                         LineAlignment = StringAlignment.Far
                     };
-                    g.DrawString("BSIMM", smallFont, Brushes.Gray, new RectangleF(0, height - 30, width, 25), format);
+                    g.DrawString("BSIMM自动生成@万毒不侵", smallFont, Brushes.Gray, new RectangleF(0, height - 30, width, 25), format);
                 }
             }
 

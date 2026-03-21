@@ -20,7 +20,15 @@ namespace BeatSaberIndependentMapsManager
             // Read simple properties
             if (obj.TryGetValue("Type", out var typeToken))
             {
-                condition.Type = typeToken.ToObject<FilterConditionType>(serializer);
+                // Try to deserialize as integer first (legacy format), then as string name
+                if (typeToken.Type == JTokenType.Integer)
+                {
+                    condition.Type = (FilterConditionType)typeToken.Value<int>();
+                }
+                else
+                {
+                    condition.Type = typeToken.ToObject<FilterConditionType>(serializer);
+                }
             }
 
             if (obj.TryGetValue("CustomName", out var customNameToken))
@@ -96,6 +104,15 @@ namespace BeatSaberIndependentMapsManager
                             return new ResultLimitValue(valueToken.Value<int>(), ResultSortOption.Newest);
                         }
                         return new ResultLimitValue(100, ResultSortOption.Newest);
+
+                    case FilterValueType.Range:
+                        // Try to deserialize as RangeValue object
+                        if (valueToken.Type == JTokenType.Object)
+                        {
+                            return valueToken.ToObject<RangeValue>(serializer);
+                        }
+                        // Handle null or empty
+                        return new RangeValue();
 
                     default:
                         return valueToken.ToObject<object>(serializer);
@@ -268,10 +285,12 @@ namespace BeatSaberIndependentMapsManager
         {
             try
             {
-                return JsonConvert.DeserializeObject<FilterPreset>(json, SerializerSettings);
+                var preset = JsonConvert.DeserializeObject<FilterPreset>(json, SerializerSettings);
+                return preset;
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"Error deserializing preset: {ex.Message}");
                 return null;
             }
         }
@@ -293,10 +312,16 @@ namespace BeatSaberIndependentMapsManager
             try
             {
                 var json = File.ReadAllText(filePath);
-                return FromJson(json);
+                var preset = FromJson(json);
+                if (preset == null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to deserialize preset from {filePath}");
+                }
+                return preset;
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"Error loading preset from {filePath}: {ex.Message}");
                 return null;
             }
         }

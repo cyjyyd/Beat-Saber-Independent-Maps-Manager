@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace BeatSaberIndependentMapsManager
@@ -354,6 +355,224 @@ namespace BeatSaberIndependentMapsManager
                         panel.Controls.Add(sortCombo);
                         panel.Controls.Add(numInput);
                         valueControl = panel;
+                        break;
+
+                    case FilterValueType.Range:
+                        // Create a panel with two numeric inputs for min-max range
+                        var rangePanel = new Panel
+                        {
+                            Width = 200,
+                            Height = 28,
+                            Dock = DockStyle.Fill,
+                            Margin = new Padding(2)
+                        };
+
+                        // Use TextBox instead of NumericUpDown to allow empty/placeholder display
+                        var minTextBox = new TextBox
+                        {
+                            Width = 70,
+                            Dock = DockStyle.Left,
+                            Text = "",
+                            TextAlign = HorizontalAlignment.Center,
+                            PlaceholderText = "最小"
+                        };
+
+                        var separatorLabel = new Label
+                        {
+                            Width = 20,
+                            Dock = DockStyle.Left,
+                            Text = "—",
+                            TextAlign = ContentAlignment.MiddleCenter
+                        };
+
+                        var maxTextBox = new TextBox
+                        {
+                            Width = 70,
+                            Dock = DockStyle.Left,
+                            Text = "",
+                            TextAlign = HorizontalAlignment.Center,
+                            PlaceholderText = "最大"
+                        };
+
+                        // Initialize from existing value
+                        if (condition.Value is RangeValue existingRange)
+                        {
+                            if (existingRange.HasMin)
+                                minTextBox.Text = existingRange.MinRaw.ToString();
+                            if (existingRange.HasMax)
+                                maxTextBox.Text = existingRange.MaxRaw.ToString();
+                        }
+
+                        void UpdateRangeValueFromText()
+                        {
+                            double? minVal = null;
+                            double? maxVal = null;
+
+                            if (!string.IsNullOrWhiteSpace(minTextBox.Text) && double.TryParse(minTextBox.Text, out double minParsed))
+                                minVal = minParsed;
+
+                            if (!string.IsNullOrWhiteSpace(maxTextBox.Text) && double.TryParse(maxTextBox.Text, out double maxParsed))
+                                maxVal = maxParsed;
+
+                            condition.Value = new RangeValue(minVal, maxVal);
+                            ConditionChanged?.Invoke(this, condition);
+                        }
+
+                        minTextBox.TextChanged += (s, e) => UpdateRangeValueFromText();
+                        maxTextBox.TextChanged += (s, e) => UpdateRangeValueFromText();
+
+                        // Allow only numeric input
+                        void ValidateNumericInput(TextBox textBox, KeyPressEventArgs e)
+                        {
+                            if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar) && e.KeyChar != '.' && e.KeyChar != '-')
+                                e.Handled = true;
+                        }
+
+                        minTextBox.KeyPress += (s, e) => ValidateNumericInput(minTextBox, e);
+                        maxTextBox.KeyPress += (s, e) => ValidateNumericInput(maxTextBox, e);
+
+                        rangePanel.Controls.Add(maxTextBox);
+                        rangePanel.Controls.Add(separatorLabel);
+                        rangePanel.Controls.Add(minTextBox);
+                        valueControl = rangePanel;
+                        break;
+
+                    case FilterValueType.SearchQuery:
+                        // Create a panel with field type checked list and text input
+                        var searchPanel = new Panel
+                        {
+                            Width = 400,
+                            Height = 28,
+                            Dock = DockStyle.Fill,
+                            Margin = new Padding(2)
+                        };
+
+                        // Use a dropdown button with checkboxes for multi-select
+                        var fieldButton = new Button
+                        {
+                            Width = 90,
+                            Dock = DockStyle.Left,
+                            Text = "全部字段",
+                            TextAlign = ContentAlignment.MiddleLeft,
+                            Margin = new Padding(0, 0, 2, 0)
+                        };
+
+                        var searchTextBox = new TextBox
+                        {
+                            Width = 300,
+                            Dock = DockStyle.Right,
+                            Text = "",
+                            PlaceholderText = "输入关键词..."
+                        };
+
+                        // Track selected field types
+                        var selectedFields = new Dictionary<string, SearchFieldType>
+                        {
+                            { "歌名", SearchFieldType.SongName },
+                            { "艺术家", SearchFieldType.Artist },
+                            { "谱师", SearchFieldType.Mapper },
+                            { "标题", SearchFieldType.MapName },
+                            { "简介", SearchFieldType.Description },
+                            { "上传者", SearchFieldType.Uploader }
+                        };
+
+                        // Initialize from existing value
+                        SearchFieldType currentFieldTypes = SearchFieldType.All;
+                        if (condition.Value is SearchQueryValue existingQuery)
+                        {
+                            searchTextBox.Text = existingQuery.Query;
+                            currentFieldTypes = existingQuery.FieldTypes;
+                        }
+                        else if (condition.Value != null)
+                        {
+                            // Backward compatibility: old string value
+                            searchTextBox.Text = condition.Value.ToString();
+                        }
+
+                        // Update button text based on selection
+                        void UpdateFieldButtonText()
+                        {
+                            if (currentFieldTypes == SearchFieldType.All || currentFieldTypes == (SearchFieldType.SongName | SearchFieldType.Artist | SearchFieldType.Mapper | SearchFieldType.MapName | SearchFieldType.Description | SearchFieldType.Uploader))
+                            {
+                                fieldButton.Text = "全部字段";
+                            }
+                            else if (currentFieldTypes == SearchFieldType.None)
+                            {
+                                fieldButton.Text = "选择字段";
+                            }
+                            else
+                            {
+                                var names = new List<string>();
+                                if (currentFieldTypes.HasFlag(SearchFieldType.SongName)) names.Add("歌名");
+                                if (currentFieldTypes.HasFlag(SearchFieldType.Artist)) names.Add("艺术家");
+                                if (currentFieldTypes.HasFlag(SearchFieldType.Mapper)) names.Add("谱师");
+                                if (currentFieldTypes.HasFlag(SearchFieldType.MapName)) names.Add("标题");
+                                if (currentFieldTypes.HasFlag(SearchFieldType.Description)) names.Add("简介");
+                                if (currentFieldTypes.HasFlag(SearchFieldType.Uploader)) names.Add("上传者");
+                                fieldButton.Text = string.Join("/", names.Take(3)) + (names.Count > 3 ? "..." : "");
+                            }
+                        }
+
+                        UpdateFieldButtonText();
+
+                        // Create context menu for field selection
+                        var fieldMenu = new ContextMenuStrip();
+                        var menuItems = new List<ToolStripMenuItem>();
+
+                        foreach (var kvp in selectedFields)
+                        {
+                            var item = new ToolStripMenuItem(kvp.Key);
+                            item.Checked = currentFieldTypes.HasFlag(kvp.Value);
+                            item.CheckOnClick = true;
+                            item.CheckedChanged += (s, e) =>
+                            {
+                                if (item.Checked)
+                                    currentFieldTypes |= kvp.Value;
+                                else
+                                    currentFieldTypes &= ~kvp.Value;
+
+                                UpdateFieldButtonText();
+                                UpdateSearchQueryValue();
+                            };
+                            menuItems.Add(item);
+                            fieldMenu.Items.Add(item);
+                        }
+
+                        // Add "全选" and "清除" buttons
+                        fieldMenu.Items.Add(new ToolStripSeparator());
+                        var selectAllItem = new ToolStripMenuItem("全选");
+                        selectAllItem.Click += (s, e) =>
+                        {
+                            currentFieldTypes = SearchFieldType.All;
+                            foreach (ToolStripMenuItem mi in menuItems) mi.Checked = true;
+                            UpdateFieldButtonText();
+                            UpdateSearchQueryValue();
+                        };
+                        fieldMenu.Items.Add(selectAllItem);
+
+                        var clearItem = new ToolStripMenuItem("清除");
+                        clearItem.Click += (s, e) =>
+                        {
+                            currentFieldTypes = SearchFieldType.None;
+                            foreach (ToolStripMenuItem mi in menuItems) mi.Checked = false;
+                            UpdateFieldButtonText();
+                            UpdateSearchQueryValue();
+                        };
+                        fieldMenu.Items.Add(clearItem);
+
+                        fieldButton.Click += (s, e) => fieldMenu.Show(fieldButton, 0, fieldButton.Height);
+
+                        void UpdateSearchQueryValue()
+                        {
+                            condition.Value = new SearchQueryValue(searchTextBox.Text, currentFieldTypes);
+                            ConditionChanged?.Invoke(this, condition);
+                        }
+
+                        searchTextBox.TextChanged += (s, e) => UpdateSearchQueryValue();
+
+                        searchPanel.Controls.Add(searchTextBox);
+                        searchPanel.Controls.Add(fieldButton);
+                        valueControl = searchPanel;
                         break;
                 }
             }

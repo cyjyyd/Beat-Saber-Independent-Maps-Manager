@@ -101,7 +101,7 @@ namespace BeatSaberIndependentMapsManager
             lbldownloadFolder = new Label();
             textBox1 = new TextBox();
             lblbplistTip = new Label();
-            PlaybackTimer = new System.Windows.Forms.Timer(components);
+            PlaybackTimer = new Timer(components);
             btnSetting = new Button();
             comboBoxPlatform = new ComboBox();
             lblPlatform = new Label();
@@ -112,6 +112,7 @@ namespace BeatSaberIndependentMapsManager
             pictureBox1 = new PictureBox();
             musicPackCoverDialog = new OpenFileDialog();
             savebplistDialog = new FolderBrowserDialog();
+            btnBatchOutput = new Button();
             BSIMMStats.SuspendLayout();
             tabMusicPackContorl.SuspendLayout();
             tabSongFolder.SuspendLayout();
@@ -666,6 +667,7 @@ namespace BeatSaberIndependentMapsManager
             // 
             // pnlFilterButtons
             // 
+            pnlFilterButtons.Controls.Add(btnBatchOutput);
             pnlFilterButtons.Controls.Add(btnNextPage);
             pnlFilterButtons.Controls.Add(lblPageInfo);
             pnlFilterButtons.Controls.Add(btnPrevPage);
@@ -694,7 +696,7 @@ namespace BeatSaberIndependentMapsManager
             // 
             lblPageInfo.Anchor = AnchorStyles.None;
             lblPageInfo.AutoSize = true;
-            lblPageInfo.Location = new System.Drawing.Point(773, 12);
+            lblPageInfo.Location = new System.Drawing.Point(793, 12);
             lblPageInfo.Name = "lblPageInfo";
             lblPageInfo.Size = new System.Drawing.Size(86, 24);
             lblPageInfo.TabIndex = 5;
@@ -704,7 +706,7 @@ namespace BeatSaberIndependentMapsManager
             // btnPrevPage
             // 
             btnPrevPage.Anchor = AnchorStyles.Top;
-            btnPrevPage.Location = new System.Drawing.Point(587, 0);
+            btnPrevPage.Location = new System.Drawing.Point(618, 0);
             btnPrevPage.Name = "btnPrevPage";
             btnPrevPage.Size = new System.Drawing.Size(100, 47);
             btnPrevPage.TabIndex = 4;
@@ -932,6 +934,16 @@ namespace BeatSaberIndependentMapsManager
             // 
             savebplistDialog.Description = "请选择bplist保存路径";
             // 
+            // btnBatchOutput
+            // 
+            btnBatchOutput.Anchor = AnchorStyles.Top;
+            btnBatchOutput.Location = new System.Drawing.Point(503, 1);
+            btnBatchOutput.Name = "btnBatchOutput";
+            btnBatchOutput.Size = new System.Drawing.Size(100, 47);
+            btnBatchOutput.TabIndex = 7;
+            btnBatchOutput.Text = "批处理";
+            btnBatchOutput.UseVisualStyleBackColor = true;
+            // 
             // MainForm
             // 
             AllowDrop = true;
@@ -1059,5 +1071,6 @@ namespace BeatSaberIndependentMapsManager
         private System.Windows.Forms.Button btnPrevPage;
         private System.Windows.Forms.Button btnNextPage;
         private System.Windows.Forms.Label lblPageInfo;
+        private Button btnBatchOutput;
     }
 }

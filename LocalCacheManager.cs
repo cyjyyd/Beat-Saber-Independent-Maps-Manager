@@ -519,17 +519,62 @@ namespace BeatSaberIndependentMapsManager
 
             try
             {
+                // Handle range-type conditions
+                if (FilterConditionMetadata.IsRangeType(condition.Type))
+                {
+                    return MatchesRangeCondition(map, condition);
+                }
+
                 switch (condition.Type)
                 {
                     // API-supported filters (also applied locally for consistency)
                     case FilterConditionType.Query:
-                        var query = condition.Value?.ToString()?.ToLower() ?? "";
-                        if (string.IsNullOrWhiteSpace(query)) return true;
-                        return (map.Name?.ToLower().Contains(query) ?? false) ||
-                               (map.Description?.ToLower().Contains(query) ?? false) ||
-                               (map.Metadata?.SongName?.ToLower().Contains(query) ?? false) ||
-                               (map.Metadata?.SongAuthorName?.ToLower().Contains(query) ?? false) ||
-                               (map.Metadata?.LevelAuthorName?.ToLower().Contains(query) ?? false);
+                        {
+                            string query;
+                            SearchFieldType fieldTypes;
+
+                            // Handle SearchQueryValue with field types (multi-select)
+                            if (condition.Value is SearchQueryValue queryValue)
+                            {
+                                query = queryValue.Query?.ToLower() ?? "";
+                                fieldTypes = queryValue.FieldTypes;
+                            }
+                            else
+                            {
+                                // Backward compatibility: treat as string with All field type
+                                query = condition.Value?.ToString()?.ToLower() ?? "";
+                                fieldTypes = SearchFieldType.All;
+                            }
+
+                            if (string.IsNullOrWhiteSpace(query)) return true;
+
+                            // If no field types selected, search all
+                            if (fieldTypes == SearchFieldType.None)
+                                fieldTypes = SearchFieldType.All;
+
+                            // Check each selected field type
+                            bool matches = false;
+
+                            if (fieldTypes.HasFlag(SearchFieldType.SongName))
+                                matches |= map.Metadata?.SongName?.ToLower().Contains(query) ?? false;
+
+                            if (fieldTypes.HasFlag(SearchFieldType.Artist))
+                                matches |= map.Metadata?.SongAuthorName?.ToLower().Contains(query) ?? false;
+
+                            if (fieldTypes.HasFlag(SearchFieldType.Mapper))
+                                matches |= map.Metadata?.LevelAuthorName?.ToLower().Contains(query) ?? false;
+
+                            if (fieldTypes.HasFlag(SearchFieldType.MapName))
+                                matches |= map.Name?.ToLower().Contains(query) ?? false;
+
+                            if (fieldTypes.HasFlag(SearchFieldType.Description))
+                                matches |= map.Description?.ToLower().Contains(query) ?? false;
+
+                            if (fieldTypes.HasFlag(SearchFieldType.Uploader))
+                                matches |= map.Uploader?.Name?.ToLower().Contains(query) ?? false;
+
+                            return matches;
+                        }
 
                     case FilterConditionType.MinBpm:
                         var minBpm = Convert.ToDouble(condition.Value);
@@ -663,17 +708,23 @@ namespace BeatSaberIndependentMapsManager
                         return map.Stats?.Downvotes <= maxDownvotes;
 
                     case FilterConditionType.MinScore:
-                        var minScore = Convert.ToDouble(condition.Value);
+                        var minScore = Convert.ToDouble(condition.Value) / 100.0;  // 用户输入0-100，API返回0-1
                         return map.Stats?.Score >= minScore;
 
                     case FilterConditionType.MaxScore:
-                        var maxScore = Convert.ToDouble(condition.Value);
+                        var maxScore = Convert.ToDouble(condition.Value) / 100.0;  // 用户输入0-100，API返回0-1
                         return map.Stats?.Score <= maxScore;
 
                     case FilterConditionType.Tags:
                         var tagQuery = condition.Value?.ToString()?.ToLower() ?? "";
                         if (string.IsNullOrWhiteSpace(tagQuery)) return true;
                         return map.Tags?.Any(t => t?.ToLower().Contains(tagQuery) ?? false) ?? false;
+
+                    case FilterConditionType.ExcludeTags:
+                        var excludeTagQuery = condition.Value?.ToString()?.ToLower() ?? "";
+                        if (string.IsNullOrWhiteSpace(excludeTagQuery)) return true;
+                        // 排除包含该标签的地图
+                        return !(map.Tags?.Any(t => t?.ToLower().Contains(excludeTagQuery) ?? false) ?? false);
 
                     case FilterConditionType.UploaderName:
                         var uploaderQuery = condition.Value?.ToString()?.ToLower() ?? "";
@@ -709,6 +760,22 @@ namespace BeatSaberIndependentMapsManager
                             var maxRatio = Convert.ToDouble(condition.Value);
                             var ratio = CalculateDownvoteRatio(map);
                             return ratio <= maxRatio;
+                        }
+
+                    case FilterConditionType.MinSageScore:
+                        {
+                            var minSageScore = Convert.ToInt32(condition.Value);
+                            return map.Versions != null && map.Versions.Count > 0 &&
+                                   map.Versions[0].SageScore.HasValue &&
+                                   map.Versions[0].SageScore.Value >= minSageScore;
+                        }
+
+                    case FilterConditionType.MaxSageScore:
+                        {
+                            var maxSageScore = Convert.ToInt32(condition.Value);
+                            return map.Versions != null && map.Versions.Count > 0 &&
+                                   map.Versions[0].SageScore.HasValue &&
+                                   map.Versions[0].SageScore.Value <= maxSageScore;
                         }
 
                     // Diff-specific filters (require checking versions[0].diffs)
@@ -764,6 +831,12 @@ namespace BeatSaberIndependentMapsManager
                         if (string.IsNullOrWhiteSpace(customMod)) return true;
                         return HasCustomMod(map, customMod);
 
+                    case FilterConditionType.ExcludeCustomMod:
+                        var excludeCustomMod = condition.Value?.ToString()?.ToLower() ?? "";
+                        if (string.IsNullOrWhiteSpace(excludeCustomMod)) return true;
+                        // 排除包含该Mod的地图
+                        return !HasCustomMod(map, excludeCustomMod);
+
                     // Upload time filters
                     case FilterConditionType.MinUploadedDate:
                         {
@@ -782,6 +855,79 @@ namespace BeatSaberIndependentMapsManager
                     // ResultLimit is handled separately in ApplyResultLimit method
                     case FilterConditionType.ResultLimit:
                         return true;
+
+                    // Map objects filters (check across all difficulties in versions[0].diffs)
+                    case FilterConditionType.MinObstacles:
+                        var minObstacles = Convert.ToInt32(condition.Value);
+                        return HasDiffWithValue(map, d => d.Obstacles >= minObstacles);
+
+                    case FilterConditionType.MaxObstacles:
+                        var maxObstacles = Convert.ToInt32(condition.Value);
+                        return HasDiffWithValue(map, d => d.Obstacles <= maxObstacles);
+
+                    case FilterConditionType.MinBombsMap:
+                        var minBombsMap = Convert.ToInt32(condition.Value);
+                        return HasDiffWithValue(map, d => d.Bombs >= minBombsMap);
+
+                    case FilterConditionType.MaxBombsMap:
+                        var maxBombsMap = Convert.ToInt32(condition.Value);
+                        return HasDiffWithValue(map, d => d.Bombs <= maxBombsMap);
+
+                    case FilterConditionType.MinNotes:
+                        var minNotes = Convert.ToInt32(condition.Value);
+                        return HasDiffWithValue(map, d => d.Notes >= minNotes);
+
+                    case FilterConditionType.MaxNotes:
+                        var maxNotes = Convert.ToInt32(condition.Value);
+                        return HasDiffWithValue(map, d => d.Notes <= maxNotes);
+
+                    case FilterConditionType.MinSeconds:
+                        var minSeconds = Convert.ToDouble(condition.Value);
+                        return HasDiffWithValue(map, d => d.Seconds >= minSeconds);
+
+                    case FilterConditionType.MaxSeconds:
+                        var maxSeconds = Convert.ToDouble(condition.Value);
+                        return HasDiffWithValue(map, d => d.Seconds <= maxSeconds);
+
+                    case FilterConditionType.MinLength:
+                        var minLength = Convert.ToDouble(condition.Value);
+                        return HasDiffWithValue(map, d => d.Length >= minLength);
+
+                    case FilterConditionType.MaxLength:
+                        var maxLength = Convert.ToDouble(condition.Value);
+                        return HasDiffWithValue(map, d => d.Length <= maxLength);
+
+                    case FilterConditionType.MinParityErrors:
+                        var minErrors = Convert.ToInt32(condition.Value);
+                        return HasDiffWithParity(map, p => p.Errors >= minErrors);
+
+                    case FilterConditionType.MaxParityErrors:
+                        var maxErrors = Convert.ToInt32(condition.Value);
+                        return HasDiffWithParity(map, p => p.Errors <= maxErrors);
+
+                    case FilterConditionType.MinParityWarns:
+                        var minWarns = Convert.ToInt32(condition.Value);
+                        return HasDiffWithParity(map, p => p.Warns >= minWarns);
+
+                    case FilterConditionType.MaxParityWarns:
+                        var maxWarns = Convert.ToInt32(condition.Value);
+                        return HasDiffWithParity(map, p => p.Warns <= maxWarns);
+
+                    case FilterConditionType.MinParityResets:
+                        var minResets = Convert.ToInt32(condition.Value);
+                        return HasDiffWithParity(map, p => p.Resets >= minResets);
+
+                    case FilterConditionType.MaxParityResets:
+                        var maxResets = Convert.ToInt32(condition.Value);
+                        return HasDiffWithParity(map, p => p.Resets <= maxResets);
+
+                    case FilterConditionType.MinMaxScore:
+                        var minMaxScore = Convert.ToInt32(condition.Value);
+                        return HasDiffWithMaxScore(map, minMaxScore, null);
+
+                    case FilterConditionType.MaxMaxScore:
+                        var maxMaxScore = Convert.ToInt32(condition.Value);
+                        return HasDiffWithMaxScore(map, null, maxMaxScore);
 
                     default:
                         return true;
@@ -1153,6 +1299,45 @@ namespace BeatSaberIndependentMapsManager
         }
 
         /// <summary>
+        /// Checks if a map has at least one difficulty with parity summary matching the predicate
+        /// </summary>
+        private bool HasDiffWithParity(BeatSaverMap map, Func<BeatSaverParitySummary, bool> predicate)
+        {
+            if (map.Versions != null && map.Versions.Count > 0 && map.Versions[0].Diffs != null)
+            {
+                foreach (var diff in map.Versions[0].Diffs)
+                {
+                    if (diff?.ParitySummary != null && predicate(diff.ParitySummary))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Checks if a map has at least one difficulty with maxScore in the specified range
+        /// </summary>
+        private bool HasDiffWithMaxScore(BeatSaverMap map, int? minScore, int? maxScore)
+        {
+            if (map.Versions == null || map.Versions.Count == 0 || map.Versions[0].Diffs == null)
+                return false;
+
+            foreach (var diff in map.Versions[0].Diffs)
+            {
+                if (diff == null || !diff.MaxScore.HasValue) continue;
+
+                bool matchesMin = minScore == null || diff.MaxScore.Value >= minScore.Value;
+                bool matchesMax = maxScore == null || diff.MaxScore.Value <= maxScore.Value;
+
+                if (matchesMin && matchesMax)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Checks if a map has a specific characteristic
         /// </summary>
         private bool HasCharacteristic(BeatSaverMap map, string characteristic)
@@ -1207,6 +1392,195 @@ namespace BeatSaberIndependentMapsManager
                 {
                     var value = (bool)property.GetValue(diff);
                     if (value) return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Handles range-type filter conditions
+        /// </summary>
+        private bool MatchesRangeCondition(BeatSaverMap map, FilterCondition condition)
+        {
+            if (!(condition.Value is RangeValue rangeVal) || !rangeVal.HasValue)
+                return true;
+
+            switch (condition.Type)
+            {
+                case FilterConditionType.BpmRange:
+                    {
+                        var bpm = map.Metadata?.Bpm ?? 0;
+                        return (!rangeVal.Min.HasValue || bpm >= rangeVal.Min.Value) &&
+                               (!rangeVal.Max.HasValue || bpm <= rangeVal.Max.Value);
+                    }
+
+                case FilterConditionType.NpsRange:
+                    return CheckNpsRangeFromValue(map, rangeVal);
+
+                case FilterConditionType.DurationRange:
+                    {
+                        var duration = map.Metadata?.Duration ?? 0;
+                        return (!rangeVal.Min.HasValue || duration >= rangeVal.Min.Value) &&
+                               (!rangeVal.Max.HasValue || duration <= rangeVal.Max.Value);
+                    }
+
+                case FilterConditionType.SsStarsRange:
+                    return HasDiffWithStars(map, rangeVal.Min, rangeVal.Max);
+
+                case FilterConditionType.BlStarsRange:
+                    return HasDiffWithBlStars(map, rangeVal.Min, rangeVal.Max);
+
+                case FilterConditionType.ScoreRange:
+                    {
+                        var score = map.Stats?.Score ?? 0;
+                        // Score is stored as 0-1 in API, user inputs 0-100
+                        var minScore = rangeVal.Min.HasValue ? rangeVal.Min.Value / 100.0 : (double?)null;
+                        var maxScore = rangeVal.Max.HasValue ? rangeVal.Max.Value / 100.0 : (double?)null;
+                        return (!minScore.HasValue || score >= minScore.Value) &&
+                               (!maxScore.HasValue || score <= maxScore.Value);
+                    }
+
+                case FilterConditionType.PlaysRange:
+                    {
+                        var plays = map.Stats?.Plays ?? 0;
+                        return (!rangeVal.Min.HasValue || plays >= rangeVal.Min.Value) &&
+                               (!rangeVal.Max.HasValue || plays <= rangeVal.Max.Value);
+                    }
+
+                case FilterConditionType.DownloadsRange:
+                    {
+                        var downloads = map.Stats?.Downloads ?? 0;
+                        return (!rangeVal.Min.HasValue || downloads >= rangeVal.Min.Value) &&
+                               (!rangeVal.Max.HasValue || downloads <= rangeVal.Max.Value);
+                    }
+
+                case FilterConditionType.UpvotesRange:
+                    {
+                        var upvotes = map.Stats?.Upvotes ?? 0;
+                        return (!rangeVal.Min.HasValue || upvotes >= rangeVal.Min.Value) &&
+                               (!rangeVal.Max.HasValue || upvotes <= rangeVal.Max.Value);
+                    }
+
+                case FilterConditionType.DownvotesRange:
+                    {
+                        var downvotes = map.Stats?.Downvotes ?? 0;
+                        return (!rangeVal.Min.HasValue || downvotes >= rangeVal.Min.Value) &&
+                               (!rangeVal.Max.HasValue || downvotes <= rangeVal.Max.Value);
+                    }
+
+                case FilterConditionType.UpvoteRatioRange:
+                    {
+                        var ratio = CalculateUpvoteRatio(map);
+                        return (!rangeVal.Min.HasValue || ratio >= rangeVal.Min.Value) &&
+                               (!rangeVal.Max.HasValue || ratio <= rangeVal.Max.Value);
+                    }
+
+                case FilterConditionType.DownvoteRatioRange:
+                    {
+                        var ratio = CalculateDownvoteRatio(map);
+                        return (!rangeVal.Min.HasValue || ratio >= rangeVal.Min.Value) &&
+                               (!rangeVal.Max.HasValue || ratio <= rangeVal.Max.Value);
+                    }
+
+                case FilterConditionType.SageScoreRange:
+                    {
+                        if (map.Versions == null || map.Versions.Count == 0 || !map.Versions[0].SageScore.HasValue)
+                            return false;
+                        var sageScore = map.Versions[0].SageScore.Value;
+                        return (!rangeVal.Min.HasValue || sageScore >= rangeVal.Min.Value) &&
+                               (!rangeVal.Max.HasValue || sageScore <= rangeVal.Max.Value);
+                    }
+
+                case FilterConditionType.NjsRange:
+                    return HasDiffWithValue(map, d =>
+                        (!rangeVal.Min.HasValue || d.Njs >= rangeVal.Min.Value) &&
+                        (!rangeVal.Max.HasValue || d.Njs <= rangeVal.Max.Value));
+
+                case FilterConditionType.BombsRange:
+                    return HasDiffWithValue(map, d =>
+                        (!rangeVal.Min.HasValue || d.Bombs >= rangeVal.Min.Value) &&
+                        (!rangeVal.Max.HasValue || d.Bombs <= rangeVal.Max.Value));
+
+                case FilterConditionType.OffsetRange:
+                    return HasDiffWithValue(map, d =>
+                        (!rangeVal.Min.HasValue || d.Offset >= rangeVal.Min.Value) &&
+                        (!rangeVal.Max.HasValue || d.Offset <= rangeVal.Max.Value));
+
+                case FilterConditionType.EventsRange:
+                    return HasDiffWithValue(map, d =>
+                        (!rangeVal.Min.HasValue || d.Events >= rangeVal.Min.Value) &&
+                        (!rangeVal.Max.HasValue || d.Events <= rangeVal.Max.Value));
+
+                case FilterConditionType.ObstaclesRange:
+                    return HasDiffWithValue(map, d =>
+                        (!rangeVal.Min.HasValue || d.Obstacles >= rangeVal.Min.Value) &&
+                        (!rangeVal.Max.HasValue || d.Obstacles <= rangeVal.Max.Value));
+
+                case FilterConditionType.BombsMapRange:
+                    return HasDiffWithValue(map, d =>
+                        (!rangeVal.Min.HasValue || d.Bombs >= rangeVal.Min.Value) &&
+                        (!rangeVal.Max.HasValue || d.Bombs <= rangeVal.Max.Value));
+
+                case FilterConditionType.NotesRange:
+                    return HasDiffWithValue(map, d =>
+                        (!rangeVal.Min.HasValue || d.Notes >= rangeVal.Min.Value) &&
+                        (!rangeVal.Max.HasValue || d.Notes <= rangeVal.Max.Value));
+
+                case FilterConditionType.SecondsRange:
+                    return HasDiffWithValue(map, d =>
+                        (!rangeVal.Min.HasValue || d.Seconds >= rangeVal.Min.Value) &&
+                        (!rangeVal.Max.HasValue || d.Seconds <= rangeVal.Max.Value));
+
+                case FilterConditionType.LengthRange:
+                    return HasDiffWithValue(map, d =>
+                        (!rangeVal.Min.HasValue || d.Length >= rangeVal.Min.Value) &&
+                        (!rangeVal.Max.HasValue || d.Length <= rangeVal.Max.Value));
+
+                case FilterConditionType.ParityErrorsRange:
+                    return HasDiffWithParity(map, p =>
+                        (!rangeVal.Min.HasValue || p.Errors >= rangeVal.Min.Value) &&
+                        (!rangeVal.Max.HasValue || p.Errors <= rangeVal.Max.Value));
+
+                case FilterConditionType.ParityWarnsRange:
+                    return HasDiffWithParity(map, p =>
+                        (!rangeVal.Min.HasValue || p.Warns >= rangeVal.Min.Value) &&
+                        (!rangeVal.Max.HasValue || p.Warns <= rangeVal.Max.Value));
+
+                case FilterConditionType.ParityResetsRange:
+                    return HasDiffWithParity(map, p =>
+                        (!rangeVal.Min.HasValue || p.Resets >= rangeVal.Min.Value) &&
+                        (!rangeVal.Max.HasValue || p.Resets <= rangeVal.Max.Value));
+
+                case FilterConditionType.MaxScoreRange:
+                    return HasDiffWithMaxScore(map,
+                        rangeVal.Min.HasValue ? (int)rangeVal.Min.Value : (int?)null,
+                        rangeVal.Max.HasValue ? (int)rangeVal.Max.Value : (int?)null);
+
+                default:
+                    return true;
+            }
+        }
+
+        /// <summary>
+        /// Checks NPS range from RangeValue
+        /// </summary>
+        private bool CheckNpsRangeFromValue(BeatSaverMap map, RangeValue rangeVal)
+        {
+            if (!rangeVal.HasValue) return true;
+
+            // Check from Versions[0].Diffs (local cache format)
+            if (map.Versions != null && map.Versions.Count > 0 && map.Versions[0].Diffs != null)
+            {
+                foreach (var diff in map.Versions[0].Diffs)
+                {
+                    if (diff == null || diff.Nps <= 0) continue;
+
+                    bool matchesMin = !rangeVal.Min.HasValue || diff.Nps >= rangeVal.Min.Value;
+                    bool matchesMax = !rangeVal.Max.HasValue || diff.Nps <= rangeVal.Max.Value;
+
+                    if (matchesMin && matchesMax)
+                        return true;
                 }
             }
 

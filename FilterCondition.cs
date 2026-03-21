@@ -113,6 +113,12 @@ namespace BeatSaberIndependentMapsManager
                 case FilterValueType.NumberWithSort:
                     Value = new ResultLimitValue(100, ResultSortOption.Newest);
                     break;
+                case FilterValueType.Range:
+                    Value = new RangeValue();
+                    break;
+                case FilterValueType.SearchQuery:
+                    Value = new SearchQueryValue();
+                    break;
             }
         }
 
@@ -142,6 +148,14 @@ namespace BeatSaberIndependentMapsManager
                     if (Value is ResultLimitValue resultLimit)
                         return resultLimit.Count > 0;
                     return true;
+                case FilterValueType.Range:
+                    if (Value is RangeValue rangeVal)
+                        return rangeVal.HasValue;
+                    return false;
+                case FilterValueType.SearchQuery:
+                    if (Value is SearchQueryValue queryVal)
+                        return queryVal.HasValue;
+                    return false;
                 default:
                     return false;
             }
