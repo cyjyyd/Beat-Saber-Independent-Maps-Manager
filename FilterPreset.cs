@@ -114,6 +114,19 @@ namespace BeatSaberIndependentMapsManager
                         // Handle null or empty
                         return new RangeValue();
 
+                    case FilterValueType.SearchQuery:
+                        // Try to deserialize as SearchQueryValue object
+                        if (valueToken.Type == JTokenType.Object)
+                        {
+                            return valueToken.ToObject<SearchQueryValue>(serializer);
+                        }
+                        // Handle plain string (legacy format)
+                        if (valueToken.Type == JTokenType.String)
+                        {
+                            return new SearchQueryValue(valueToken.ToString(), SearchFieldType.All);
+                        }
+                        return new SearchQueryValue();
+
                     default:
                         return valueToken.ToObject<object>(serializer);
                 }
