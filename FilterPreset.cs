@@ -127,6 +127,19 @@ namespace BeatSaberIndependentMapsManager
                         }
                         return new SearchQueryValue();
 
+                    case FilterValueType.ExcludeMod:
+                        // Try to deserialize as ExcludeModValue object
+                        if (valueToken.Type == JTokenType.Object)
+                        {
+                            return valueToken.ToObject<ExcludeModValue>(serializer);
+                        }
+                        // Handle plain string (legacy format)
+                        if (valueToken.Type == JTokenType.String)
+                        {
+                            return new ExcludeModValue(valueToken.ToString(), false);
+                        }
+                        return new ExcludeModValue();
+
                     default:
                         return valueToken.ToObject<object>(serializer);
                 }

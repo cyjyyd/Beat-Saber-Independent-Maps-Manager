@@ -48,10 +48,11 @@ namespace BeatSaberIndependentMapsManager
     /// <summary>
     /// BeatSaver API 客户端和数据模型
     /// </summary>
-    public class BeatSaverClient
+    public class BeatSaverClient : IDisposable
     {
         private static readonly HttpClient client = new HttpClient();
         private const string BaseUrl = "https://api.beatsaver.com";
+        private static bool _disposed = false;
 
         public BeatSaverClient()
         {
@@ -148,6 +149,23 @@ namespace BeatSaberIndependentMapsManager
             if (filter.Verified == true) sb.Append("verified=true&");
 
             return sb.ToString().TrimEnd('&');
+        }
+
+        /// <summary>
+        /// 释放资源
+        /// </summary>
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                try
+                {
+                    client?.CancelPendingRequests();
+                    client?.Dispose();
+                }
+                catch { }
+                _disposed = true;
+            }
         }
     }
 

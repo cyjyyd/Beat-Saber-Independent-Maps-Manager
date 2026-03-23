@@ -168,7 +168,8 @@ namespace BeatSaberIndependentMapsManager
         Date,           // Date picker
         NumberWithSort, // Number input with sort selection (数量+排序)
         Range,          // Range input (min-max)
-        SearchQuery     // Search query with field type selection (搜索关键词+类型)
+        SearchQuery,    // Search query with field type selection (搜索关键词+类型)
+        ExcludeMod      // Exclude mod with strict mode option (排除mod+严格模式)
     }
 
     /// <summary>
@@ -340,6 +341,32 @@ namespace BeatSaberIndependentMapsManager
     }
 
     /// <summary>
+    /// Represents an exclude mod value with mod name and strict mode option
+    /// </summary>
+    public class ExcludeModValue
+    {
+        public string ModName { get; set; } = "";
+        public bool Strict { get; set; } = false;
+
+        public ExcludeModValue() { }
+
+        public ExcludeModValue(string modName, bool strict = false)
+        {
+            ModName = modName ?? "";
+            Strict = strict;
+        }
+
+        public bool HasValue => !string.IsNullOrWhiteSpace(ModName);
+
+        public override string ToString()
+        {
+            if (string.IsNullOrWhiteSpace(ModName))
+                return "";
+            return Strict ? $"{ModName} (严格)" : ModName;
+        }
+    }
+
+    /// <summary>
     /// Sort options for result limit
     /// </summary>
     public enum ResultSortOption
@@ -448,7 +475,7 @@ namespace BeatSaberIndependentMapsManager
                 // Additional mods
                 { FilterConditionType.Ne, ("Noodle Extensions", FilterValueType.Boolean, null) },
                 { FilterConditionType.CustomMod, ("包含Mod", FilterValueType.Text, null) },
-                { FilterConditionType.ExcludeCustomMod, ("排除Mod", FilterValueType.Text, null) },
+                { FilterConditionType.ExcludeCustomMod, ("排除Mod", FilterValueType.ExcludeMod, null) },
                 // Upload time filters
                 { FilterConditionType.MinUploadedDate, ("上传时间起始", FilterValueType.Date, null) },
                 { FilterConditionType.MaxUploadedDate, ("上传时间截止", FilterValueType.Date, null) },

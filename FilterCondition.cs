@@ -119,6 +119,9 @@ namespace BeatSaberIndependentMapsManager
                 case FilterValueType.SearchQuery:
                     Value = new SearchQueryValue();
                     break;
+                case FilterValueType.ExcludeMod:
+                    Value = new ExcludeModValue();
+                    break;
             }
         }
 
@@ -156,6 +159,11 @@ namespace BeatSaberIndependentMapsManager
                     if (Value is SearchQueryValue queryVal)
                         return queryVal.HasValue;
                     return false;
+                case FilterValueType.ExcludeMod:
+                    if (Value is ExcludeModValue excludeModVal)
+                        return excludeModVal.HasValue;
+                    // Backward compatibility: old string value
+                    return !string.IsNullOrWhiteSpace(Value?.ToString());
                 default:
                     return false;
             }

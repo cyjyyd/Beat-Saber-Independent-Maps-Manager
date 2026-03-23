@@ -65,6 +65,8 @@ namespace BeatSaberIndependentMapsManager
         private FilterBuilderForm filterBuilderForm;
         // 本地缓存管理器
         private LocalCacheManager localCacheManager;
+        // 更新管理器
+        private UpdateManager updateManager;
         #endregion
         #region 动态库引用
         [DllImport("Everything64.dll", CharSet = CharSet.Unicode)]
@@ -79,7 +81,6 @@ namespace BeatSaberIndependentMapsManager
         private static extern void Everything_GetResultFullPathName(UInt32 nIndex, StringBuilder lpString, UInt32 nMaxCount);
         [DllImport("Everything64.dll")]
         private static extern void Everything_SetRequestFlags(UInt32 dwRequestFlags);
-        const string version = "1.0.0";
         const string author = "@万毒不侵";
         CultureInfo cultureInfo = CultureInfo.CurrentCulture;
         #endregion
@@ -92,7 +93,7 @@ namespace BeatSaberIndependentMapsManager
         {
             comboBoxPlatform.SelectedIndex = 0;
             string language = cultureInfo.TwoLetterISOLanguageName;
-            this.Text = "BSIMM-独立曲包管理/编辑器 " + version + " " + author;
+            this.Text = "BSIMM-独立曲包管理/编辑器 " + AppVersion.VersionString + " " + author;
             debugLog("程序日志将自动同步到程序目录：" + Application.StartupPath + "BSIMM-" + DateTime.Now.ToString("yyyy-MM-dd") + ".log");
             if (!Directory.Exists(Application.StartupPath + "assets"))
             {
@@ -102,7 +103,7 @@ namespace BeatSaberIndependentMapsManager
                 Directory.CreateDirectory(Application.StartupPath + "assets\\scripts");
             }
             //双语的适配以后再做
-            Thread update = new Thread(updateDetect);
+            Thread update = new Thread(updateDetect) { IsBackground = true };
             update.Start();
             if (!File.Exists("Everything64.dll"))
             {
@@ -132,12 +133,12 @@ namespace BeatSaberIndependentMapsManager
             }
             if (multiInstanceDetect)
             {
-                Thread detect = new Thread(detectMultiBeatSaberInstance);
+                Thread detect = new Thread(detectMultiBeatSaberInstance) { IsBackground = true };
                 detect.Start();
             }
             else
             {
-                Thread detect = new Thread(detectSingleBeatSaberInstance);
+                Thread detect = new Thread(detectSingleBeatSaberInstance) { IsBackground = true };
                 detect.Start();
             }
             if (config.HashCache)
@@ -152,8 +153,154 @@ namespace BeatSaberIndependentMapsManager
         private void updateDetect()
         {
             debugLog("检查更新中...");
-            //string updateUrl = "";
-            debugLog("检查更新完成");
+
+            try
+            {
+                updateManager = new UpdateManager(config);
+                var updateInfo = updateManager.CheckForUpdateAsync().Result;
+
+                if (updateInfo != null)
+                {
+                    debugLog($"发现新版本: {updateInfo.NewVersion}");
+                    ShowUpdateDialog(updateInfo);
+                }
+                else
+                {
+                    debugLog("当前已是最新版本");
+                }
+            }
+            catch (Exception ex)
+            {
+                debugLog($"检查更新失败: {ex.Message}");
+            }
+
+            // 更新最后检查时间
+            config.LastUpdateCheck = DateTime.Now;
+            config.configUpdate();
+        }
+
+        private void ShowUpdateDialog(UpdateInfo updateInfo)
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action(() => ShowUpdateDialog(updateInfo)));
+                return;
+            }
+
+            // 构建更新提示信息
+            string message = $"发现新版本 {updateInfo.NewVersion}\n\n";
+            message += $"当前版本: {updateInfo.CurrentVersion}\n";
+            message += $"更新大小: {updateInfo.GetFormattedSize()}\n\n";
+
+            if (!string.IsNullOrWhiteSpace(updateInfo.ReleaseNotes))
+            {
+                // 限制 Release Notes 长度
+                string notes = updateInfo.ReleaseNotes;
+                if (notes.Length > 500)
+                    notes = notes.Substring(0, 500) + "...";
+                message += $"更新内容:\n{notes}\n\n";
+            }
+
+            message += "是否立即更新?";
+
+            DialogResult result = MessageBox.Show(
+                message,
+                "发现新版本",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Information,
+                MessageBoxDefaultButton.Button1
+            );
+
+            if (result == DialogResult.Yes)
+            {
+                StartUpdate(updateInfo);
+            }
+            else if (result == DialogResult.Cancel)
+            {
+                // 跳过此版本
+                updateManager.SkipVersion(updateInfo.NewVersion);
+                debugLog($"已跳过版本 {updateInfo.NewVersion}");
+            }
+        }
+
+        private void StartUpdate(UpdateInfo updateInfo)
+        {
+            // 显示进度对话框
+            Form progressForm = new Form
+            {
+                Text = "正在更新",
+                Size = new Size(400, 150),
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                StartPosition = FormStartPosition.CenterParent
+            };
+
+            ProgressBar progressBar = new ProgressBar
+            {
+                Style = ProgressBarStyle.Continuous,
+                Dock = DockStyle.Top,
+                Height = 30
+            };
+
+            Label statusLabel = new Label
+            {
+                Text = "正在下载更新...",
+                Dock = DockStyle.Bottom,
+                Height = 30,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            progressForm.Controls.Add(progressBar);
+            progressForm.Controls.Add(statusLabel);
+
+            // 在后台线程执行更新
+            Task.Run(async () =>
+            {
+                var progress = new Progress<int>(percent =>
+                {
+                    if (progressForm.InvokeRequired)
+                    {
+                        progressForm.Invoke(new Action(() =>
+                        {
+                            progressBar.Value = percent;
+                            statusLabel.Text = $"正在下载更新... {percent}%";
+                        }));
+                    }
+                });
+
+                bool success = await updateManager.DownloadAndApplyUpdateAsync(updateInfo, progress);
+
+                if (success)
+                {
+                    progressForm.Invoke(new Action(() =>
+                    {
+                        progressForm.Close();
+                        MessageBox.Show(
+                            "更新完成，程序将重启。",
+                            "更新完成",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information
+                        );
+                        updateManager.RestartApplication();
+                    }));
+                }
+                else
+                {
+                    progressForm.Invoke(new Action(() =>
+                    {
+                        progressForm.Close();
+                        MessageBox.Show(
+                            "更新失败，请稍后重试或手动下载更新。",
+                            "更新失败",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error
+                        );
+                    }));
+                }
+            });
+
+            progressForm.ShowDialog();
         }
         #endregion
         #region 游戏实例检测与归集
@@ -1364,7 +1511,7 @@ namespace BeatSaberIndependentMapsManager
                 string musicPackName = musicPackListView.Items[index].Text;
                 if (songListinited)
                 {
-                    new Thread(() => displaySongList(musicPackName)).Start();
+                    new Thread(() => displaySongList(musicPackName)) { IsBackground = true }.Start();
                 }
                 else
                 {
@@ -1515,7 +1662,7 @@ namespace BeatSaberIndependentMapsManager
 
         private void btnExit_Click(object sender, EventArgs e)
         {
-            Environment.Exit(0);
+            this.Close();
         }
 
         private void PlaybackTimer_Tick(object sender, EventArgs e)
@@ -1628,6 +1775,81 @@ namespace BeatSaberIndependentMapsManager
                 e.Cancel = true;
                 return;
             }
+
+            // 取消所有后台任务
+            try
+            {
+                // 取消静态 HttpClient 的待处理请求
+                imageHttpClient.CancelPendingRequests();
+
+                if (searchCts != null && !searchCts.IsCancellationRequested)
+                {
+                    searchCts.Cancel();
+                }
+
+                if (imageLoadCts != null && !imageLoadCts.IsCancellationRequested)
+                {
+                    imageLoadCts.Cancel();
+                }
+
+                // 停止音频播放
+                if (waveOut != null)
+                {
+                    waveOut.Stop();
+                    waveOut.Dispose();
+                    waveOut = null;
+                }
+
+                if (currentAudioReader != null)
+                {
+                    currentAudioReader.Dispose();
+                    currentAudioReader = null;
+                }
+
+                // 释放本地缓存管理器
+                if (localCacheManager != null)
+                {
+                    localCacheManager.Dispose();
+                    localCacheManager = null;
+                }
+
+                // 释放 BeatSaver 客户端
+                if (beatSaverClient != null)
+                {
+                    beatSaverClient.Dispose();
+                    beatSaverClient = null;
+                }
+
+                // 释放更新管理器
+                if (updateManager != null)
+                {
+                    updateManager.Dispose();
+                    updateManager = null;
+                }
+
+                // 释放筛选构建器窗体
+                if (filterBuilderForm != null && !filterBuilderForm.IsDisposed)
+                {
+                    filterBuilderForm.Close();
+                    filterBuilderForm.Dispose();
+                    filterBuilderForm = null;
+                }
+
+                // 释放图片缓存
+                foreach (var img in coverImageCache.Values)
+                {
+                    img?.Dispose();
+                }
+                coverImageCache.Clear();
+
+                // 释放曲包封面图片
+                foreach (var img in musicPackCoverimgs.Values)
+                {
+                    img?.Dispose();
+                }
+                musicPackCoverimgs.Clear();
+            }
+            catch { }
         }
 
         private void btnDeduplication_Click(object sender, EventArgs e)
@@ -1796,7 +2018,7 @@ namespace BeatSaberIndependentMapsManager
             string[] folders = Directory.GetDirectories(Application.StartupPath);
             foreach (string folder in folders)
             {
-                new Thread(() => addFolder(folder)).Start();
+                new Thread(() => addFolder(folder)) { IsBackground = true }.Start();
             }
         }
 
@@ -2102,6 +2324,7 @@ namespace BeatSaberIndependentMapsManager
                         {
                             this.BeginInvoke(() =>
                             {
+                                if (this.IsDisposed) return;
                                 if (rowIndex < dataGridView1.Rows.Count && !dataGridView1.Rows[rowIndex].IsNewRow)
                                 {
                                     var targetRow = dataGridView1.Rows[rowIndex];
@@ -2447,14 +2670,12 @@ namespace BeatSaberIndependentMapsManager
                     {
                         this.BeginInvoke(() =>
                         {
-                            if (!string.IsNullOrEmpty(progress.Status))
-                            {
-                                BSIMMProgress.ProgressBar.Value = Math.Min(100, (int)progress.Percentage);
-                                BSIMMActionText.Text = "下载";
-                                BSIMMStatusText.Text = progress.Status.StartsWith("正在下载")
-                                    ? $"{progress.Status} {progress.Percentage:F1}%"
-                                    : progress.Status;
-                            }
+                            if (this.IsDisposed) return;
+                            BSIMMProgress.ProgressBar.Value = Math.Min(100, (int)progress.Percentage);
+                            BSIMMActionText.Text = "下载";
+                            BSIMMStatusText.Text = progress.Status.StartsWith("正在下载")
+                                ? $"{progress.Status} {progress.Percentage:F1}%"
+                                : progress.Status;
                         });
                     };
 
@@ -2489,6 +2710,7 @@ namespace BeatSaberIndependentMapsManager
                         {
                             this.BeginInvoke(() =>
                             {
+                                if (this.IsDisposed) return;
                                 BSIMMProgress.ProgressBar.Value = percent;
                                 BSIMMActionText.Text = "搜索";
                                 BSIMMStatusText.Text = $"正在筛选... {percent}%";
@@ -2523,6 +2745,7 @@ namespace BeatSaberIndependentMapsManager
                                     lastPercent = percent;
                                     this.BeginInvoke(() =>
                                     {
+                                        if (this.IsDisposed) return;
                                         BSIMMProgress.ProgressBar.Value = percent;
                                         BSIMMActionText.Text = "搜索";
                                         BSIMMStatusText.Text = $"正在筛选... 已处理 {processedCount} 首，找到 {tempList.Count} 首";
@@ -3235,43 +3458,82 @@ namespace BeatSaberIndependentMapsManager
             BSIMMActionText.Text = "批处理导出中...";
             btnBatchOutput.Enabled = false;
 
-            foreach (var preset in presets)
+            // 检查是否所有预设都需要本地缓存
+            bool allRequireLocalCache = presets.All(p => RequiresLocalCache(p));
+            bool useSharedCache = false;
+
+            try
             {
-                try
+                // 如果所有预设都需要本地缓存，预加载一次
+                if (allRequireLocalCache && localCacheManager != null && localCacheManager.IsCacheAvailable)
                 {
-                    BSIMMStatusText.Text = $"正在处理: {preset.Name}";
+                    BSIMMStatusText.Text = "预加载本地缓存...";
+                    useSharedCache = true;
 
-                    // 执行搜索获取所有结果
-                    var maps = await FetchAllMapsForPreset(preset);
-
-                    if (maps.Count == 0)
+                    await Task.Run(() =>
                     {
-                        debugLog($"批处理 - {preset.Name}: 无结果");
-                        zeroResultCount++;
-                        continue;
+                        var progress = new Progress<int>(percent =>
+                        {
+                            this.BeginInvoke(() =>
+                            {
+                                if (this.IsDisposed) return;
+                                BSIMMProgress.ProgressBar.Value = percent / 2; // 预加载占一半进度
+                                BSIMMStatusText.Text = $"预加载缓存... {percent}%";
+                            });
+                        });
+                        localCacheManager.InitializeSharedReader(true, progress);
+                    });
+                }
+
+                for (int i = 0; i < presets.Count; i++)
+                {
+                    var preset = presets[i];
+                    try
+                    {
+                        int overallProgress = useSharedCache ? 50 + (i * 50 / presets.Count) : (i * 100 / presets.Count);
+                        BSIMMStatusText.Text = $"正在处理 ({i + 1}/{presets.Count}): {preset.Name}";
+                        BSIMMProgress.ProgressBar.Value = overallProgress;
+
+                        // 执行搜索获取所有结果
+                        var maps = await FetchAllMapsForPreset(preset, useSharedCache);
+
+                        if (maps.Count == 0)
+                        {
+                            debugLog($"批处理 - {preset.Name}: 无结果");
+                            zeroResultCount++;
+                            continue;
+                        }
+
+                        // 提取封面文字
+                        string coverText = ExtractCoverTextFromPresetName(preset.Name);
+
+                        // 导出到歌单（静默模式）
+                        string filePath = Path.Combine(outputDir, $"{SanitizeFileName(preset.Name)}.bplist");
+                        bool success = ExportMapsToPlaylistInternal(maps, filePath, preset.Name, coverText, silent: true);
+
+                        if (success)
+                        {
+                            debugLog($"批处理成功 - {preset.Name}: {maps.Count} 首歌曲");
+                            successCount++;
+                        }
+                        else
+                        {
+                            failCount++;
+                        }
                     }
-
-                    // 提取封面文字
-                    string coverText = ExtractCoverTextFromPresetName(preset.Name);
-
-                    // 导出到歌单（静默模式）
-                    string filePath = Path.Combine(outputDir, $"{SanitizeFileName(preset.Name)}.bplist");
-                    bool success = ExportMapsToPlaylistInternal(maps, filePath, preset.Name, coverText, silent: true);
-
-                    if (success)
+                    catch (Exception ex)
                     {
-                        debugLog($"批处理成功 - {preset.Name}: {maps.Count} 首歌曲");
-                        successCount++;
-                    }
-                    else
-                    {
+                        debugLog($"批处理失败 - {preset.Name}: {ex.Message}");
                         failCount++;
                     }
                 }
-                catch (Exception ex)
+            }
+            finally
+            {
+                // 释放共享缓存
+                if (useSharedCache && localCacheManager != null)
                 {
-                    debugLog($"批处理失败 - {preset.Name}: {ex.Message}");
-                    failCount++;
+                    localCacheManager.ClearSharedReader();
                 }
             }
 
@@ -3287,7 +3549,7 @@ namespace BeatSaberIndependentMapsManager
         /// <summary>
         /// 获取预设对应的所有谱面（异步）
         /// </summary>
-        private async Task<List<BeatSaverMap>> FetchAllMapsForPreset(FilterPreset preset)
+        private async Task<List<BeatSaverMap>> FetchAllMapsForPreset(FilterPreset preset, bool useSharedCache = false)
         {
             var allMaps = new List<BeatSaverMap>();
 
@@ -3311,10 +3573,25 @@ namespace BeatSaberIndependentMapsManager
                         {
                             this.BeginInvoke(() =>
                             {
+                                if (this.IsDisposed) return;
                                 BSIMMProgress.ProgressBar.Value = percent;
                             });
                         });
-                        return localCacheManager.ParallelFilterMaps(preset, progress);
+
+                        // 使用共享缓存或流式筛选
+                        if (useSharedCache)
+                        {
+                            var results = new List<BeatSaverMapSlim>();
+                            foreach (var map in localCacheManager.StreamFilterMapsShared(preset, null))
+                            {
+                                results.Add(map);
+                            }
+                            return results.Select(m => m.ToFullMap()).ToList();
+                        }
+                        else
+                        {
+                            return localCacheManager.ParallelFilterMaps(preset, progress);
+                        }
                     });
                 }
                 else

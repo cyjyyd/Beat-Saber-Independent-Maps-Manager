@@ -513,63 +513,18 @@ namespace BeatSaberIndependentMapsManager
                 return;
             }
 
-            // 询问导出方式
-            using (var choiceForm = new Form())
+            // 如果只有一个预设或当前预设不为空，直接导出
+            if (currentPreset != null && presets.Count == 1)
             {
-                choiceForm.Text = "导出预设";
-                choiceForm.ClientSize = new Size(300, 150);
-                choiceForm.FormBorderStyle = FormBorderStyle.FixedDialog;
-                choiceForm.StartPosition = FormStartPosition.CenterParent;
-                choiceForm.MaximizeBox = false;
-                choiceForm.MinimizeBox = false;
-
-                var lblMessage = new Label
-                {
-                    Text = "请选择导出方式：",
-                    Location = new Point(20, 20),
-                    AutoSize = true
-                };
-
-                var btnCurrent = new Button
-                {
-                    Text = "导出当前预设",
-                    Location = new Point(20, 60),
-                    Size = new Size(120, 35),
-                    DialogResult = DialogResult.Yes
-                };
-
-                var btnAll = new Button
-                {
-                    Text = "批量导出全部",
-                    Location = new Point(160, 60),
-                    Size = new Size(120, 35),
-                    DialogResult = DialogResult.OK
-                };
-
-                var btnCancel = new Button
-                {
-                    Text = "取消",
-                    Location = new Point(100, 105),
-                    Size = new Size(100, 30),
-                    DialogResult = DialogResult.Cancel
-                };
-
-                choiceForm.Controls.Add(lblMessage);
-                choiceForm.Controls.Add(btnCurrent);
-                choiceForm.Controls.Add(btnAll);
-                choiceForm.Controls.Add(btnCancel);
-
-                var result = choiceForm.ShowDialog();
-
-                if (result == DialogResult.Yes)
-                {
-                    ExportSinglePreset(currentPreset);
-                }
-                else if (result == DialogResult.OK)
-                {
-                    ExportAllPresets();
-                }
+                ExportSinglePreset(currentPreset);
+                return;
             }
+
+            // 多个预设时显示选择菜单
+            var menu = new ContextMenuStrip();
+            menu.Items.Add("导出当前预设", null, (s, e) => ExportSinglePreset(currentPreset));
+            menu.Items.Add("批量导出全部...", null, (s, e) => ExportAllPresets());
+            menu.Show(btnExportPreset, 0, btnExportPreset.Height);
         }
 
         private void ExportSinglePreset(FilterPreset preset)
@@ -581,22 +536,58 @@ namespace BeatSaberIndependentMapsManager
                 return;
             }
 
+            string fileName = preset.Name;
+            string filter = "筛选预设文件 (*.bsf)|*.bsf|JSON文件 (*.json)|*.json";
+
             using (SaveFileDialog sfd = new SaveFileDialog())
             {
                 sfd.Title = "导出筛选预设";
-                sfd.Filter = "筛选预设文件 (*.bsf)|*.bsf|JSON文件 (*.json)|*.json";
+                sfd.Filter = filter;
                 sfd.DefaultExt = ".bsf";
-                sfd.FileName = preset.Name;
+                sfd.FileName = fileName;
                 sfd.RestoreDirectory = true;
+                sfd.OverwritePrompt = true;
 
-                if (sfd.ShowDialog() == DialogResult.OK)
+                if (sfd.ShowDialog(this.FindForm()) == DialogResult.OK)
                 {
                     try
                     {
+                        // 异步执行导出操作避免UI卡顿
+                        var filePath = sfd.FileName;
                         var exportPreset = preset.Clone();
-                        exportPreset.SaveToFile(sfd.FileName);
-                        MessageBox.Show($"预设已导出到：{sfd.FileName}", "成功",
-                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                        System.Threading.Tasks.Task.Run(() =>
+                        {
+                            try
+                            {
+                                exportPreset.SaveToFile(filePath);
+                                if (!this.IsDisposed && this.IsHandleCreated)
+                                {
+                                    this.BeginInvoke(new Action(() =>
+                                    {
+                                        if (!this.IsDisposed)
+                                        {
+                                            MessageBox.Show($"预设已导出到：{filePath}", "成功",
+                                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                                        }
+                                    }));
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                if (!this.IsDisposed && this.IsHandleCreated)
+                                {
+                                    this.BeginInvoke(new Action(() =>
+                                    {
+                                        if (!this.IsDisposed)
+                                        {
+                                            MessageBox.Show($"导出预设失败：{ex.Message}", "错误",
+                                                MessageBoxButtons.OK, MessageBoxIcon.Error);
+                                        }
+                                    }));
+                                }
+                            }
+                        });
                     }
                     catch (Exception ex)
                     {
@@ -614,31 +605,47 @@ namespace BeatSaberIndependentMapsManager
                 fbd.Description = "选择导出目录";
                 fbd.ShowNewFolderButton = true;
 
-                if (fbd.ShowDialog() == DialogResult.OK)
+                if (fbd.ShowDialog(this.FindForm()) == DialogResult.OK)
                 {
-                    int successCount = 0;
-                    int failCount = 0;
+                    var selectedPath = fbd.SelectedPath;
+                    var presetsCopy = presets.ToList();
 
-                    foreach (var preset in presets)
+                    // 异步执行导出操作
+                    System.Threading.Tasks.Task.Run(() =>
                     {
-                        try
-                        {
-                            string destPath = Path.Combine(fbd.SelectedPath, $"{preset.Name}.bsf");
-                            preset.Clone().SaveToFile(destPath);
-                            successCount++;
-                        }
-                        catch
-                        {
-                            failCount++;
-                        }
-                    }
+                        int successCount = 0;
+                        int failCount = 0;
 
-                    string message = $"成功导出 {successCount} 个预设到：\n{fbd.SelectedPath}";
-                    if (failCount > 0)
-                        message += $"\n失败 {failCount} 个";
+                        foreach (var preset in presetsCopy)
+                        {
+                            try
+                            {
+                                string destPath = Path.Combine(selectedPath, $"{preset.Name}.bsf");
+                                preset.Clone().SaveToFile(destPath);
+                                successCount++;
+                            }
+                            catch
+                            {
+                                failCount++;
+                            }
+                        }
 
-                    MessageBox.Show(message, "导出完成",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        if (!this.IsDisposed && this.IsHandleCreated)
+                        {
+                            this.BeginInvoke(new Action(() =>
+                            {
+                                if (!this.IsDisposed)
+                                {
+                                    string message = $"成功导出 {successCount} 个预设到：\n{selectedPath}";
+                                    if (failCount > 0)
+                                        message += $"\n失败 {failCount} 个";
+
+                                    MessageBox.Show(message, "导出完成",
+                                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                                }
+                            }));
+                        }
+                    });
                 }
             }
         }

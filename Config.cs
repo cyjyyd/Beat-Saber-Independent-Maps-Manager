@@ -88,14 +88,21 @@ namespace BeatSaberIndependentMapsManager
             { get; set; }
         public bool DownProxy
             { get; set; }
-        public bool LocalCaChe 
+        public bool LocalCaChe
             { get; set; }
+        // 更新相关配置
+        public string SkipVersion { get; set; }
+        public DateTime LastUpdateCheck { get; set; }
         public void readset()
         {
             HashCache = SafeParseBoolean(ReadIniData("Settings", "HashCache", "false", iniFilePath));
             LastFolder = SafeParseBoolean(ReadIniData("Settings", "LastFolder", "false", iniFilePath));
             DownProxy = SafeParseBoolean(ReadIniData("Settings", "DownProxy", "false", iniFilePath));
             LocalCaChe = SafeParseBoolean(ReadIniData("Settings", "LocalCache", "false", iniFilePath));
+            SkipVersion = ReadIniData("Settings", "SkipVersion", "", iniFilePath);
+            string lastCheckStr = ReadIniData("Settings", "LastUpdateCheck", "", iniFilePath);
+            if (DateTime.TryParse(lastCheckStr, out DateTime lastCheck))
+                LastUpdateCheck = lastCheck;
         }
 
         private bool SafeParseBoolean(string value)
@@ -110,6 +117,8 @@ namespace BeatSaberIndependentMapsManager
             WriteIniData("Settings", "LastFolder", Convert.ToString(LastFolder), iniFilePath);
             WriteIniData("Settings", "DownProxy", Convert.ToString(DownProxy), iniFilePath);
             WriteIniData("Settings", "LocalCache", Convert.ToString(LocalCaChe), iniFilePath);
+            WriteIniData("Settings", "SkipVersion", SkipVersion ?? "", iniFilePath);
+            WriteIniData("Settings", "LastUpdateCheck", LastUpdateCheck.ToString("yyyy-MM-dd HH:mm:ss"), iniFilePath);
         }
         public void configUpdate()
         {

@@ -36,6 +36,9 @@ namespace BeatSaberIndependentMapsManager
         private long cacheDate = 0;
         private bool cacheAvailable = false;
 
+        // 轻量级读取器（用于批处理缓存复用）
+        private LocalCacheReader sharedReader;
+
         /// <summary>
         /// Event raised when download progress changes
         /// </summary>
@@ -185,131 +188,202 @@ namespace BeatSaberIndependentMapsManager
         }
 
         /// <summary>
-        /// Streams through the cache and filters maps based on preset
+        /// Streams through the cache and filters maps based on preset (uses lightweight data structure)
         /// </summary>
-        public IEnumerable<BeatSaverMap> StreamFilterMaps(FilterPreset preset, IProgress<int> progress, CancellationToken cancellationToken = default)
+        public IEnumerable<BeatSaverMapSlim> StreamFilterMapsSlim(FilterPreset preset, IProgress<int> progress, CancellationToken cancellationToken = default)
         {
             if (!IsCacheAvailable)
                 yield break;
 
-            using var fileStream = new FileStream(cachePath, FileMode.Open, FileAccess.Read);
-            using var streamReader = new StreamReader(fileStream);
-            using var jsonReader = new JsonTextReader(streamReader);
-
-            var serializer = new JsonSerializer();
-            long totalBytes = fileStream.Length;
-            long lastReportBytes = 0;
-            int reportInterval = 1024 * 1024; // Report every 1MB
-
-            // Navigate to docs array
-            while (jsonReader.Read())
+            using var reader = new LocalCacheReader(cachePath);
+            foreach (var map in reader.StreamFilterMaps(preset, progress))
             {
                 if (cancellationToken.IsCancellationRequested)
                     yield break;
-
-                if (jsonReader.TokenType == JsonToken.StartArray && jsonReader.Path == "docs")
-                {
-                    break;
-                }
+                yield return map;
             }
-
-            // Stream read each map object
-            while (jsonReader.Read() && jsonReader.TokenType != JsonToken.EndArray)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                    yield break;
-
-                if (jsonReader.TokenType == JsonToken.StartObject)
-                {
-                    var map = serializer.Deserialize<BeatSaverMap>(jsonReader);
-
-                    if (map != null && MatchesFilter(map, preset))
-                    {
-                        yield return map;
-                    }
-
-                    // Report progress
-                    if (fileStream.Position - lastReportBytes > reportInterval)
-                    {
-                        var percent = (int)(fileStream.Position * 100 / totalBytes);
-                        progress?.Report(percent);
-                        lastReportBytes = fileStream.Position;
-                    }
-                }
-            }
-
-            progress?.Report(100);
         }
 
         /// <summary>
-        /// Performs parallel filtering on the cache (loads all maps into memory first)
+        /// Streams through the cache and filters maps based on preset
+        /// Returns full BeatSaverMap objects (converts from lightweight structure)
+        /// </summary>
+        public IEnumerable<BeatSaverMap> StreamFilterMaps(FilterPreset preset, IProgress<int> progress, CancellationToken cancellationToken = default)
+        {
+            foreach (var slimMap in StreamFilterMapsSlim(preset, progress, cancellationToken))
+            {
+                yield return slimMap.ToFullMap();
+            }
+        }
+
+        /// <summary>
+        /// Initializes shared reader for batch processing (reuses cache data across multiple filter operations)
+        /// Call ClearSharedReader() after batch processing to free memory
+        /// </summary>
+        public void InitializeSharedReader(bool preloadData = false, IProgress<int> progress = null)
+        {
+            if (sharedReader == null)
+            {
+                sharedReader = new LocalCacheReader(cachePath);
+                if (preloadData)
+                {
+                    sharedReader.PreloadForBatchProcessing(progress);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Filters using shared reader (for batch processing)
+        /// </summary>
+        public IEnumerable<BeatSaverMapSlim> StreamFilterMapsShared(FilterPreset preset, IProgress<int> progress, CancellationToken cancellationToken = default)
+        {
+            if (!IsCacheAvailable)
+                yield break;
+
+            if (sharedReader == null)
+                InitializeSharedReader();
+
+            foreach (var map in sharedReader.StreamFilterMaps(preset, progress))
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    yield break;
+                yield return map;
+            }
+        }
+
+        /// <summary>
+        /// Clears the shared reader to free memory
+        /// </summary>
+        public void ClearSharedReader()
+        {
+            sharedReader?.Dispose();
+            sharedReader = null;
+        }
+
+        /// <summary>
+        /// Performs parallel filtering on the cache (uses lightweight data structure for memory efficiency)
         /// </summary>
         public List<BeatSaverMap> ParallelFilterMaps(FilterPreset preset, IProgress<int> progress, CancellationToken cancellationToken = default)
         {
             if (!IsCacheAvailable)
                 return new List<BeatSaverMap>();
 
-            // First pass: load all maps into a list
-            var allMaps = new List<BeatSaverMap>();
-            using (var fileStream = new FileStream(cachePath, FileMode.Open, FileAccess.Read))
-            using (var streamReader = new StreamReader(fileStream))
-            using (var jsonReader = new JsonTextReader(streamReader))
+            // 使用轻量级结构进行筛选
+            var results = new List<BeatSaverMapSlim>();
+            int processed = 0;
+            long lastReportBytes = 0;
+            int reportInterval = 1024 * 1024;
+
+            // 第一遍：流式读取并筛选
+            using (var reader = new LocalCacheReader(cachePath))
             {
-                var serializer = new JsonSerializer();
-
-                // Navigate to docs array
-                while (jsonReader.Read())
-                {
-                    if (jsonReader.TokenType == JsonToken.StartArray && jsonReader.Path == "docs")
-                        break;
-                }
-
-                // Load all maps
-                while (jsonReader.Read() && jsonReader.TokenType != JsonToken.EndArray)
+                foreach (var map in reader.StreamFilterMaps(preset, null))
                 {
                     if (cancellationToken.IsCancellationRequested)
                         return new List<BeatSaverMap>();
 
-                    if (jsonReader.TokenType == JsonToken.StartObject)
+                    results.Add(map);
+                    processed++;
+
+                    // 进度报告
+                    long pos = reader.CurrentPosition;
+                    if (progress != null && pos - lastReportBytes > reportInterval)
                     {
-                        var map = serializer.Deserialize<BeatSaverMap>(jsonReader);
-                        if (map != null)
-                            allMaps.Add(map);
+                        progress.Report((int)(pos * 100 / reader.CacheSize));
+                        lastReportBytes = pos;
                     }
                 }
             }
 
-            progress?.Report(50);
-
-            // Second pass: parallel filter
-            var results = new ConcurrentBag<BeatSaverMap>();
-            int processed = 0;
-            int total = allMaps.Count;
-
-            Parallel.ForEach(Partitioner.Create(allMaps), new ParallelOptions
-            {
-                MaxDegreeOfParallelism = Environment.ProcessorCount,
-                CancellationToken = cancellationToken
-            }, map =>
-            {
-                if (MatchesFilter(map, preset))
-                {
-                    results.Add(map);
-                }
-
-                var current = Interlocked.Increment(ref processed);
-                if (current % 1000 == 0)
-                {
-                    var percent = 50 + (current * 50 / total);
-                    progress?.Report(percent);
-                }
-            });
-
             progress?.Report(100);
 
-            // Apply result limit
-            var resultList = results.ToList();
-            return ApplyResultLimit(resultList, preset);
+            // 应用结果限制
+            var limitedResults = ApplyResultLimitSlim(results, preset);
+
+            // 转换为完整对象
+            return limitedResults.Select(m => m.ToFullMap()).ToList();
+        }
+
+        /// <summary>
+        /// Batch filter multiple presets efficiently (reuses cache data)
+        /// </summary>
+        public List<List<BeatSaverMap>> BatchFilterMaps(List<FilterPreset> presets, IProgress<int> progress, CancellationToken cancellationToken = default)
+        {
+            if (!IsCacheAvailable || presets == null || presets.Count == 0)
+                return new List<List<BeatSaverMap>>();
+
+            var results = new List<List<BeatSaverMap>>();
+            int processedPresets = 0;
+
+            // 初始化共享读取器
+            InitializeSharedReader(true, new Progress<int>(p =>
+            {
+                progress?.Report(p / 2); // 加载占前半进度
+            }));
+
+            try
+            {
+                foreach (var preset in presets)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        break;
+
+                    var presetResults = new List<BeatSaverMapSlim>();
+                    foreach (var map in StreamFilterMapsShared(preset, null, cancellationToken))
+                    {
+                        presetResults.Add(map);
+                    }
+
+                    var limitedResults = ApplyResultLimitSlim(presetResults, preset);
+                    results.Add(limitedResults.Select(m => m.ToFullMap()).ToList());
+
+                    processedPresets++;
+                    progress?.Report(50 + processedPresets * 50 / presets.Count);
+                }
+            }
+            finally
+            {
+                ClearSharedReader();
+            }
+
+            progress?.Report(100);
+            return results;
+        }
+
+        /// <summary>
+        /// Applies result limit to lightweight map list
+        /// </summary>
+        private List<BeatSaverMapSlim> ApplyResultLimitSlim(List<BeatSaverMapSlim> maps, FilterPreset preset)
+        {
+            ResultLimitValue resultLimit = preset.TopLevelResultLimit;
+
+            if (resultLimit == null)
+            {
+                foreach (var group in preset.GetActiveGroups())
+                {
+                    resultLimit = group.GetResultLimit();
+                    if (resultLimit != null) break;
+                }
+            }
+
+            if (resultLimit == null || resultLimit.Count <= 0)
+                return maps;
+
+            switch (resultLimit.SortOption)
+            {
+                case ResultSortOption.Newest:
+                    maps = maps.OrderByDescending(m => m.Uploaded).ToList();
+                    break;
+                case ResultSortOption.Oldest:
+                    maps = maps.OrderBy(m => m.Uploaded).ToList();
+                    break;
+                case ResultSortOption.Random:
+                    var random = new Random();
+                    maps = maps.OrderBy(m => random.Next()).ToList();
+                    break;
+            }
+
+            return maps.Take(resultLimit.Count).ToList();
         }
 
         /// <summary>
@@ -832,10 +906,35 @@ namespace BeatSaberIndependentMapsManager
                         return HasCustomMod(map, customMod);
 
                     case FilterConditionType.ExcludeCustomMod:
-                        var excludeCustomMod = condition.Value?.ToString()?.ToLower() ?? "";
-                        if (string.IsNullOrWhiteSpace(excludeCustomMod)) return true;
-                        // 排除包含该Mod的地图
-                        return !HasCustomMod(map, excludeCustomMod);
+                        {
+                            string excludeCustomMod;
+                            bool strictMode = false;
+
+                            // Handle ExcludeModValue with strict mode
+                            if (condition.Value is ExcludeModValue excludeModValue)
+                            {
+                                excludeCustomMod = excludeModValue.ModName?.ToLower() ?? "";
+                                strictMode = excludeModValue.Strict;
+                            }
+                            else
+                            {
+                                // Backward compatibility: old string value
+                                excludeCustomMod = condition.Value?.ToString()?.ToLower() ?? "";
+                            }
+
+                            if (string.IsNullOrWhiteSpace(excludeCustomMod)) return true;
+
+                            if (strictMode)
+                            {
+                                // 严格模式：任意难度都不得包含该Mod
+                                return !HasCustomMod(map, excludeCustomMod);
+                            }
+                            else
+                            {
+                                // 非严格模式：只要有一个难度不包含该Mod即可
+                                return HasDiffWithoutCustomMod(map, excludeCustomMod);
+                            }
+                        }
 
                     // Upload time filters
                     case FilterConditionType.MinUploadedDate:
@@ -1399,6 +1498,37 @@ namespace BeatSaberIndependentMapsManager
         }
 
         /// <summary>
+        /// Checks if a map has at least one difficulty WITHOUT a specific custom mod
+        /// Used for non-strict exclude mod filtering
+        /// </summary>
+        private bool HasDiffWithoutCustomMod(BeatSaverMap map, string modName)
+        {
+            if (map.Versions == null || map.Versions.Count == 0 || map.Versions[0].Diffs == null)
+                return true; // No difficulties = passes filter (no mod to exclude)
+
+            foreach (var diff in map.Versions[0].Diffs)
+            {
+                if (diff == null) continue;
+
+                // Use reflection to check for boolean properties matching the mod name
+                var diffType = diff.GetType();
+                var property = diffType.GetProperty(modName, System.Reflection.BindingFlags.IgnoreCase | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                if (property != null && property.PropertyType == typeof(bool))
+                {
+                    var value = (bool)property.GetValue(diff);
+                    if (!value) return true; // Found a difficulty without this mod
+                }
+                else
+                {
+                    // Property doesn't exist on this diff = mod not present
+                    return true;
+                }
+            }
+
+            return false; // All difficulties have this mod
+        }
+
+        /// <summary>
         /// Handles range-type filter conditions
         /// </summary>
         private bool MatchesRangeCondition(BeatSaverMap map, FilterCondition condition)
@@ -1867,6 +1997,8 @@ namespace BeatSaberIndependentMapsManager
             if (!disposed)
             {
                 httpClient?.Dispose();
+                sharedReader?.Dispose();
+                sharedReader = null;
                 disposed = true;
             }
         }

@@ -19,6 +19,30 @@ namespace BeatSaberIndependentMapsManager
             {
                 components.Dispose();
             }
+
+            // 释放静态HttpClient资源
+            try
+            {
+                imageHttpClient?.CancelPendingRequests();
+                imageHttpClient?.Dispose();
+            }
+            catch { }
+
+            // 释放BeatSaverClient（静态HttpClient）
+            try
+            {
+                beatSaverClient?.Dispose();
+            }
+            catch { }
+
+            // 释放CancellationTokenSource
+            try
+            {
+                searchCts?.Dispose();
+                imageLoadCts?.Dispose();
+            }
+            catch { }
+
             base.Dispose(disposing);
         }
 
@@ -61,7 +85,6 @@ namespace BeatSaberIndependentMapsManager
             musicPackimg = new ImageList(components);
             lblMap = new Label();
             lblMusicPack = new Label();
-            tabBSVer = new TabPage();
             tabDelicatedSong = new TabPage();
             lblVolumeText2 = new Label();
             lblPreviewdsong = new Label();
@@ -86,6 +109,7 @@ namespace BeatSaberIndependentMapsManager
             DB_levelAuthorName = new DataGridViewTextBoxColumn();
             lblFilterResult = new Label();
             pnlFilterButtons = new Panel();
+            btnBatchOutput = new Button();
             btnNextPage = new Button();
             lblPageInfo = new Label();
             btnPrevPage = new Button();
@@ -112,7 +136,6 @@ namespace BeatSaberIndependentMapsManager
             pictureBox1 = new PictureBox();
             musicPackCoverDialog = new OpenFileDialog();
             savebplistDialog = new FolderBrowserDialog();
-            btnBatchOutput = new Button();
             BSIMMStats.SuspendLayout();
             tabMusicPackContorl.SuspendLayout();
             tabSongFolder.SuspendLayout();
@@ -195,7 +218,6 @@ namespace BeatSaberIndependentMapsManager
             // 
             tabMusicPackContorl.AllowDrop = true;
             tabMusicPackContorl.Controls.Add(tabSongFolder);
-            tabMusicPackContorl.Controls.Add(tabBSVer);
             tabMusicPackContorl.Controls.Add(tabDelicatedSong);
             tabMusicPackContorl.Controls.Add(tabFolderandList);
             tabMusicPackContorl.Location = new System.Drawing.Point(0, 0);
@@ -425,17 +447,6 @@ namespace BeatSaberIndependentMapsManager
             lblMusicPack.Size = new System.Drawing.Size(154, 24);
             lblMusicPack.TabIndex = 9;
             lblMusicPack.Text = "曲包目录列表";
-            // 
-            // tabBSVer
-            // 
-            tabBSVer.Location = new System.Drawing.Point(4, 33);
-            tabBSVer.Margin = new Padding(6);
-            tabBSVer.Name = "tabBSVer";
-            tabBSVer.Padding = new Padding(6);
-            tabBSVer.Size = new System.Drawing.Size(1087, 665);
-            tabBSVer.TabIndex = 1;
-            tabBSVer.Text = "节奏光剑版本管理";
-            tabBSVer.UseVisualStyleBackColor = true;
             // 
             // tabDelicatedSong
             // 
@@ -680,6 +691,16 @@ namespace BeatSaberIndependentMapsManager
             pnlFilterButtons.Name = "pnlFilterButtons";
             pnlFilterButtons.Size = new System.Drawing.Size(1087, 47);
             pnlFilterButtons.TabIndex = 8;
+            // 
+            // btnBatchOutput
+            // 
+            btnBatchOutput.Anchor = AnchorStyles.Top;
+            btnBatchOutput.Location = new System.Drawing.Point(503, 1);
+            btnBatchOutput.Name = "btnBatchOutput";
+            btnBatchOutput.Size = new System.Drawing.Size(100, 47);
+            btnBatchOutput.TabIndex = 7;
+            btnBatchOutput.Text = "批处理";
+            btnBatchOutput.UseVisualStyleBackColor = true;
             // 
             // btnNextPage
             // 
@@ -934,16 +955,6 @@ namespace BeatSaberIndependentMapsManager
             // 
             savebplistDialog.Description = "请选择bplist保存路径";
             // 
-            // btnBatchOutput
-            // 
-            btnBatchOutput.Anchor = AnchorStyles.Top;
-            btnBatchOutput.Location = new System.Drawing.Point(503, 1);
-            btnBatchOutput.Name = "btnBatchOutput";
-            btnBatchOutput.Size = new System.Drawing.Size(100, 47);
-            btnBatchOutput.TabIndex = 7;
-            btnBatchOutput.Text = "批处理";
-            btnBatchOutput.UseVisualStyleBackColor = true;
-            // 
             // MainForm
             // 
             AllowDrop = true;
@@ -1000,7 +1011,6 @@ namespace BeatSaberIndependentMapsManager
         private System.Windows.Forms.Button btnSaveMusicPack;
         private System.Windows.Forms.TabControl tabMusicPackContorl;
         private System.Windows.Forms.TabPage tabSongFolder;
-        private System.Windows.Forms.TabPage tabBSVer;
         private System.Windows.Forms.TabPage tabDelicatedSong;
         private System.Windows.Forms.TabPage tabFolderandList;
         private System.Windows.Forms.Button btnSetting;

@@ -574,6 +574,63 @@ namespace BeatSaberIndependentMapsManager
                         searchPanel.Controls.Add(fieldButton);
                         valueControl = searchPanel;
                         break;
+
+                    case FilterValueType.ExcludeMod:
+                        // Create a panel with text input and strict mode checkbox
+                        var excludeModPanel = new Panel
+                        {
+                            Width = 280,
+                            Height = 28,
+                            Dock = DockStyle.Fill,
+                            Margin = new Padding(2)
+                        };
+
+                        var modNameTextBox = new TextBox
+                        {
+                            Width = 150,
+                            Dock = DockStyle.Left,
+                            Text = "",
+                            PlaceholderText = "Mod名称..."
+                        };
+
+                        var strictCheckBox = new CheckBox
+                        {
+                            Width = 70,
+                            Dock = DockStyle.Right,
+                            Text = "严格",
+                            TextAlign = ContentAlignment.MiddleLeft,
+                            Margin = new Padding(5, 3, 0, 0)
+                        };
+
+                        // ToolTip for strict mode
+                        var strictToolTip = new ToolTip();
+                        strictToolTip.SetToolTip(strictCheckBox, "勾选: 任意难度都不得包含该Mod\n不勾选: 有一个难度不包含该Mod即可");
+
+                        // Initialize from existing value
+                        if (condition.Value is ExcludeModValue existingValue)
+                        {
+                            modNameTextBox.Text = existingValue.ModName;
+                            strictCheckBox.Checked = existingValue.Strict;
+                        }
+                        else if (condition.Value != null)
+                        {
+                            // Backward compatibility: old string value
+                            modNameTextBox.Text = condition.Value.ToString();
+                        }
+
+                        void UpdateExcludeModValue()
+                        {
+                            condition.Value = new ExcludeModValue(modNameTextBox.Text, strictCheckBox.Checked);
+                            ConditionChanged?.Invoke(this, condition);
+                        }
+
+                        modNameTextBox.TextChanged += (s, e) => UpdateExcludeModValue();
+                        strictCheckBox.CheckedChanged += (s, e) => UpdateExcludeModValue();
+
+                        excludeModPanel.Controls.Add(strictCheckBox);
+                        excludeModPanel.Controls.Add(modNameTextBox);
+                        valueControl = excludeModPanel;
+                        break;
                 }
             }
 
