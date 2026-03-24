@@ -351,12 +351,11 @@ namespace BeatSaberIndependentMapsManager
         }
 
         /// <summary>
-        /// Applies result limit to lightweight map list
+        /// Gets the result limit from a preset (checks top-level first, then group-level)
         /// </summary>
-        private List<BeatSaverMapSlim> ApplyResultLimitSlim(List<BeatSaverMapSlim> maps, FilterPreset preset)
+        private ResultLimitValue GetResultLimitFromPreset(FilterPreset preset)
         {
-            ResultLimitValue resultLimit = preset.TopLevelResultLimit;
-
+            var resultLimit = preset.TopLevelResultLimit;
             if (resultLimit == null)
             {
                 foreach (var group in preset.GetActiveGroups())
@@ -365,25 +364,19 @@ namespace BeatSaberIndependentMapsManager
                     if (resultLimit != null) break;
                 }
             }
+            return resultLimit;
+        }
 
+        /// <summary>
+        /// Applies result limit to lightweight map list
+        /// </summary>
+        private List<BeatSaverMapSlim> ApplyResultLimitSlim(List<BeatSaverMapSlim> maps, FilterPreset preset)
+        {
+            var resultLimit = GetResultLimitFromPreset(preset);
             if (resultLimit == null || resultLimit.Count <= 0)
                 return maps;
 
-            switch (resultLimit.SortOption)
-            {
-                case ResultSortOption.Newest:
-                    maps = maps.OrderByDescending(m => m.Uploaded).ToList();
-                    break;
-                case ResultSortOption.Oldest:
-                    maps = maps.OrderBy(m => m.Uploaded).ToList();
-                    break;
-                case ResultSortOption.Random:
-                    var random = new Random();
-                    maps = maps.OrderBy(m => random.Next()).ToList();
-                    break;
-            }
-
-            return maps.Take(resultLimit.Count).ToList();
+            return ApplySortAndLimit(maps, resultLimit, m => m.Uploaded);
         }
 
         /// <summary>
@@ -391,40 +384,32 @@ namespace BeatSaberIndependentMapsManager
         /// </summary>
         private List<BeatSaverMap> ApplyResultLimit(List<BeatSaverMap> maps, FilterPreset preset)
         {
-            // First check for top-level result limit (overrides group-level)
-            ResultLimitValue resultLimit = preset.TopLevelResultLimit;
-
-            // If no top-level limit, check for group-level limit (first group that has one)
-            if (resultLimit == null)
-            {
-                foreach (var group in preset.GetActiveGroups())
-                {
-                    resultLimit = group.GetResultLimit();
-                    if (resultLimit != null)
-                        break;
-                }
-            }
-
+            var resultLimit = GetResultLimitFromPreset(preset);
             if (resultLimit == null || resultLimit.Count <= 0)
                 return maps;
 
-            // Sort based on sort option
+            return ApplySortAndLimit(maps, resultLimit, m => m.Uploaded);
+        }
+
+        /// <summary>
+        /// Generic method to apply sorting and limit to a list
+        /// </summary>
+        private List<T> ApplySortAndLimit<T>(List<T> list, ResultLimitValue resultLimit, Func<T, DateTime> dateSelector)
+        {
             switch (resultLimit.SortOption)
             {
                 case ResultSortOption.Newest:
-                    maps = maps.OrderByDescending(m => m.Uploaded).ToList();
+                    list = list.OrderByDescending(dateSelector).ToList();
                     break;
                 case ResultSortOption.Oldest:
-                    maps = maps.OrderBy(m => m.Uploaded).ToList();
+                    list = list.OrderBy(dateSelector).ToList();
                     break;
                 case ResultSortOption.Random:
                     var random = new Random();
-                    maps = maps.OrderBy(m => random.Next()).ToList();
+                    list = list.OrderBy(m => random.Next()).ToList();
                     break;
             }
-
-            // Take the specified count
-            return maps.Take(resultLimit.Count).ToList();
+            return list.Take(resultLimit.Count).ToList();
         }
 
         /// <summary>
@@ -441,6 +426,7 @@ namespace BeatSaberIndependentMapsManager
 
             // Process groups with group-level AND/OR logic
             bool? groupResult = null;
+            LogicOperator? prevGroupOperator = null;
 
             foreach (var group in activeGroups)
             {
@@ -455,12 +441,15 @@ namespace BeatSaberIndependentMapsManager
                 }
                 else
                 {
-                    // Apply group operator
-                    if (group.GroupOperator == LogicOperator.Or)
+                    // Apply the PREVIOUS group's operator to combine with current group
+                    if (prevGroupOperator == LogicOperator.Or)
                         groupResult = groupResult.Value || matchesGroup;
                     else
                         groupResult = groupResult.Value && matchesGroup;
                 }
+
+                // Store this group's operator for the next iteration
+                prevGroupOperator = group.GroupOperator;
             }
 
             return groupResult ?? true;
@@ -472,113 +461,77 @@ namespace BeatSaberIndependentMapsManager
         private bool MatchesGroupConditions(BeatSaverMap map, List<FilterCondition> conditions)
         {
             bool? result = null;
-            LogicOperator? lastOperator = null;
+            LogicOperator? prevOperator = null;
 
             // Handle NPS conditions together (MinNps and MaxNps should check the same difficulty)
             var npsConditions = conditions.Where(c => c.Type == FilterConditionType.MinNps || c.Type == FilterConditionType.MaxNps).ToList();
-            bool? npsResult = null;
             bool npsProcessed = false;
 
             // Handle SS Stars conditions together
             var ssStarsConditions = conditions.Where(c => c.Type == FilterConditionType.MinSsStars || c.Type == FilterConditionType.MaxSsStars).ToList();
-            bool? ssStarsResult = null;
             bool ssStarsProcessed = false;
 
             // Handle BL Stars conditions together
             var blStarsConditions = conditions.Where(c => c.Type == FilterConditionType.MinBlStars || c.Type == FilterConditionType.MaxBlStars).ToList();
-            bool? blStarsResult = null;
             bool blStarsProcessed = false;
 
             for (int i = 0; i < conditions.Count; i++)
             {
                 var condition = conditions[i];
+                bool? conditionResult = null;
 
-                // Skip NPS conditions - they are handled separately
+                // Handle NPS conditions together
                 if (condition.Type == FilterConditionType.MinNps || condition.Type == FilterConditionType.MaxNps)
                 {
                     if (!npsProcessed && npsConditions.Any())
                     {
-                        npsResult = CheckNpsRange(map, npsConditions);
+                        conditionResult = CheckNpsRange(map, npsConditions);
                         npsProcessed = true;
-                        var lastNpsCondition = npsConditions.LastOrDefault();
-                        if (lastNpsCondition != null)
-                            lastOperator = lastNpsCondition.Operator;
                     }
-                    continue;
                 }
-
-                // Skip SS Stars conditions - they are handled separately
-                if (condition.Type == FilterConditionType.MinSsStars || condition.Type == FilterConditionType.MaxSsStars)
+                // Handle SS Stars conditions together
+                else if (condition.Type == FilterConditionType.MinSsStars || condition.Type == FilterConditionType.MaxSsStars)
                 {
                     if (!ssStarsProcessed && ssStarsConditions.Any())
                     {
-                        ssStarsResult = CheckSsStarsRange(map, ssStarsConditions);
+                        conditionResult = CheckSsStarsRange(map, ssStarsConditions);
                         ssStarsProcessed = true;
-                        var lastSsCondition = ssStarsConditions.LastOrDefault();
-                        if (lastSsCondition != null)
-                            lastOperator = lastSsCondition.Operator;
                     }
-                    continue;
                 }
-
-                // Skip BL Stars conditions - they are handled separately
-                if (condition.Type == FilterConditionType.MinBlStars || condition.Type == FilterConditionType.MaxBlStars)
+                // Handle BL Stars conditions together
+                else if (condition.Type == FilterConditionType.MinBlStars || condition.Type == FilterConditionType.MaxBlStars)
                 {
                     if (!blStarsProcessed && blStarsConditions.Any())
                     {
-                        blStarsResult = CheckBlStarsRange(map, blStarsConditions);
+                        conditionResult = CheckBlStarsRange(map, blStarsConditions);
                         blStarsProcessed = true;
-                        var lastBlCondition = blStarsConditions.LastOrDefault();
-                        if (lastBlCondition != null)
-                            lastOperator = lastBlCondition.Operator;
                     }
-                    continue;
-                }
-
-                bool matches = MatchesCondition(map, condition);
-
-                // Apply pending results first if they were computed
-                if ((npsResult.HasValue || ssStarsResult.HasValue || blStarsResult.HasValue) && !result.HasValue)
-                {
-                    bool pendingResult = true;
-                    if (npsResult.HasValue) pendingResult = pendingResult && npsResult.Value;
-                    if (ssStarsResult.HasValue) pendingResult = pendingResult && ssStarsResult.Value;
-                    if (blStarsResult.HasValue) pendingResult = pendingResult && blStarsResult.Value;
-
-                    if (lastOperator == LogicOperator.Or)
-                        result = pendingResult || matches;
-                    else
-                        result = pendingResult && matches;
-                    lastOperator = null;
-                }
-                else if (result == null)
-                {
-                    result = matches;
                 }
                 else
                 {
-                    var prevCondition = conditions[i - 1];
-                    if (prevCondition.Operator == LogicOperator.Or)
-                        result = result.Value || matches;
-                    else
-                        result = result.Value && matches;
+                    // Regular condition
+                    conditionResult = MatchesCondition(map, condition);
                 }
-            }
 
-            // Combine remaining pending results
-            if (result == null)
-            {
-                bool combined = true;
-                if (npsResult.HasValue) combined = combined && npsResult.Value;
-                if (ssStarsResult.HasValue) combined = combined && ssStarsResult.Value;
-                if (blStarsResult.HasValue) combined = combined && blStarsResult.Value;
-                return combined;
-            }
+                // Combine result using the operator from the PREVIOUS condition
+                if (conditionResult.HasValue)
+                {
+                    if (result == null)
+                    {
+                        result = conditionResult.Value;
+                    }
+                    else
+                    {
+                        if (prevOperator == LogicOperator.Or)
+                            result = result.Value || conditionResult.Value;
+                        else
+                            result = result.Value && conditionResult.Value;
+                    }
+                }
 
-            // Apply any remaining pending results
-            if (npsResult.HasValue) result = result.Value && npsResult.Value;
-            if (ssStarsResult.HasValue) result = result.Value && ssStarsResult.Value;
-            if (blStarsResult.HasValue) result = result.Value && blStarsResult.Value;
+                // Update prevOperator for the next condition
+                prevOperator = condition.Operator;
+            }
 
             return result ?? true;
         }
@@ -1718,38 +1671,28 @@ namespace BeatSaberIndependentMapsManager
         }
 
         /// <summary>
-        /// Calculates the upvote ratio as a percentage (0-100)
+        /// Calculates vote ratio as a percentage (0-100)
         /// Returns 0 if there are no votes
         /// </summary>
-        private double CalculateUpvoteRatio(BeatSaverMap map)
+        private double CalculateVoteRatio(BeatSaverMap map, bool isUpvote)
         {
             if (map.Stats == null) return 0;
 
-            var upvotes = map.Stats.Upvotes;
-            var downvotes = map.Stats.Downvotes;
-            var total = upvotes + downvotes;
-
+            var total = map.Stats.Upvotes + map.Stats.Downvotes;
             if (total == 0) return 0;
 
-            return (double)upvotes / total * 100;
+            return (isUpvote ? map.Stats.Upvotes : map.Stats.Downvotes) * 100.0 / total;
         }
 
         /// <summary>
-        /// Calculates the downvote ratio as a percentage (0-100)
-        /// Returns 0 if there are no votes
+        /// Calculates the upvote ratio as a percentage (0-100)
         /// </summary>
-        private double CalculateDownvoteRatio(BeatSaverMap map)
-        {
-            if (map.Stats == null) return 0;
+        private double CalculateUpvoteRatio(BeatSaverMap map) => CalculateVoteRatio(map, true);
 
-            var upvotes = map.Stats.Upvotes;
-            var downvotes = map.Stats.Downvotes;
-            var total = upvotes + downvotes;
-
-            if (total == 0) return 0;
-
-            return (double)downvotes / total * 100;
-        }
+        /// <summary>
+        /// Calculates the downvote ratio as a percentage (0-100)
+        /// </summary>
+        private double CalculateDownvoteRatio(BeatSaverMap map) => CalculateVoteRatio(map, false);
 
         /// <summary>
         /// Gets the cache file size in bytes

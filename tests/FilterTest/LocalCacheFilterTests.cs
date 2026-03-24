@@ -181,6 +181,72 @@ namespace BeatSaberIndependentMapsManager.Tests
             TestGroupLevelResultLimit("Group ResultLimit=5 Newest", 5, ResultSortOption.Newest);
             TestGroupLevelResultLimit("Group ResultLimit=5 Oldest", 5, ResultSortOption.Oldest);
 
+            // === Range-type Filters (Simplified UI) ===
+            Console.WriteLine("\n=== Range-type Filters (Simplified UI) ===\n");
+
+            TestRangeTypeFilter("BPM Range 120-150", FilterConditionType.BpmRange, 120, 150,
+                m => m.Metadata?.Bpm >= 120 && m.Metadata?.Bpm <= 150);
+
+            TestRangeTypeFilter("NPS Range 5-10", FilterConditionType.NpsRange, 5, 10,
+                m => HasNpsInRange(m, 5, 10));
+
+            TestRangeTypeFilter("Duration Range 60-300s", FilterConditionType.DurationRange, 60, 300,
+                m => m.Metadata?.Duration >= 60 && m.Metadata?.Duration <= 300);
+
+            TestRangeTypeFilter("SS Stars Range 5-10", FilterConditionType.SsStarsRange, 5, 10,
+                m => HasStarsInRange(m, 5, 10, "ss"));
+
+            TestRangeTypeFilter("BL Stars Range 5-10", FilterConditionType.BlStarsRange, 5, 10,
+                m => HasStarsInRange(m, 5, 10, "bl"));
+
+            TestRangeTypeFilter("Score Range 80-100", FilterConditionType.ScoreRange, 80, 100,
+                m => m.Stats?.Score >= 0.8 && m.Stats?.Score <= 1.0);
+
+            TestRangeTypeFilter("Upvote Ratio 80-100%", FilterConditionType.UpvoteRatioRange, 80, 100,
+                m => CalculateUpvoteRatio(m) >= 80 && CalculateUpvoteRatio(m) <= 100);
+
+            // === AND/OR Logic Tests ===
+            Console.WriteLine("\n=== AND/OR Logic Tests ===\n");
+
+            // Test AND logic (default)
+            TestAndLogic("AND: BPM>=120 AND Duration>=60",
+                (FilterConditionType.MinBpm, 120.0), (FilterConditionType.MinDuration, 60.0),
+                m => m.Metadata?.Bpm >= 120 && m.Metadata?.Duration >= 60);
+
+            TestAndLogic("AND: Chroma=true AND NE=true",
+                (FilterConditionType.Chroma, true), (FilterConditionType.Ne, true),
+                m => HasModInDiffs(m, "chroma") && HasModInDiffs(m, "ne"));
+
+            TestAndLogic("AND: SS Ranked AND BL Ranked",
+                (FilterConditionType.Ranked, true), (FilterConditionType.BlRanked, true),
+                m => m.Ranked && m.BlRanked);
+
+            // Test OR logic
+            TestOrLogic("OR: Chroma=true OR NE=true",
+                (FilterConditionType.Chroma, true), (FilterConditionType.Ne, true),
+                m => HasModInDiffs(m, "chroma") || HasModInDiffs(m, "ne"));
+
+            TestOrLogic("OR: SS Ranked OR BL Ranked",
+                (FilterConditionType.Ranked, true), (FilterConditionType.BlRanked, true),
+                m => m.Ranked || m.BlRanked);
+
+            TestOrLogic("OR: BPM>=180 OR NPS>=10",
+                (FilterConditionType.MinBpm, 180.0), (FilterConditionType.MinNps, 10.0),
+                m => m.Metadata?.Bpm >= 180 || HasNpsAtLeast(m, 10));
+
+            // Test complex combinations
+            TestComplexLogic("Complex: (BPM>=120 OR NPS>=8) AND Duration>=60",
+                new (FilterConditionType, object, LogicOperator)[] { (FilterConditionType.MinBpm, (object)120.0, LogicOperator.Or), (FilterConditionType.MinNps, (object)8.0, LogicOperator.And) },
+                new (FilterConditionType, object)[] { (FilterConditionType.MinDuration, (object)60.0) },
+                m => (m.Metadata?.Bpm >= 120 || HasNpsAtLeast(m, 8)) && m.Metadata?.Duration >= 60);
+
+            // Test group-level AND/OR
+            TestGroupOrLogic("Group OR: (Chroma+NE) OR (ME+Cinema)",
+                new (FilterConditionType, object)[] { (FilterConditionType.Chroma, (object)true), (FilterConditionType.Ne, (object)true) },
+                new (FilterConditionType, object)[] { (FilterConditionType.Me, (object)true), (FilterConditionType.Cinema, (object)true) },
+                m => (HasModInDiffs(m, "chroma") && HasModInDiffs(m, "ne")) ||
+                     (HasModInDiffs(m, "me") && HasModInDiffs(m, "cinema")));
+
             // === Summary ===
             Console.WriteLine("\n========== TEST SUMMARY ==========");
             Console.WriteLine($"Total: {passCount + failCount}, Passed: {passCount}, Failed: {failCount}");
@@ -457,6 +523,159 @@ namespace BeatSaberIndependentMapsManager.Tests
             var total = map.Stats.Upvotes + map.Stats.Downvotes;
             if (total == 0) return 0;
             return (double)map.Stats.Downvotes / total * 100;
+        }
+
+        // === Range-type Filter Tests ===
+        private void TestRangeTypeFilter(string name, FilterConditionType rangeType, double? min, double? max, Func<BeatSaverMap, bool> expectedPredicate)
+        {
+            int expected = allMaps.Count(expectedPredicate);
+
+            var preset = new FilterPreset("Test");
+            var group = new FilterGroup("TestGroup");
+            group.UseLocalCache = true;
+
+            var condition = new FilterCondition(rangeType);
+            condition.Value = new RangeValue(min, max);
+            condition.IsEnabled = true;
+            group.AddCondition(condition);
+
+            preset.AddGroup(group);
+
+            int actual = allMaps.Count(m => manager.TestMatchesFilter(m, preset));
+
+            bool passed = expected == actual;
+            if (passed) passCount++; else failCount++;
+
+            Console.WriteLine($"  {name}: Expected={expected}, Actual={actual} {(passed ? "[PASS]" : "[FAIL]")}");
+        }
+
+        // === AND Logic Tests ===
+        private void TestAndLogic(string name, (FilterConditionType type, object value) cond1, (FilterConditionType type, object value) cond2, Func<BeatSaverMap, bool> expectedPredicate)
+        {
+            int expected = allMaps.Count(expectedPredicate);
+
+            var preset = new FilterPreset("Test");
+            var group = new FilterGroup("TestGroup");
+            group.UseLocalCache = true;
+
+            var condition1 = new FilterCondition(cond1.type) { Value = cond1.value, IsEnabled = true, Operator = LogicOperator.And };
+            var condition2 = new FilterCondition(cond2.type) { Value = cond2.value, IsEnabled = true, Operator = LogicOperator.And };
+            group.AddCondition(condition1);
+            group.AddCondition(condition2);
+
+            preset.AddGroup(group);
+
+            int actual = allMaps.Count(m => manager.TestMatchesFilter(m, preset));
+
+            bool passed = expected == actual;
+            if (passed) passCount++; else failCount++;
+
+            Console.WriteLine($"  {name}: Expected={expected}, Actual={actual} {(passed ? "[PASS]" : "[FAIL]")}");
+        }
+
+        // === OR Logic Tests ===
+        private void TestOrLogic(string name, (FilterConditionType type, object value) cond1, (FilterConditionType type, object value) cond2, Func<BeatSaverMap, bool> expectedPredicate)
+        {
+            int expected = allMaps.Count(expectedPredicate);
+
+            var preset = new FilterPreset("Test");
+            var group = new FilterGroup("TestGroup");
+            group.UseLocalCache = true;
+
+            // First condition with OR operator, second with AND (default, but won't apply since it's last)
+            var condition1 = new FilterCondition(cond1.type) { Value = cond1.value, IsEnabled = true, Operator = LogicOperator.Or };
+            var condition2 = new FilterCondition(cond2.type) { Value = cond2.value, IsEnabled = true, Operator = LogicOperator.And };
+            group.AddCondition(condition1);
+            group.AddCondition(condition2);
+
+            preset.AddGroup(group);
+
+            int actual = allMaps.Count(m => manager.TestMatchesFilter(m, preset));
+
+            bool passed = expected == actual;
+            if (passed) passCount++; else failCount++;
+
+            Console.WriteLine($"  {name}: Expected={expected}, Actual={actual} {(passed ? "[PASS]" : "[FAIL]")}");
+        }
+
+        // === Complex Logic Tests ===
+        private void TestComplexLogic(string name, (FilterConditionType, object, LogicOperator)[] conds1, (FilterConditionType, object)[] conds2, Func<BeatSaverMap, bool> expectedPredicate)
+        {
+            int expected = allMaps.Count(expectedPredicate);
+
+            var preset = new FilterPreset("Test");
+            var group = new FilterGroup("TestGroup");
+            group.UseLocalCache = true;
+
+            // Add first set of conditions
+            foreach (var cond in conds1)
+            {
+                var condition = new FilterCondition(cond.Item1) { Value = cond.Item2, IsEnabled = true, Operator = cond.Item3 };
+                group.AddCondition(condition);
+            }
+
+            // Add second set of conditions
+            foreach (var cond in conds2)
+            {
+                var condition = new FilterCondition(cond.Item1) { Value = cond.Item2, IsEnabled = true, Operator = LogicOperator.And };
+                group.AddCondition(condition);
+            }
+
+            preset.AddGroup(group);
+
+            int actual = allMaps.Count(m => manager.TestMatchesFilter(m, preset));
+
+            bool passed = expected == actual;
+            if (passed) passCount++; else failCount++;
+
+            Console.WriteLine($"  {name}: Expected={expected}, Actual={actual} {(passed ? "[PASS]" : "[FAIL]")}");
+        }
+
+        // === Group OR Logic Tests ===
+        private void TestGroupOrLogic(string name, (FilterConditionType, object)[] group1Conds, (FilterConditionType, object)[] group2Conds, Func<BeatSaverMap, bool> expectedPredicate)
+        {
+            int expected = allMaps.Count(expectedPredicate);
+
+            var preset = new FilterPreset("Test");
+
+            // First group
+            var group1 = new FilterGroup("Group1") { UseLocalCache = true, GroupOperator = LogicOperator.Or };
+            foreach (var cond in group1Conds)
+            {
+                var condition = new FilterCondition(cond.Item1) { Value = cond.Item2, IsEnabled = true, Operator = LogicOperator.And };
+                group1.AddCondition(condition);
+            }
+            preset.AddGroup(group1);
+
+            // Second group
+            var group2 = new FilterGroup("Group2") { UseLocalCache = true, GroupOperator = LogicOperator.And };
+            foreach (var cond in group2Conds)
+            {
+                var condition = new FilterCondition(cond.Item1) { Value = cond.Item2, IsEnabled = true, Operator = LogicOperator.And };
+                group2.AddCondition(condition);
+            }
+            preset.AddGroup(group2);
+
+            int actual = allMaps.Count(m => manager.TestMatchesFilter(m, preset));
+
+            bool passed = expected == actual;
+            if (passed) passCount++; else failCount++;
+
+            Console.WriteLine($"  {name}: Expected={expected}, Actual={actual} {(passed ? "[PASS]" : "[FAIL]")}");
+        }
+
+        // Helper to check if map has NPS >= threshold
+        private bool HasNpsAtLeast(BeatSaverMap map, double minNps)
+        {
+            if (map.Versions == null || map.Versions.Count == 0 || map.Versions[0].Diffs == null)
+                return false;
+
+            foreach (var diff in map.Versions[0].Diffs)
+            {
+                if (diff != null && diff.Nps >= minNps)
+                    return true;
+            }
+            return false;
         }
 
         public static void Main(string[] args)
