@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
@@ -3460,81 +3461,163 @@ namespace BeatSaberIndependentMapsManager
 
             // 检查是否所有预设都需要本地缓存
             bool allRequireLocalCache = presets.All(p => RequiresLocalCache(p));
-            bool useSharedCache = false;
 
             try
             {
-                // 如果所有预设都需要本地缓存，预加载一次
-                if (allRequireLocalCache && localCacheManager != null && localCacheManager.IsCacheAvailable)
+                if (allRequireLocalCache)
                 {
-                    BSIMMStatusText.Text = "预加载本地缓存...";
-                    useSharedCache = true;
+                    // 如果本地缓存管理器未初始化，则创建
+                    if (localCacheManager == null)
+                        localCacheManager = new LocalCacheManager();
 
-                    await Task.Run(() =>
+                    // 检查缓存是否可用
+                    if (!localCacheManager.IsCacheAvailable)
+                    {
+                        MessageBox.Show("需要本地缓存但未下载，请先在设置中下载本地缓存。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        btnBatchOutput.Enabled = true;
+                        return;
+                    }
+
+                    // 使用本地缓存进行并行筛选
+                    BSIMMStatusText.Text = "并行筛选中...";
+
+                    var filterResults = await Task.Run(() =>
                     {
                         var progress = new Progress<int>(percent =>
                         {
                             this.BeginInvoke(() =>
                             {
                                 if (this.IsDisposed) return;
-                                BSIMMProgress.ProgressBar.Value = percent / 2; // 预加载占一半进度
-                                BSIMMStatusText.Text = $"预加载缓存... {percent}%";
+                                BSIMMProgress.ProgressBar.Value = percent;
+                                if (percent < 50)
+                                    BSIMMStatusText.Text = $"预加载缓存... {percent}%";
+                                else
+                                    BSIMMStatusText.Text = $"并行筛选中... {percent}%";
                             });
                         });
-                        localCacheManager.InitializeSharedReader(true, progress);
+                        return localCacheManager.ParallelBatchFilterSlim(presets, progress);
                     });
-                }
 
-                for (int i = 0; i < presets.Count; i++)
-                {
-                    var preset = presets[i];
-                    try
+                    // 并行导出歌单
+                    BSIMMStatusText.Text = "并行导出中...";
+                    var exportResults = new ConcurrentBag<(int Index, bool Success, int MapCount, string PresetName)>();
+                    int exportProgress = 0;
+
+                    await Task.Run(() =>
                     {
-                        int overallProgress = useSharedCache ? 50 + (i * 50 / presets.Count) : (i * 100 / presets.Count);
-                        BSIMMStatusText.Text = $"正在处理 ({i + 1}/{presets.Count}): {preset.Name}";
-                        BSIMMProgress.ProgressBar.Value = overallProgress;
-
-                        // 执行搜索获取所有结果
-                        var maps = await FetchAllMapsForPreset(preset, useSharedCache);
-
-                        if (maps.Count == 0)
+                        var options = new ParallelOptions
                         {
-                            debugLog($"批处理 - {preset.Name}: 无结果");
+                            MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, presets.Count)
+                        };
+
+                        Parallel.For(0, presets.Count, options, (i) =>
+                        {
+                            var preset = presets[i];
+                            var maps = filterResults[i];
+
+                            try
+                            {
+                                if (maps.Count == 0)
+                                {
+                                    this.BeginInvoke(() => debugLog($"批处理 - {preset.Name}: 无结果"));
+                                    exportResults.Add((i, false, 0, preset.Name));
+                                    return;
+                                }
+
+                                // 提取封面文字
+                                string coverText = ExtractCoverTextFromPresetName(preset.Name);
+
+                                // 导出到歌单
+                                string filePath = Path.Combine(outputDir, $"{SanitizeFileName(preset.Name)}.bplist");
+                                var fullMaps = maps.Select(m => m.ToFullMap()).ToList();
+                                bool success = ExportMapsToPlaylistInternal(fullMaps, filePath, preset.Name, coverText, silent: true);
+
+                                exportResults.Add((i, success, maps.Count, preset.Name));
+
+                                // 更新进度
+                                lock (exportResults)
+                                {
+                                    exportProgress++;
+                                    this.BeginInvoke(() =>
+                                    {
+                                        if (this.IsDisposed) return;
+                                        BSIMMProgress.ProgressBar.Value = 50 + exportProgress * 50 / presets.Count;
+                                        BSIMMStatusText.Text = $"导出中 ({exportProgress}/{presets.Count})...";
+                                    });
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                this.BeginInvoke(() => debugLog($"批处理失败 - {preset.Name}: {ex.Message}"));
+                                exportResults.Add((i, false, 0, preset.Name));
+                            }
+                        });
+                    });
+
+                    // 统计结果
+                    foreach (var result in exportResults.OrderBy(r => r.Index))
+                    {
+                        if (result.MapCount == 0)
                             zeroResultCount++;
-                            continue;
-                        }
-
-                        // 提取封面文字
-                        string coverText = ExtractCoverTextFromPresetName(preset.Name);
-
-                        // 导出到歌单（静默模式）
-                        string filePath = Path.Combine(outputDir, $"{SanitizeFileName(preset.Name)}.bplist");
-                        bool success = ExportMapsToPlaylistInternal(maps, filePath, preset.Name, coverText, silent: true);
-
-                        if (success)
+                        else if (result.Success)
                         {
-                            debugLog($"批处理成功 - {preset.Name}: {maps.Count} 首歌曲");
                             successCount++;
+                            debugLog($"批处理成功 - {result.PresetName}: {result.MapCount} 首歌曲");
                         }
                         else
+                            failCount++;
+                    }
+                }
+                else
+                {
+                    // 不使用本地缓存时，串行处理（API请求有限速）
+                    for (int i = 0; i < presets.Count; i++)
+                    {
+                        var preset = presets[i];
+                        try
                         {
+                            int overallProgress = (i * 100 / presets.Count);
+                            BSIMMStatusText.Text = $"正在处理 ({i + 1}/{presets.Count}): {preset.Name}";
+                            BSIMMProgress.ProgressBar.Value = overallProgress;
+
+                            // 执行搜索获取所有结果
+                            var maps = await FetchAllMapsForPreset(preset, false);
+
+                            if (maps.Count == 0)
+                            {
+                                debugLog($"批处理 - {preset.Name}: 无结果");
+                                zeroResultCount++;
+                                continue;
+                            }
+
+                            // 提取封面文字
+                            string coverText = ExtractCoverTextFromPresetName(preset.Name);
+
+                            // 导出到歌单（静默模式）
+                            string filePath = Path.Combine(outputDir, $"{SanitizeFileName(preset.Name)}.bplist");
+                            bool success = ExportMapsToPlaylistInternal(maps, filePath, preset.Name, coverText, silent: true);
+
+                            if (success)
+                            {
+                                debugLog($"批处理成功 - {preset.Name}: {maps.Count} 首歌曲");
+                                successCount++;
+                            }
+                            else
+                            {
+                                failCount++;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            debugLog($"批处理失败 - {preset.Name}: {ex.Message}");
                             failCount++;
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        debugLog($"批处理失败 - {preset.Name}: {ex.Message}");
-                        failCount++;
-                    }
                 }
             }
-            finally
+            catch (Exception ex)
             {
-                // 释放共享缓存
-                if (useSharedCache && localCacheManager != null)
-                {
-                    localCacheManager.ClearSharedReader();
-                }
+                debugLog($"批处理导出错误: {ex.Message}");
             }
 
             btnBatchOutput.Enabled = true;
@@ -3586,7 +3669,9 @@ namespace BeatSaberIndependentMapsManager
                             {
                                 results.Add(map);
                             }
-                            return results.Select(m => m.ToFullMap()).ToList();
+                            // 应用结果限制
+                            var limitedResults = localCacheManager.ApplyResultLimitSlim(results, preset);
+                            return limitedResults.Select(m => m.ToFullMap()).ToList();
                         }
                         else
                         {
