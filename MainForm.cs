@@ -3908,24 +3908,27 @@ namespace BeatSaberIndependentMapsManager
                     // 使用API搜索
                     var filter = BuildSearchFilterFromPreset(preset);
                     int page = 0;
-                    int maxPages = 100; // 限制最大页数防止无限循环
+                    int totalPagesFromApi = 0;
 
-                    while (page < maxPages)
+                    while (true)
                     {
                         var response = await beatSaverClient.SearchMapsAsync(filter, page);
                         if (response?.Maps == null || response.Maps.Count == 0)
                             break;
 
+                        // 获取总页数（仅在第一页时获取）
+                        if (page == 0)
+                        {
+                            if (response.Info != null)
+                                totalPagesFromApi = response.Info.Pages;
+                            else if (response.Metadata != null)
+                                totalPagesFromApi = (response.Metadata.Total + response.Metadata.PageSize - 1) / response.Metadata.PageSize;
+                        }
+
                         allMaps.AddRange(response.Maps);
 
                         // 检查是否还有下一页
-                        int totalPages = 0;
-                        if (response.Info != null)
-                            totalPages = response.Info.Pages;
-                        else if (response.Metadata != null)
-                            totalPages = (response.Metadata.Total + response.Metadata.PageSize - 1) / response.Metadata.PageSize;
-
-                        if (page >= totalPages - 1)
+                        if (page >= totalPagesFromApi - 1)
                             break;
 
                         page++;
