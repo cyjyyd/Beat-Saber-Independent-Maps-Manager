@@ -832,21 +832,18 @@ namespace BeatSaberIndependentMapsManager
         private bool MatchesGroupConditionsSlim(BeatSaverMapSlim map, List<FilterCondition> conditions)
         {
             bool? result = null;
-            LogicOperator? lastOperator = null;
+            LogicOperator? prevOperator = null;
 
             // NPS 条件组合处理
             var npsConditions = conditions.Where(c => c.Type == FilterConditionType.MinNps || c.Type == FilterConditionType.MaxNps).ToList();
-            bool? npsResult = null;
             bool npsProcessed = false;
 
             // SS Stars 条件组合处理
             var ssStarsConditions = conditions.Where(c => c.Type == FilterConditionType.MinSsStars || c.Type == FilterConditionType.MaxSsStars).ToList();
-            bool? ssStarsResult = null;
             bool ssStarsProcessed = false;
 
             // BL Stars 条件组合处理
             var blStarsConditions = conditions.Where(c => c.Type == FilterConditionType.MinBlStars || c.Type == FilterConditionType.MaxBlStars).ToList();
-            bool? blStarsResult = null;
             bool blStarsProcessed = false;
 
             // Mod 条件组合处理 (BeatSaver API's Mod params are naturally OR logic)
@@ -859,115 +856,74 @@ namespace BeatSaberIndependentMapsManager
                 FilterConditionType.Vivify
             };
             var modConditions = conditions.Where(c => modConditionTypes.Contains(c.Type)).ToList();
-            bool? modResult = null;
             bool modProcessed = false;
 
             for (int i = 0; i < conditions.Count; i++)
             {
                 var condition = conditions[i];
+                bool? conditionResult = null;
 
                 // NPS 条件
                 if (condition.Type == FilterConditionType.MinNps || condition.Type == FilterConditionType.MaxNps)
                 {
                     if (!npsProcessed && npsConditions.Any())
                     {
-                        npsResult = CheckNpsRangeSlim(map, npsConditions);
+                        conditionResult = CheckNpsRangeSlim(map, npsConditions);
                         npsProcessed = true;
-                        var lastNpsCondition = npsConditions.LastOrDefault();
-                        if (lastNpsCondition != null)
-                            lastOperator = lastNpsCondition.Operator;
                     }
-                    continue;
                 }
-
                 // SS Stars 条件
-                if (condition.Type == FilterConditionType.MinSsStars || condition.Type == FilterConditionType.MaxSsStars)
+                else if (condition.Type == FilterConditionType.MinSsStars || condition.Type == FilterConditionType.MaxSsStars)
                 {
                     if (!ssStarsProcessed && ssStarsConditions.Any())
                     {
-                        ssStarsResult = CheckStarsRangeSlim(map, ssStarsConditions, false);
+                        conditionResult = CheckStarsRangeSlim(map, ssStarsConditions, false);
                         ssStarsProcessed = true;
-                        var lastSsCondition = ssStarsConditions.LastOrDefault();
-                        if (lastSsCondition != null)
-                            lastOperator = lastSsCondition.Operator;
                     }
-                    continue;
                 }
-
                 // BL Stars 条件
-                if (condition.Type == FilterConditionType.MinBlStars || condition.Type == FilterConditionType.MaxBlStars)
+                else if (condition.Type == FilterConditionType.MinBlStars || condition.Type == FilterConditionType.MaxBlStars)
                 {
                     if (!blStarsProcessed && blStarsConditions.Any())
                     {
-                        blStarsResult = CheckStarsRangeSlim(map, blStarsConditions, true);
+                        conditionResult = CheckStarsRangeSlim(map, blStarsConditions, true);
                         blStarsProcessed = true;
-                        var lastBlCondition = blStarsConditions.LastOrDefault();
-                        if (lastBlCondition != null)
-                            lastOperator = lastBlCondition.Operator;
                     }
-                    continue;
                 }
-
                 // Mod 条件 (API behavior: OR params)
-                if (modConditionTypes.Contains(condition.Type))
+                else if (modConditionTypes.Contains(condition.Type))
                 {
                     if (!modProcessed && modConditions.Any())
                     {
-                        modResult = CheckModConditionsSlim(map, modConditions);
+                        conditionResult = CheckModConditionsSlim(map, modConditions);
                         modProcessed = true;
-                        var lastModCondition = modConditions.LastOrDefault();
-                        if (lastModCondition != null)
-                            lastOperator = lastModCondition.Operator;
                     }
-                    continue;
-                }
-
-                bool matches = MatchesConditionSlim(map, condition);
-
-                // 处理组合结果
-                if ((npsResult.HasValue || ssStarsResult.HasValue || blStarsResult.HasValue || modResult.HasValue) && !result.HasValue)
-                {
-                    bool pendingResult = true;
-                    if (npsResult.HasValue) pendingResult = pendingResult && npsResult.Value;
-                    if (ssStarsResult.HasValue) pendingResult = pendingResult && ssStarsResult.Value;
-                    if (blStarsResult.HasValue) pendingResult = pendingResult && blStarsResult.Value;
-                    if (modResult.HasValue) pendingResult = pendingResult && modResult.Value;
-
-                    if (lastOperator == LogicOperator.Or)
-                        result = pendingResult || matches;
-                    else
-                        result = pendingResult && matches;
-                    lastOperator = null;
-                }
-                else if (result == null)
-                {
-                    result = matches;
                 }
                 else
                 {
-                    var prevCondition = conditions[i - 1];
-                    if (prevCondition.Operator == LogicOperator.Or)
-                        result = result.Value || matches;
-                    else
-                        result = result.Value && matches;
+                    // 常规条件
+                    conditionResult = MatchesConditionSlim(map, condition);
                 }
-            }
 
-            // 组合剩余结果
-            if (result == null)
-            {
-                bool combined = true;
-                if (npsResult.HasValue) combined = combined && npsResult.Value;
-                if (ssStarsResult.HasValue) combined = combined && ssStarsResult.Value;
-                if (blStarsResult.HasValue) combined = combined && blStarsResult.Value;
-                if (modResult.HasValue) combined = combined && modResult.Value;
-                return combined;
-            }
+                // 合并结果
+                if (conditionResult.HasValue)
+                {
+                    if (result == null)
+                    {
+                        result = conditionResult.Value;
+                    }
+                    else
+                    {
+                        if (prevOperator == LogicOperator.Or)
+                            result = result.Value || conditionResult.Value;
+                        else
+                            result = result.Value && conditionResult.Value;
+                    }
+                }
 
-            if (npsResult.HasValue) result = result.Value && npsResult.Value;
-            if (ssStarsResult.HasValue) result = result.Value && ssStarsResult.Value;
-            if (blStarsResult.HasValue) result = result.Value && blStarsResult.Value;
-            if (modResult.HasValue) result = result.Value && modResult.Value;
+                // 更新 prevOperator 为当前条件的 Operator，供下一次迭代使用
+                prevOperator = condition.Operator;
+            }
 
             return result ?? true;
         }
@@ -1026,7 +982,6 @@ namespace BeatSaberIndependentMapsManager
             bool hasMod = condition.Type switch
             {
                 FilterConditionType.Chroma => map.HasMod("Chroma"),
-                FilterConditionType.Ne => map.HasMod("Ne"),
                 FilterConditionType.Noodle => map.HasMod("Noodle"),
                 FilterConditionType.Me => map.HasMod("Me"),
                 FilterConditionType.Cinema => map.HasMod("Cinema"),

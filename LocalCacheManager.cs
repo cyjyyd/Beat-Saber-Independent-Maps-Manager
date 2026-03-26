@@ -351,6 +351,73 @@ namespace BeatSaberIndependentMapsManager
         }
 
         /// <summary>
+        /// Parallel batch filter multiple presets using preloaded cache (for better performance)
+        /// </summary>
+        public List<List<BeatSaverMapSlim>> ParallelBatchFilterSlim(List<FilterPreset> presets, IProgress<int> progress, CancellationToken cancellationToken = default)
+        {
+            if (!IsCacheAvailable || presets == null || presets.Count == 0)
+                return new List<List<BeatSaverMapSlim>>();
+
+            // 确保共享读取器已初始化并预加载
+            InitializeSharedReader(true, new Progress<int>(p =>
+            {
+                progress?.Report(p / 2); // 加载占前半进度
+            }));
+
+            var results = new ConcurrentBag<(int Index, List<BeatSaverMapSlim> Maps)>();
+            int completedPresets = 0;
+            object lockObj = new object();
+
+            try
+            {
+                // 并行处理每个预设
+                var options = new ParallelOptions
+                {
+                    CancellationToken = cancellationToken,
+                    MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, presets.Count)
+                };
+
+                Parallel.For(0, presets.Count, options, (i, state) =>
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        state.Break();
+                        return;
+                    }
+
+                    var preset = presets[i];
+                    var presetResults = new List<BeatSaverMapSlim>();
+
+                    // 直接遍历预加载的数据（线程安全，因为 preloadedMaps 是只读的）
+                    foreach (var map in sharedReader.StreamFilterMaps(preset, null))
+                    {
+                        presetResults.Add(map);
+                    }
+
+                    // 应用结果限制
+                    var limitedResults = ApplyResultLimitSlim(presetResults, preset);
+                    results.Add((i, limitedResults));
+
+                    // 更新进度
+                    lock (lockObj)
+                    {
+                        completedPresets++;
+                        progress?.Report(50 + completedPresets * 50 / presets.Count);
+                    }
+                });
+            }
+            finally
+            {
+                ClearSharedReader();
+            }
+
+            progress?.Report(100);
+
+            // 按原始顺序返回结果
+            return results.OrderBy(r => r.Index).Select(r => r.Maps).ToList();
+        }
+
+        /// <summary>
         /// Gets the result limit from a preset (checks top-level first, then group-level)
         /// </summary>
         private ResultLimitValue GetResultLimitFromPreset(FilterPreset preset)
@@ -370,7 +437,7 @@ namespace BeatSaberIndependentMapsManager
         /// <summary>
         /// Applies result limit to lightweight map list
         /// </summary>
-        private List<BeatSaverMapSlim> ApplyResultLimitSlim(List<BeatSaverMapSlim> maps, FilterPreset preset)
+        public List<BeatSaverMapSlim> ApplyResultLimitSlim(List<BeatSaverMapSlim> maps, FilterPreset preset)
         {
             var resultLimit = GetResultLimitFromPreset(preset);
             if (resultLimit == null || resultLimit.Count <= 0)
