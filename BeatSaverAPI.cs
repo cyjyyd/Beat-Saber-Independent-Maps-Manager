@@ -84,6 +84,97 @@ namespace BeatSaberIndependentMapsManager
             return JsonConvert.DeserializeObject<BeatSaverSearchResponse>(json);
         }
 
+        /// <summary>
+        /// 对搜索结果应用Mod二次筛选
+        /// BeatSaver API的Mod参数是OR关系，此方法确保AND逻辑
+        /// 注意：每个Mod条件检查是否有至少一个难度支持，不同Mod可由不同难度满足
+        /// </summary>
+        public List<BeatSaverMap> ApplyModFilters(List<BeatSaverMap> maps, BeatSaverSearchFilter filter)
+        {
+            if (maps == null || !filter.HasModFiltersToApply)
+                return maps;
+
+            var filteredMaps = new List<BeatSaverMap>();
+
+            foreach (var map in maps)
+            {
+                bool matchesAllMods = true;
+
+                foreach (var modFilter in filter.ModFiltersToApply)
+                {
+                    bool satisfiesMod = CheckMapSatisfiesModCondition(map, modFilter.ModName, modFilter.RequiredValue);
+                    if (!satisfiesMod)
+                    {
+                        matchesAllMods = false;
+                        break;
+                    }
+                }
+
+                if (matchesAllMods)
+                    filteredMaps.Add(map);
+            }
+
+            return filteredMaps;
+        }
+
+        /// <summary>
+        /// 检查谱面是否满足指定的Mod条件
+        /// 与本地缓存的HasMod逻辑一致：检查是否有至少一个难度支持该Mod
+        /// </summary>
+        private bool CheckMapSatisfiesModCondition(BeatSaverMap map, string modName, bool requiredValue)
+        {
+            if (map.Versions == null || map.Versions.Count == 0)
+                return false;
+
+            // 使用最新版本（第一个版本）进行检查
+            var latestVersion = map.Versions[0];
+            if (latestVersion.Diffs == null || latestVersion.Diffs.Count == 0)
+                return false;
+
+            if (requiredValue)
+            {
+                // 要求有这个Mod：检查是否至少有一个难度支持
+                foreach (var diff in latestVersion.Diffs)
+                {
+                    bool hasMod = modName.ToLower() switch
+                    {
+                        "chroma" => diff.Chroma,
+                        "noodle" => diff.Ne,
+                        "ne" => diff.Ne,
+                        "me" => diff.Me,
+                        "cinema" => diff.Cinema,
+                        "vivify" => diff.Vivify,
+                        _ => false
+                    };
+
+                    if (hasMod)
+                        return true;
+                }
+                return false;
+            }
+            else
+            {
+                // 要求没有这个Mod：检查是否所有难度都不支持
+                foreach (var diff in latestVersion.Diffs)
+                {
+                    bool hasMod = modName.ToLower() switch
+                    {
+                        "chroma" => diff.Chroma,
+                        "noodle" => diff.Ne,
+                        "ne" => diff.Ne,
+                        "me" => diff.Me,
+                        "cinema" => diff.Cinema,
+                        "vivify" => diff.Vivify,
+                        _ => false
+                    };
+
+                    if (hasMod)
+                        return false;
+                }
+                return true;
+            }
+        }
+
         private string BuildSearchUrl(BeatSaverSearchFilter filter, int page)
         {
             var sb = new System.Text.StringBuilder();
@@ -127,8 +218,10 @@ namespace BeatSaberIndependentMapsManager
                 sb.Append($"maxRating={filter.MaxRating.Value / 100.0}&");
 
             // Mod 支持
+            // 注意：BeatSaver API的Mod参数是OR关系
+            // 发送所有Mod参数，然后在客户端进行二次筛选实现AND逻辑
             if (filter.Chroma == true) sb.Append("chroma=true&");
-            if (filter.Noodle == true) sb.Append("noodle=true&");
+            if (filter.Noodle == true) sb.Append("ne=true&");  // API用ne表示noodle
             if (filter.Me == true) sb.Append("me=true&");
             if (filter.Cinema == true) sb.Append("cinema=true&");
             if (filter.Vivify == true) sb.Append("vivify=true&");
@@ -197,6 +290,32 @@ namespace BeatSaberIndependentMapsManager
         public string Leaderboard { get; set; }
         public bool? Curated { get; set; }
         public bool? Verified { get; set; }
+
+        /// <summary>
+        /// 需要在客户端进行二次筛选的Mod条件
+        /// BeatSaver API的Mod参数是OR关系，需要二次筛选实现AND逻辑
+        /// </summary>
+        public List<ModFilterCondition> ModFiltersToApply { get; set; } = new List<ModFilterCondition>();
+
+        /// <summary>
+        /// 检查是否有需要二次筛选的Mod条件
+        /// </summary>
+        public bool HasModFiltersToApply => ModFiltersToApply.Count > 0;
+    }
+
+    /// <summary>
+    /// Mod筛选条件
+    /// </summary>
+    public class ModFilterCondition
+    {
+        public string ModName { get; set; }
+        public bool RequiredValue { get; set; }
+
+        public ModFilterCondition(string modName, bool requiredValue)
+        {
+            ModName = modName;
+            RequiredValue = requiredValue;
+        }
     }
 
     /// <summary>

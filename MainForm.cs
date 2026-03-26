@@ -2560,10 +2560,19 @@ namespace BeatSaberIndependentMapsManager
                 // 检查是否有 OR 逻辑需要处理
                 bool hasOrLogic = HasOrLogic(preset);
 
+                // 构建filter检查是否需要Mod二次筛选
+                var filter = BuildSearchFilterFromPreset(preset);
+                bool needsModFiltering = filter.HasModFiltersToApply && filter.ModFiltersToApply.Count > 1;
+
                 if (hasOrLogic)
                 {
                     // 使用 OR 逻辑处理：执行多次搜索然后合并
                     await SearchWithOrLogic(preset);
+                }
+                else if (needsModFiltering)
+                {
+                    // 有多个Mod条件需要AND筛选：获取所有结果后二次筛选
+                    await SearchWithModFiltering(filter);
                 }
                 else
                 {
@@ -2572,7 +2581,6 @@ namespace BeatSaberIndependentMapsManager
                     isLocalCacheSearch = false;
                     allOrSearchResults.Clear();
 
-                    var filter = BuildSearchFilterFromPreset(preset);
                     var response = await beatSaverClient.SearchMapsAsync(filter, currentPage);
 
                     if (response?.Maps != null && response.Maps.Count > 0)
@@ -2814,6 +2822,15 @@ namespace BeatSaberIndependentMapsManager
 
                 // 检查组内条件是否有 OR
                 var conditions = group.GetActiveConditions();
+
+                // 检查是否为"仅包含Mod支持条件"的特殊情况
+                // BeatSaver API的Mod参数本身就是OR关系，不需要拆分
+                if (IsModOnlyGroup(conditions))
+                {
+                    // 组内仅有Mod条件，API会处理OR逻辑，跳过此组
+                    continue;
+                }
+
                 foreach (var condition in conditions)
                 {
                     if (condition.Operator == LogicOperator.Or)
@@ -2822,6 +2839,35 @@ namespace BeatSaberIndependentMapsManager
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// 检查条件列表是否仅包含Mod支持条件
+        /// BeatSaver API的Mod参数本身就是OR关系，直接拼接即可
+        /// </summary>
+        private bool IsModOnlyGroup(List<FilterCondition> conditions)
+        {
+            if (conditions == null || conditions.Count == 0)
+                return false;
+
+            // Mod支持条件类型
+            var modConditionTypes = new HashSet<FilterConditionType>
+            {
+                FilterConditionType.Chroma,
+                FilterConditionType.Noodle,
+                FilterConditionType.Me,
+                FilterConditionType.Cinema,
+                FilterConditionType.Vivify
+            };
+
+            // 检查所有条件是否都是Mod支持条件
+            foreach (var condition in conditions)
+            {
+                if (!modConditionTypes.Contains(condition.Type))
+                    return false;
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -2937,6 +2983,88 @@ namespace BeatSaberIndependentMapsManager
         }
 
         /// <summary>
+        /// 使用Mod二次筛选执行搜索
+        /// 当有多个Mod条件需要AND逻辑时使用
+        /// </summary>
+        private async Task SearchWithModFiltering(BeatSaverSearchFilter filter)
+        {
+            BSIMMActionText.Text = "正在搜索并筛选...";
+
+            // 收集所有页面的结果
+            var allResults = new Dictionary<string, BeatSaverMap>();
+            int page = 0;
+            int totalPagesFromApi = 0;
+
+            while (true)
+            {
+                try
+                {
+                    var response = await beatSaverClient.SearchMapsAsync(filter, page);
+                    if (response?.Maps == null || response.Maps.Count == 0)
+                        break;
+
+                    // 获取总页数
+                    if (page == 0)
+                    {
+                        if (response.Info != null)
+                            totalPagesFromApi = response.Info.Pages;
+                        else if (response.Metadata != null)
+                            totalPagesFromApi = (response.Metadata.Total + response.Metadata.PageSize - 1) / response.Metadata.PageSize;
+                    }
+
+                    foreach (var map in response.Maps)
+                    {
+                        if (!string.IsNullOrEmpty(map.Id) && !allResults.ContainsKey(map.Id))
+                        {
+                            allResults[map.Id] = map;
+                        }
+                    }
+
+                    // 检查是否还有更多页面
+                    if (page >= totalPagesFromApi - 1)
+                        break;
+
+                    page++;
+                    BSIMMActionText.Text = $"正在获取数据... 第 {page + 1}/{totalPagesFromApi} 页";
+
+                    // 添加小延迟避免请求过快
+                    await Task.Delay(100);
+                }
+                catch
+                {
+                    break;
+                }
+            }
+
+            BSIMMActionText.Text = "正在筛选...";
+
+            // 应用Mod二次筛选
+            var filteredResults = beatSaverClient.ApplyModFilters(allResults.Values.ToList(), filter);
+
+            // 缓存筛选后的结果
+            allOrSearchResults = filteredResults;
+            isOrModeSearch = true; // 复用OR模式的分页显示逻辑
+            isLocalCacheSearch = false;
+            currentPage = 0;
+
+            // 计算总页数
+            totalPages = (int)Math.Ceiling((double)allOrSearchResults.Count / PageSize);
+
+            if (allOrSearchResults.Count > 0)
+            {
+                BSIMMActionText.Text = $"找到 {allOrSearchResults.Count} 个结果（Mod筛选）";
+                await DisplayOrSearchPage();
+            }
+            else
+            {
+                BSIMMActionText.Text = "未找到匹配的结果";
+                btnPrevPage.Enabled = false;
+                btnNextPage.Enabled = false;
+                lblPageInfo.Text = "第 0/0 页";
+            }
+        }
+
+        /// <summary>
         /// 执行单个搜索任务
         /// </summary>
         private async Task<List<BeatSaverMap>> ExecuteSearchTask(BeatSaverSearchFilter filter, int page)
@@ -3048,7 +3176,8 @@ namespace BeatSaberIndependentMapsManager
                 Automapper = source.Automapper,
                 Leaderboard = source.Leaderboard,
                 Curated = source.Curated,
-                Verified = source.Verified
+                Verified = source.Verified,
+                ModFiltersToApply = new List<ModFilterCondition>(source.ModFiltersToApply)
             };
         }
 
@@ -3061,11 +3190,69 @@ namespace BeatSaberIndependentMapsManager
 
             if (preset == null) return filter;
 
+            // Mod支持条件类型
+            var modConditionTypes = new HashSet<FilterConditionType>
+            {
+                FilterConditionType.Chroma,
+                FilterConditionType.Noodle,
+                FilterConditionType.Me,
+                FilterConditionType.Cinema,
+                FilterConditionType.Vivify
+            };
+
             foreach (var group in preset.GetActiveGroups())
             {
-                foreach (var condition in group.GetActiveConditions())
+                var conditions = group.GetActiveConditions();
+
+                // 追踪Mod条件之间的逻辑关系
+                // 只有AND关系才需要二次筛选，OR关系API直接返回正确结果
+                FilterCondition previousModCondition = null;
+
+                for (int i = 0; i < conditions.Count; i++)
                 {
-                    ApplyConditionToFilter(filter, condition);
+                    var condition = conditions[i];
+                    bool isModCondition = modConditionTypes.Contains(condition.Type);
+
+                    if (isModCondition && previousModCondition != null)
+                    {
+                        // 当前Mod条件与前一个Mod条件的关系
+                        // 如果是AND关系，需要添加到ModFiltersToApply进行二次筛选
+                        // 如果是OR关系，API直接返回OR结果，不需要二次筛选
+                        bool needsAndFiltering = (previousModCondition.Operator == LogicOperator.And);
+                        ApplyConditionToFilter(filter, condition, needsAndFiltering);
+                    }
+                    else if (!isModCondition)
+                    {
+                        // 非Mod条件，正常处理
+                        ApplyConditionToFilter(filter, condition, false);
+                    }
+                    else
+                    {
+                        // 第一个Mod条件或独立的Mod条件，检查是否是唯一的Mod条件
+                        // 如果后续没有其他Mod条件或是OR关系，不需要二次筛选
+                        bool hasNextModCondition = false;
+                        bool nextModIsOr = false;
+
+                        for (int j = i + 1; j < conditions.Count; j++)
+                        {
+                            if (modConditionTypes.Contains(conditions[j].Type))
+                            {
+                                hasNextModCondition = true;
+                                // 下一个Mod条件的运算符决定当前条件是否需要二次筛选
+                                nextModIsOr = (conditions[j].Operator == LogicOperator.Or);
+                                break;
+                            }
+                        }
+
+                        // 如果没有后续Mod条件，或后续是OR关系，都不需要二次筛选
+                        bool needsAndFiltering = hasNextModCondition && !nextModIsOr;
+                        ApplyConditionToFilter(filter, condition, needsAndFiltering);
+                    }
+
+                    if (isModCondition)
+                    {
+                        previousModCondition = condition;
+                    }
                 }
             }
 
@@ -3075,7 +3262,10 @@ namespace BeatSaberIndependentMapsManager
         /// <summary>
         /// 将条件应用到搜索过滤器
         /// </summary>
-        private void ApplyConditionToFilter(BeatSaverSearchFilter filter, FilterCondition condition)
+        /// <param name="filter">搜索过滤器</param>
+        /// <param name="condition">筛选条件</param>
+        /// <param name="addModToFilter">对于Mod条件，是否添加到二次筛选列表（AND逻辑时需要）</param>
+        private void ApplyConditionToFilter(BeatSaverSearchFilter filter, FilterCondition condition, bool addModToFilter = false)
         {
             if (condition.Value == null) return;
 
@@ -3142,19 +3332,53 @@ namespace BeatSaberIndependentMapsManager
                         filter.MaxBlStars = maxBl;
                     break;
                 case FilterConditionType.Chroma:
-                    filter.Chroma = Convert.ToBoolean(condition.Value);
+                    {
+                        bool val = Convert.ToBoolean(condition.Value);
+                        filter.Chroma = val;
+                        if (addModToFilter)
+                            filter.ModFiltersToApply.Add(new ModFilterCondition("Chroma", val));
+                    }
                     break;
                 case FilterConditionType.Noodle:
-                    filter.Noodle = Convert.ToBoolean(condition.Value);
+                    {
+                        bool val = Convert.ToBoolean(condition.Value);
+                        filter.Noodle = val;
+                        if (addModToFilter)
+                            filter.ModFiltersToApply.Add(new ModFilterCondition("Noodle", val));
+                    }
                     break;
                 case FilterConditionType.Me:
-                    filter.Me = Convert.ToBoolean(condition.Value);
+                    {
+                        bool val = Convert.ToBoolean(condition.Value);
+                        filter.Me = val;
+                        if (addModToFilter)
+                            filter.ModFiltersToApply.Add(new ModFilterCondition("Me", val));
+                    }
                     break;
                 case FilterConditionType.Cinema:
-                    filter.Cinema = Convert.ToBoolean(condition.Value);
+                    {
+                        bool val = Convert.ToBoolean(condition.Value);
+                        filter.Cinema = val;
+                        if (addModToFilter)
+                            filter.ModFiltersToApply.Add(new ModFilterCondition("Cinema", val));
+                    }
                     break;
                 case FilterConditionType.Vivify:
-                    filter.Vivify = Convert.ToBoolean(condition.Value);
+                    {
+                        bool val = Convert.ToBoolean(condition.Value);
+                        filter.Vivify = val;
+                        if (addModToFilter)
+                            filter.ModFiltersToApply.Add(new ModFilterCondition("Vivify", val));
+                    }
+                    break;
+                case FilterConditionType.Ne:
+                    // Ne (Noodle Extensions) 与 Noodle 相同，API用ne参数
+                    {
+                        bool val = Convert.ToBoolean(condition.Value);
+                        filter.Noodle = val;
+                        if (addModToFilter)
+                            filter.ModFiltersToApply.Add(new ModFilterCondition("Noodle", val));
+                    }
                     break;
                 case FilterConditionType.Automapper:
                     var autoVal = condition.Value.ToString();

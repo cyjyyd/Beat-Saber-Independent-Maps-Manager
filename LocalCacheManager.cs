@@ -475,6 +475,18 @@ namespace BeatSaberIndependentMapsManager
             var blStarsConditions = conditions.Where(c => c.Type == FilterConditionType.MinBlStars || c.Type == FilterConditionType.MaxBlStars).ToList();
             bool blStarsProcessed = false;
 
+            // Handle Mod conditions together (BeatSaver API's Mod params are naturally OR logic)
+            var modConditionTypes = new HashSet<FilterConditionType>
+            {
+                FilterConditionType.Chroma,
+                FilterConditionType.Noodle,
+                FilterConditionType.Me,
+                FilterConditionType.Cinema,
+                FilterConditionType.Vivify
+            };
+            var modConditions = conditions.Where(c => modConditionTypes.Contains(c.Type)).ToList();
+            bool modProcessed = false;
+
             for (int i = 0; i < conditions.Count; i++)
             {
                 var condition = conditions[i];
@@ -507,6 +519,15 @@ namespace BeatSaberIndependentMapsManager
                         blStarsProcessed = true;
                     }
                 }
+                // Handle Mod conditions together (API behavior: OR params)
+                else if (modConditionTypes.Contains(condition.Type))
+                {
+                    if (!modProcessed && modConditions.Any())
+                    {
+                        conditionResult = CheckModConditions(map, modConditions);
+                        modProcessed = true;
+                    }
+                }
                 else
                 {
                     // Regular condition
@@ -534,6 +555,75 @@ namespace BeatSaberIndependentMapsManager
             }
 
             return result ?? true;
+        }
+
+        /// <summary>
+        /// Checks Mod conditions with API-consistent behavior:
+        /// - BeatSaver API's Mod params are naturally OR logic (returns maps supporting ANY of the specified mods)
+        /// - Local cache should match this behavior for OR conditions
+        /// - For AND conditions, requires ALL mods to be supported
+        /// </summary>
+        private bool CheckModConditions(BeatSaverMap map, List<FilterCondition> modConditions)
+        {
+            if (map == null || modConditions == null || !modConditions.Any())
+                return true;
+
+            // Group consecutive mod conditions by their operator
+            // OR conditions: return true if map supports ANY of the mods (API behavior)
+            // AND conditions: return true only if map supports ALL of the mods
+
+            bool? result = null;
+            LogicOperator? prevOperator = null;
+
+            foreach (var condition in modConditions)
+            {
+                bool conditionResult = CheckSingleModCondition(map, condition);
+
+                if (result == null)
+                {
+                    result = conditionResult;
+                }
+                else
+                {
+                    if (prevOperator == LogicOperator.Or)
+                    {
+                        // OR: true if any condition is true (API behavior)
+                        result = result.Value || conditionResult;
+                    }
+                    else
+                    {
+                        // AND: true only if all conditions are true
+                        result = result.Value && conditionResult;
+                    }
+                }
+
+                prevOperator = condition.Operator;
+            }
+
+            return result ?? true;
+        }
+
+        /// <summary>
+        /// Checks a single Mod condition
+        /// </summary>
+        private bool CheckSingleModCondition(BeatSaverMap map, FilterCondition condition)
+        {
+            if (condition?.Value == null)
+                return true;
+
+            bool requiredValue = Convert.ToBoolean(condition.Value);
+            bool hasMod = condition.Type switch
+            {
+                FilterConditionType.Chroma => HasMod(map, "Chroma"),
+                FilterConditionType.Ne => HasMod(map, "Ne"),
+                FilterConditionType.Noodle => HasMod(map, "Noodle"),
+                FilterConditionType.Me => HasMod(map, "Me"),
+                FilterConditionType.Cinema => HasMod(map, "Cinema"),
+                FilterConditionType.Vivify => HasMod(map, "Vivify"),
+                _ => false
+            };
+
+            return requiredValue == hasMod;
         }
 
         /// <summary>

@@ -312,6 +312,8 @@ namespace BeatSaberIndependentMapsManager
             try
             {
                 var preset = JsonConvert.DeserializeObject<FilterPreset>(json, SerializerSettings);
+                // Convert legacy Min/Max conditions to Range conditions
+                preset?.ConvertLegacyConditions();
                 return preset;
             }
             catch (Exception ex)
@@ -319,6 +321,229 @@ namespace BeatSaberIndependentMapsManager
                 System.Diagnostics.Debug.WriteLine($"Error deserializing preset: {ex.Message}");
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Converts legacy Min/Max conditions to Range conditions for backward compatibility
+        /// Also converts Ne to Noodle (Ne was removed from UI)
+        /// </summary>
+        private void ConvertLegacyConditions()
+        {
+            foreach (var group in Groups)
+            {
+                var newConditions = new List<FilterCondition>();
+                var processedTypes = new HashSet<FilterConditionType>();
+
+                for (int i = 0; i < group.Conditions.Count; i++)
+                {
+                    var condition = group.Conditions[i];
+
+                    // Convert Ne to Noodle
+                    if (condition.Type == FilterConditionType.Ne)
+                    {
+                        condition.Type = FilterConditionType.Noodle;
+                    }
+
+                    // Skip if already processed (paired Min/Max)
+                    if (processedTypes.Contains(condition.Type))
+                        continue;
+
+                    // Check if this is a legacy Min/Max condition that should be converted to Range
+                    var rangeType = GetCorrespondingRangeType(condition.Type);
+                    if (rangeType != null)
+                    {
+                        // Find the matching Max condition if exists
+                        var minMaxPair = FindMatchingMinMaxCondition(group.Conditions, condition.Type, i);
+                        if (minMaxPair != null)
+                        {
+                            // Create a Range condition from Min/Max pair
+                            var rangeCondition = new FilterCondition(rangeType.Value);
+                            double? min = condition.Value != null ? Convert.ToDouble(condition.Value) : null;
+                            double? max = minMaxPair.Value != null ? Convert.ToDouble(minMaxPair.Value) : null;
+                            rangeCondition.Value = new RangeValue(min, max);
+                            rangeCondition.IsEnabled = condition.IsEnabled || minMaxPair.IsEnabled;
+                            rangeCondition.Operator = minMaxPair.Operator; // Use the second condition's operator
+                            newConditions.Add(rangeCondition);
+                            processedTypes.Add(minMaxPair.Type);
+                        }
+                        else
+                        {
+                            // Single Min or Max condition, convert to Range with only one side
+                            var rangeCondition = new FilterCondition(rangeType.Value);
+                            if (IsMinCondition(condition.Type))
+                            {
+                                double? min = condition.Value != null ? Convert.ToDouble(condition.Value) : null;
+                                rangeCondition.Value = new RangeValue(min, null);
+                            }
+                            else
+                            {
+                                double? max = condition.Value != null ? Convert.ToDouble(condition.Value) : null;
+                                rangeCondition.Value = new RangeValue(null, max);
+                            }
+                            rangeCondition.IsEnabled = condition.IsEnabled;
+                            rangeCondition.Operator = condition.Operator;
+                            newConditions.Add(rangeCondition);
+                        }
+                        processedTypes.Add(condition.Type);
+                    }
+                    else
+                    {
+                        // Not a legacy condition, keep as is
+                        newConditions.Add(condition);
+                    }
+                }
+
+                group.Conditions = newConditions;
+            }
+        }
+
+        /// <summary>
+        /// Gets the corresponding Range type for a Min/Max condition type
+        /// </summary>
+        private static FilterConditionType? GetCorrespondingRangeType(FilterConditionType type)
+        {
+            return type switch
+            {
+                FilterConditionType.MinBpm or FilterConditionType.MaxBpm => FilterConditionType.BpmRange,
+                FilterConditionType.MinNps or FilterConditionType.MaxNps => FilterConditionType.NpsRange,
+                FilterConditionType.MinDuration or FilterConditionType.MaxDuration => FilterConditionType.DurationRange,
+                FilterConditionType.MinSsStars or FilterConditionType.MaxSsStars => FilterConditionType.SsStarsRange,
+                FilterConditionType.MinBlStars or FilterConditionType.MaxBlStars => FilterConditionType.BlStarsRange,
+                FilterConditionType.MinScore or FilterConditionType.MaxScore => FilterConditionType.ScoreRange,
+                FilterConditionType.MinPlays or FilterConditionType.MaxPlays => FilterConditionType.PlaysRange,
+                FilterConditionType.MinDownloads or FilterConditionType.MaxDownloads => FilterConditionType.DownloadsRange,
+                FilterConditionType.MinUpvotes or FilterConditionType.MaxUpvotes => FilterConditionType.UpvotesRange,
+                FilterConditionType.MinDownvotes or FilterConditionType.MaxDownvotes => FilterConditionType.DownvotesRange,
+                FilterConditionType.MinUpvoteRatio or FilterConditionType.MaxUpvoteRatio => FilterConditionType.UpvoteRatioRange,
+                FilterConditionType.MinDownvoteRatio or FilterConditionType.MaxDownvoteRatio => FilterConditionType.DownvoteRatioRange,
+                FilterConditionType.MinSageScore or FilterConditionType.MaxSageScore => FilterConditionType.SageScoreRange,
+                FilterConditionType.MinNjs or FilterConditionType.MaxNjs => FilterConditionType.NjsRange,
+                FilterConditionType.MinBombs or FilterConditionType.MaxBombs => FilterConditionType.BombsRange,
+                FilterConditionType.MinOffset or FilterConditionType.MaxOffset => FilterConditionType.OffsetRange,
+                FilterConditionType.MinEvents or FilterConditionType.MaxEvents => FilterConditionType.EventsRange,
+                FilterConditionType.MinObstacles or FilterConditionType.MaxObstacles => FilterConditionType.ObstaclesRange,
+                FilterConditionType.MinBombsMap or FilterConditionType.MaxBombsMap => FilterConditionType.BombsMapRange,
+                FilterConditionType.MinNotes or FilterConditionType.MaxNotes => FilterConditionType.NotesRange,
+                FilterConditionType.MinSeconds or FilterConditionType.MaxSeconds => FilterConditionType.SecondsRange,
+                FilterConditionType.MinLength or FilterConditionType.MaxLength => FilterConditionType.LengthRange,
+                FilterConditionType.MinParityErrors or FilterConditionType.MaxParityErrors => FilterConditionType.ParityErrorsRange,
+                FilterConditionType.MinParityWarns or FilterConditionType.MaxParityWarns => FilterConditionType.ParityWarnsRange,
+                FilterConditionType.MinParityResets or FilterConditionType.MaxParityResets => FilterConditionType.ParityResetsRange,
+                FilterConditionType.MinMaxScore or FilterConditionType.MaxMaxScore => FilterConditionType.MaxScoreRange,
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Checks if a condition type is a Min condition
+        /// </summary>
+        private static bool IsMinCondition(FilterConditionType type)
+        {
+            return type == FilterConditionType.MinBpm ||
+                   type == FilterConditionType.MinNps ||
+                   type == FilterConditionType.MinDuration ||
+                   type == FilterConditionType.MinSsStars ||
+                   type == FilterConditionType.MinBlStars ||
+                   type == FilterConditionType.MinScore ||
+                   type == FilterConditionType.MinPlays ||
+                   type == FilterConditionType.MinDownloads ||
+                   type == FilterConditionType.MinUpvotes ||
+                   type == FilterConditionType.MinDownvotes ||
+                   type == FilterConditionType.MinUpvoteRatio ||
+                   type == FilterConditionType.MinDownvoteRatio ||
+                   type == FilterConditionType.MinSageScore ||
+                   type == FilterConditionType.MinNjs ||
+                   type == FilterConditionType.MinBombs ||
+                   type == FilterConditionType.MinOffset ||
+                   type == FilterConditionType.MinEvents ||
+                   type == FilterConditionType.MinObstacles ||
+                   type == FilterConditionType.MinBombsMap ||
+                   type == FilterConditionType.MinNotes ||
+                   type == FilterConditionType.MinSeconds ||
+                   type == FilterConditionType.MinLength ||
+                   type == FilterConditionType.MinParityErrors ||
+                   type == FilterConditionType.MinParityWarns ||
+                   type == FilterConditionType.MinParityResets ||
+                   type == FilterConditionType.MinMaxScore;
+        }
+
+        /// <summary>
+        /// Finds the matching Max/Min condition for a Min/Max pair
+        /// </summary>
+        private static FilterCondition FindMatchingMinMaxCondition(List<FilterCondition> conditions, FilterConditionType type, int startIndex)
+        {
+            var correspondingType = GetCorrespondingMinMaxType(type);
+            if (correspondingType == null) return null;
+
+            for (int i = startIndex + 1; i < conditions.Count; i++)
+            {
+                if (conditions[i].Type == correspondingType.Value)
+                    return conditions[i];
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the corresponding Max type for a Min type, or vice versa
+        /// </summary>
+        private static FilterConditionType? GetCorrespondingMinMaxType(FilterConditionType type)
+        {
+            return type switch
+            {
+                FilterConditionType.MinBpm => FilterConditionType.MaxBpm,
+                FilterConditionType.MaxBpm => FilterConditionType.MinBpm,
+                FilterConditionType.MinNps => FilterConditionType.MaxNps,
+                FilterConditionType.MaxNps => FilterConditionType.MinNps,
+                FilterConditionType.MinDuration => FilterConditionType.MaxDuration,
+                FilterConditionType.MaxDuration => FilterConditionType.MinDuration,
+                FilterConditionType.MinSsStars => FilterConditionType.MaxSsStars,
+                FilterConditionType.MaxSsStars => FilterConditionType.MinSsStars,
+                FilterConditionType.MinBlStars => FilterConditionType.MaxBlStars,
+                FilterConditionType.MaxBlStars => FilterConditionType.MinBlStars,
+                FilterConditionType.MinScore => FilterConditionType.MaxScore,
+                FilterConditionType.MaxScore => FilterConditionType.MinScore,
+                FilterConditionType.MinPlays => FilterConditionType.MaxPlays,
+                FilterConditionType.MaxPlays => FilterConditionType.MinPlays,
+                FilterConditionType.MinDownloads => FilterConditionType.MaxDownloads,
+                FilterConditionType.MaxDownloads => FilterConditionType.MinDownloads,
+                FilterConditionType.MinUpvotes => FilterConditionType.MaxUpvotes,
+                FilterConditionType.MaxUpvotes => FilterConditionType.MinUpvotes,
+                FilterConditionType.MinDownvotes => FilterConditionType.MaxDownvotes,
+                FilterConditionType.MaxDownvotes => FilterConditionType.MinDownvotes,
+                FilterConditionType.MinUpvoteRatio => FilterConditionType.MaxUpvoteRatio,
+                FilterConditionType.MaxUpvoteRatio => FilterConditionType.MinUpvoteRatio,
+                FilterConditionType.MinDownvoteRatio => FilterConditionType.MaxDownvoteRatio,
+                FilterConditionType.MaxDownvoteRatio => FilterConditionType.MinDownvoteRatio,
+                FilterConditionType.MinSageScore => FilterConditionType.MaxSageScore,
+                FilterConditionType.MaxSageScore => FilterConditionType.MinSageScore,
+                FilterConditionType.MinNjs => FilterConditionType.MaxNjs,
+                FilterConditionType.MaxNjs => FilterConditionType.MinNjs,
+                FilterConditionType.MinBombs => FilterConditionType.MaxBombs,
+                FilterConditionType.MaxBombs => FilterConditionType.MinBombs,
+                FilterConditionType.MinOffset => FilterConditionType.MaxOffset,
+                FilterConditionType.MaxOffset => FilterConditionType.MinOffset,
+                FilterConditionType.MinEvents => FilterConditionType.MaxEvents,
+                FilterConditionType.MaxEvents => FilterConditionType.MinEvents,
+                FilterConditionType.MinObstacles => FilterConditionType.MaxObstacles,
+                FilterConditionType.MaxObstacles => FilterConditionType.MinObstacles,
+                FilterConditionType.MinBombsMap => FilterConditionType.MaxBombsMap,
+                FilterConditionType.MaxBombsMap => FilterConditionType.MinBombsMap,
+                FilterConditionType.MinNotes => FilterConditionType.MaxNotes,
+                FilterConditionType.MaxNotes => FilterConditionType.MinNotes,
+                FilterConditionType.MinSeconds => FilterConditionType.MaxSeconds,
+                FilterConditionType.MaxSeconds => FilterConditionType.MinSeconds,
+                FilterConditionType.MinLength => FilterConditionType.MaxLength,
+                FilterConditionType.MaxLength => FilterConditionType.MinLength,
+                FilterConditionType.MinParityErrors => FilterConditionType.MaxParityErrors,
+                FilterConditionType.MaxParityErrors => FilterConditionType.MinParityErrors,
+                FilterConditionType.MinParityWarns => FilterConditionType.MaxParityWarns,
+                FilterConditionType.MaxParityWarns => FilterConditionType.MinParityWarns,
+                FilterConditionType.MinParityResets => FilterConditionType.MaxParityResets,
+                FilterConditionType.MaxParityResets => FilterConditionType.MinParityResets,
+                FilterConditionType.MinMaxScore => FilterConditionType.MaxMaxScore,
+                FilterConditionType.MaxMaxScore => FilterConditionType.MinMaxScore,
+                _ => null
+            };
         }
 
         /// <summary>

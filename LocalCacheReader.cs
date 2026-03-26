@@ -849,6 +849,19 @@ namespace BeatSaberIndependentMapsManager
             bool? blStarsResult = null;
             bool blStarsProcessed = false;
 
+            // Mod 条件组合处理 (BeatSaver API's Mod params are naturally OR logic)
+            var modConditionTypes = new HashSet<FilterConditionType>
+            {
+                FilterConditionType.Chroma,
+                FilterConditionType.Noodle,
+                FilterConditionType.Me,
+                FilterConditionType.Cinema,
+                FilterConditionType.Vivify
+            };
+            var modConditions = conditions.Where(c => modConditionTypes.Contains(c.Type)).ToList();
+            bool? modResult = null;
+            bool modProcessed = false;
+
             for (int i = 0; i < conditions.Count; i++)
             {
                 var condition = conditions[i];
@@ -895,15 +908,30 @@ namespace BeatSaberIndependentMapsManager
                     continue;
                 }
 
+                // Mod 条件 (API behavior: OR params)
+                if (modConditionTypes.Contains(condition.Type))
+                {
+                    if (!modProcessed && modConditions.Any())
+                    {
+                        modResult = CheckModConditionsSlim(map, modConditions);
+                        modProcessed = true;
+                        var lastModCondition = modConditions.LastOrDefault();
+                        if (lastModCondition != null)
+                            lastOperator = lastModCondition.Operator;
+                    }
+                    continue;
+                }
+
                 bool matches = MatchesConditionSlim(map, condition);
 
                 // 处理组合结果
-                if ((npsResult.HasValue || ssStarsResult.HasValue || blStarsResult.HasValue) && !result.HasValue)
+                if ((npsResult.HasValue || ssStarsResult.HasValue || blStarsResult.HasValue || modResult.HasValue) && !result.HasValue)
                 {
                     bool pendingResult = true;
                     if (npsResult.HasValue) pendingResult = pendingResult && npsResult.Value;
                     if (ssStarsResult.HasValue) pendingResult = pendingResult && ssStarsResult.Value;
                     if (blStarsResult.HasValue) pendingResult = pendingResult && blStarsResult.Value;
+                    if (modResult.HasValue) pendingResult = pendingResult && modResult.Value;
 
                     if (lastOperator == LogicOperator.Or)
                         result = pendingResult || matches;
@@ -932,14 +960,81 @@ namespace BeatSaberIndependentMapsManager
                 if (npsResult.HasValue) combined = combined && npsResult.Value;
                 if (ssStarsResult.HasValue) combined = combined && ssStarsResult.Value;
                 if (blStarsResult.HasValue) combined = combined && blStarsResult.Value;
+                if (modResult.HasValue) combined = combined && modResult.Value;
                 return combined;
             }
 
             if (npsResult.HasValue) result = result.Value && npsResult.Value;
             if (ssStarsResult.HasValue) result = result.Value && ssStarsResult.Value;
             if (blStarsResult.HasValue) result = result.Value && blStarsResult.Value;
+            if (modResult.HasValue) result = result.Value && modResult.Value;
 
             return result ?? true;
+        }
+
+        /// <summary>
+        /// Checks Mod conditions with API-consistent behavior:
+        /// - BeatSaver API's Mod params are naturally OR logic (returns maps supporting ANY of the specified mods)
+        /// - Local cache should match this behavior for OR conditions
+        /// - For AND conditions, requires ALL mods to be supported
+        /// </summary>
+        private bool CheckModConditionsSlim(BeatSaverMapSlim map, List<FilterCondition> modConditions)
+        {
+            if (map == null || modConditions == null || !modConditions.Any())
+                return true;
+
+            bool? result = null;
+            LogicOperator? prevOperator = null;
+
+            foreach (var condition in modConditions)
+            {
+                bool conditionResult = CheckSingleModConditionSlim(map, condition);
+
+                if (result == null)
+                {
+                    result = conditionResult;
+                }
+                else
+                {
+                    if (prevOperator == LogicOperator.Or)
+                    {
+                        // OR: true if any condition is true (API behavior)
+                        result = result.Value || conditionResult;
+                    }
+                    else
+                    {
+                        // AND: true only if all conditions are true
+                        result = result.Value && conditionResult;
+                    }
+                }
+
+                prevOperator = condition.Operator;
+            }
+
+            return result ?? true;
+        }
+
+        /// <summary>
+        /// Checks a single Mod condition for BeatSaverMapSlim
+        /// </summary>
+        private bool CheckSingleModConditionSlim(BeatSaverMapSlim map, FilterCondition condition)
+        {
+            if (condition?.Value == null)
+                return true;
+
+            bool requiredValue = Convert.ToBoolean(condition.Value);
+            bool hasMod = condition.Type switch
+            {
+                FilterConditionType.Chroma => map.HasMod("Chroma"),
+                FilterConditionType.Ne => map.HasMod("Ne"),
+                FilterConditionType.Noodle => map.HasMod("Noodle"),
+                FilterConditionType.Me => map.HasMod("Me"),
+                FilterConditionType.Cinema => map.HasMod("Cinema"),
+                FilterConditionType.Vivify => map.HasMod("Vivify"),
+                _ => false
+            };
+
+            return requiredValue == hasMod;
         }
 
         private bool MatchesConditionSlim(BeatSaverMapSlim map, FilterCondition condition)
