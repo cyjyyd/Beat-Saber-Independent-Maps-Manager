@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,6 +22,9 @@ namespace BeatSaberIndependentMapsManager
         public long TotalBytes { get; set; }
         public double Percentage => TotalBytes > 0 ? (BytesReceived * 100.0 / TotalBytes) : 0;
         public string Status { get; set; }
+        public string CurrentSource { get; set; } // 当前使用的下载源
+        public int SourceIndex { get; set; } // 当前下载源索引
+        public int TotalSources { get; set; } // 总下载源数量
     }
 
     /// <summary>
@@ -28,13 +32,37 @@ namespace BeatSaberIndependentMapsManager
     /// </summary>
     public class LocalCacheManager : IDisposable
     {
-        private const string CacheUrl = "https://raw.githubusercontent.com/qe201020335/BSC-ScrapeData/refs/heads/data/cache.json.gz";
+        // Primary and backup download sources
+        private static readonly string[] CacheUrls = {
+            "https://raw.githubusercontent.com/qe201020335/BSC-ScrapeData/refs/heads/data/cache.json.gz",
+            // GitHub mirror sources
+            "https://ghproxy.net/https://raw.githubusercontent.com/qe201020335/BSC-ScrapeData/refs/heads/data/cache.json.gz",
+            "https://mirror.ghproxy.com/https://raw.githubusercontent.com/qe201020335/BSC-ScrapeData/refs/heads/data/cache.json.gz",
+            "https://gh-proxy.com/https://raw.githubusercontent.com/qe201020335/BSC-ScrapeData/refs/heads/data/cache.json.gz",
+            "https://gh.api.catmeme.workers.dev/https://raw.githubusercontent.com/qe201020335/BSC-ScrapeData/refs/heads/data/cache.json.gz",
+        };
+
+        private static readonly string[] TimestampUrls = {
+            "https://raw.githubusercontent.com/qe201020335/BSC-ScrapeData/refs/heads/data/timestamp.txt",
+            "https://ghproxy.net/https://raw.githubusercontent.com/qe201020335/BSC-ScrapeData/refs/heads/data/timestamp.txt",
+            "https://mirror.ghproxy.com/https://raw.githubusercontent.com/qe201020335/BSC-ScrapeData/refs/heads/data/timestamp.txt",
+            "https://gh-proxy.com/https://raw.githubusercontent.com/qe201020335/BSC-ScrapeData/refs/heads/data/timestamp.txt",
+            "https://gh.api.catmeme.workers.dev/https://raw.githubusercontent.com/qe201020335/BSC-ScrapeData/refs/heads/data/timestamp.txt",
+        };
+
         private const string LocalCacheFileName = "cache.json";
-        private string cachePath;  // Removed readonly for testing support
-        private readonly HttpClient httpClient;
+        private string cachePath;
+        private HttpClient httpClient;
+        private HttpClientHandler httpHandler;
         private bool disposed = false;
         private long cacheDate = 0;
         private bool cacheAvailable = false;
+
+        // Default cache age threshold (7 days in seconds)
+        private const long DefaultCacheAgeThreshold = 7 * 24 * 60 * 60;
+
+        // Download timeout per source (30 seconds)
+        private const int SourceTimeoutSeconds = 30;
 
         // 轻量级读取器（用于批处理缓存复用）
         private LocalCacheReader sharedReader;
@@ -59,12 +87,17 @@ namespace BeatSaberIndependentMapsManager
         /// </summary>
         public string CachePath => cachePath;
 
+        /// <summary>
+        /// Gets or sets whether to use system proxy
+        /// </summary>
+        public bool UseSystemProxy { get; set; } = true;
+
         public LocalCacheManager()
         {
             cachePath = Path.Combine(Application.StartupPath, LocalCacheFileName);
-            httpClient = new HttpClient();
-            httpClient.Timeout = TimeSpan.FromMinutes(10);
-            httpClient.DefaultRequestHeaders.Add("User-Agent", "BSIMM/1.0");
+
+            // Initialize HttpClient with system proxy support
+            InitializeHttpClient();
 
             // Check if cache exists
             if (File.Exists(cachePath))
@@ -80,33 +113,187 @@ namespace BeatSaberIndependentMapsManager
         }
 
         /// <summary>
-        /// Downloads the cache file from remote source
+        /// Refreshes the cache status from disk
+        /// Call this after downloading to update the internal state
+        /// </summary>
+        public void RefreshCacheStatus()
+        {
+            if (File.Exists(cachePath))
+            {
+                cacheAvailable = true;
+                // Read the date from the JSON file first
+                long jsonDate = ReadCacheDate();
+                if (jsonDate > 0)
+                {
+                    cacheDate = jsonDate;
+                }
+                else
+                {
+                    // Fallback to file modification time
+                    try
+                    {
+                        cacheDate = new DateTimeOffset(File.GetLastWriteTimeUtc(cachePath)).ToUnixTimeSeconds();
+                    }
+                    catch { }
+                }
+            }
+            else
+            {
+                cacheAvailable = false;
+                cacheDate = 0;
+            }
+        }
+
+        /// <summary>
+        /// Initializes HttpClient with system proxy support
+        /// </summary>
+        private void InitializeHttpClient()
+        {
+            httpHandler = new HttpClientHandler
+            {
+                UseProxy = UseSystemProxy,
+                Proxy = UseSystemProxy ? WebRequest.GetSystemWebProxy() : null,
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+            };
+
+            // Configure proxy credentials if needed
+            if (UseSystemProxy && httpHandler.Proxy != null)
+            {
+                httpHandler.Proxy.Credentials = CredentialCache.DefaultCredentials;
+            }
+
+            httpClient = new HttpClient(httpHandler);
+            httpClient.Timeout = TimeSpan.FromMinutes(10);
+            httpClient.DefaultRequestHeaders.Add("User-Agent", "BSIMM/1.0");
+        }
+
+        /// <summary>
+        /// Reinitializes HttpClient (useful when proxy settings change)
+        /// </summary>
+        public void ReinitializeHttpClient()
+        {
+            httpClient?.Dispose();
+            httpHandler?.Dispose();
+            InitializeHttpClient();
+        }
+
+        /// <summary>
+        /// Downloads the cache file from remote source with fallback support
         /// </summary>
         public async Task<bool> DownloadCacheAsync()
         {
-            try
+            var tempFile = Path.GetTempFileName();
+            var errors = new List<string>();
+
+            DownloadProgress?.Invoke(this, new CacheDownloadProgress
             {
-                DownloadProgress?.Invoke(this, new CacheDownloadProgress { Status = "正在下载缓存文件..." });
+                Status = "正在下载缓存文件...",
+                TotalSources = CacheUrls.Length
+            });
 
-                // Download gzip file to temp location
-                var tempFile = Path.GetTempFileName();
+            // Try each source in order
+            for (int i = 0; i < CacheUrls.Length; i++)
+            {
+                var url = CacheUrls[i];
+                var sourceName = GetSourceName(url);
 
-                using (var response = await httpClient.GetAsync(CacheUrl, HttpCompletionOption.ResponseHeadersRead))
+                DownloadProgress?.Invoke(this, new CacheDownloadProgress
+                {
+                    Status = $"尝试下载源 {i + 1}/{CacheUrls.Length}: {sourceName}",
+                    CurrentSource = sourceName,
+                    SourceIndex = i,
+                    TotalSources = CacheUrls.Length
+                });
+
+                try
+                {
+                    bool success = await DownloadFromSourceAsync(url, tempFile, i, CacheUrls.Length);
+                    if (success)
+                    {
+                        // Decompress gzip
+                        DownloadProgress?.Invoke(this, new CacheDownloadProgress
+                        {
+                            Status = "正在解压...",
+                            SourceIndex = i,
+                            TotalSources = CacheUrls.Length
+                        });
+
+                        using (var gzipStream = new GZipStream(File.OpenRead(tempFile), CompressionMode.Decompress))
+                        using (var outputFile = File.Create(cachePath))
+                        {
+                            await gzipStream.CopyToAsync(outputFile);
+                        }
+
+                        // Clean up temp file
+                        File.Delete(tempFile);
+
+                        cacheAvailable = true;
+
+                        // Read the actual date from the downloaded JSON file
+                        long downloadedDate = ReadCacheDate();
+                        if (downloadedDate > 0)
+                        {
+                            cacheDate = downloadedDate;
+                        }
+                        else
+                        {
+                            // Fallback to current time if date field not found
+                            cacheDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                        }
+
+                        DownloadProgress?.Invoke(this, new CacheDownloadProgress
+                        {
+                            Status = $"下载完成（使用源: {sourceName}）",
+                            SourceIndex = i,
+                            TotalSources = CacheUrls.Length
+                        });
+
+                        return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"{sourceName}: {ex.Message}");
+                    DownloadProgress?.Invoke(this, new CacheDownloadProgress
+                    {
+                        Status = $"源 {sourceName} 失败，尝试下一个...",
+                        SourceIndex = i,
+                        TotalSources = CacheUrls.Length
+                    });
+                }
+            }
+
+            // All sources failed
+            File.Delete(tempFile);
+            var errorMessage = $"所有下载源均失败:\n{string.Join("\n", errors.Take(5))}";
+            DownloadProgress?.Invoke(this, new CacheDownloadProgress { Status = errorMessage });
+            return false;
+        }
+
+        /// <summary>
+        /// Downloads from a specific source URL
+        /// </summary>
+        private async Task<bool> DownloadFromSourceAsync(string url, string tempFile, int sourceIndex, int totalSources)
+        {
+            // Use a shorter timeout per source
+            using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(SourceTimeoutSeconds)))
+            {
+                using (var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cts.Token))
                 {
                     response.EnsureSuccessStatusCode();
 
                     var totalBytes = response.Content.Headers.ContentLength ?? -1;
 
-                    using (var contentStream = await response.Content.ReadAsStreamAsync())
+                    using (var contentStream = await response.Content.ReadAsStreamAsync(cts.Token))
                     using (var fileStream = File.Create(tempFile))
                     {
                         var buffer = new byte[8192];
                         var bytesRead = 0;
                         var totalRead = 0L;
 
-                        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length, cts.Token)) > 0)
                         {
-                            await fileStream.WriteAsync(buffer, 0, bytesRead);
+                            await fileStream.WriteAsync(buffer, 0, bytesRead, cts.Token);
                             totalRead += bytesRead;
 
                             if (totalBytes > 0)
@@ -115,37 +302,30 @@ namespace BeatSaberIndependentMapsManager
                                 {
                                     BytesReceived = totalRead,
                                     TotalBytes = totalBytes,
-                                    Status = "正在下载..."
+                                    Status = "正在下载...",
+                                    SourceIndex = sourceIndex,
+                                    TotalSources = totalSources
                                 });
                             }
                         }
                     }
                 }
-
-                DownloadProgress?.Invoke(this, new CacheDownloadProgress { Status = "正在解压..." });
-
-                // Decompress gzip
-                using (var gzipStream = new GZipStream(File.OpenRead(tempFile), CompressionMode.Decompress))
-                using (var outputFile = File.Create(cachePath))
-                {
-                    await gzipStream.CopyToAsync(outputFile);
-                }
-
-                // Clean up temp file
-                File.Delete(tempFile);
-
-                cacheAvailable = true;
-                cacheDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-                DownloadProgress?.Invoke(this, new CacheDownloadProgress { Status = "下载完成" });
-
-                return true;
             }
-            catch (Exception ex)
-            {
-                DownloadProgress?.Invoke(this, new CacheDownloadProgress { Status = $"下载失败: {ex.Message}" });
-                return false;
-            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Gets a friendly name for a download source URL
+        /// </summary>
+        private string GetSourceName(string url)
+        {
+            if (url.Contains("ghproxy.net")) return "ghproxy.net";
+            if (url.Contains("mirror.ghproxy.com")) return "mirror.ghproxy.com";
+            if (url.Contains("gh-proxy.com")) return "gh-proxy.com";
+            if (url.Contains("gh.api.catmeme")) return "GitHub Worker";
+            if (url.Contains("raw.githubusercontent.com")) return "GitHub Raw";
+            return new Uri(url).Host;
         }
 
         /// <summary>
@@ -157,6 +337,129 @@ namespace BeatSaberIndependentMapsManager
                 return true;
 
             return await DownloadCacheAsync();
+        }
+
+        /// <summary>
+        /// Gets the remote cache timestamp from the timestamp file with fallback support
+        /// Returns 0 if unable to fetch from all sources
+        /// </summary>
+        public async Task<long> GetRemoteCacheTimestampAsync()
+        {
+            // Try each timestamp source
+            for (int i = 0; i < TimestampUrls.Length && i < CacheUrls.Length; i++)
+            {
+                try
+                {
+                    using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
+                    {
+                        // Try to fetch timestamp from the timestamp file
+                        using (var response = await httpClient.GetAsync(TimestampUrls[i], HttpCompletionOption.ResponseHeadersRead, cts.Token))
+                        {
+                            if (response.IsSuccessStatusCode)
+                            {
+                                var content = await response.Content.ReadAsStringAsync(cts.Token);
+                                if (long.TryParse(content.Trim(), out long timestamp))
+                                {
+                                    return timestamp;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // Fallback: try to get Last-Modified header from each cache file source
+            for (int i = 0; i < CacheUrls.Length; i++)
+            {
+                try
+                {
+                    using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
+                    using (var request = new HttpRequestMessage(HttpMethod.Head, CacheUrls[i]))
+                    using (var response = await httpClient.SendAsync(request, cts.Token))
+                    {
+                        if (response.IsSuccessStatusCode && response.Content.Headers.LastModified.HasValue)
+                        {
+                            return new DateTimeOffset(response.Content.Headers.LastModified.Value.UtcDateTime).ToUnixTimeSeconds();
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// Checks if the local cache is outdated compared to remote
+        /// </summary>
+        /// <param name="thresholdSeconds">Optional threshold in seconds. If local cache is older than this threshold, it's considered outdated regardless of remote timestamp.</param>
+        /// <returns>True if cache is outdated or unable to determine</returns>
+        public async Task<bool> IsCacheOutdatedAsync(long? thresholdSeconds = null)
+        {
+            if (!IsCacheAvailable)
+                return true;
+
+            // Get local cache timestamp from JSON
+            long localTimestamp = ReadCacheDate();
+            if (localTimestamp == 0)
+            {
+                // Fallback to file modification time
+                localTimestamp = cacheDate;
+            }
+
+            // Get remote timestamp
+            long remoteTimestamp = await GetRemoteCacheTimestampAsync();
+
+            if (remoteTimestamp == 0)
+            {
+                // Unable to get remote timestamp
+                // Use threshold-based check: if cache is older than threshold, consider it outdated
+                if (thresholdSeconds.HasValue && localTimestamp > 0)
+                {
+                    var currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    return currentTime - localTimestamp > thresholdSeconds.Value;
+                }
+                else if (!thresholdSeconds.HasValue && localTimestamp > 0)
+                {
+                    var currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    return currentTime - localTimestamp > DefaultCacheAgeThreshold;
+                }
+                return false; // Assume cache is valid if we can't check
+            }
+
+            // Compare timestamps
+            // Allow a small tolerance (60 seconds) to account for network delays
+            // If local timestamp equals or is very close to remote, consider it up-to-date
+            if (localTimestamp >= remoteTimestamp - 60)
+            {
+                return false; // Cache is up-to-date
+            }
+
+            return remoteTimestamp > localTimestamp;
+        }
+
+        /// <summary>
+        /// Checks if cache is outdated and updates it if necessary
+        /// </summary>
+        /// <param name="forceCheck">If true, always check remote timestamp even if local cache seems recent</param>
+        /// <param name="thresholdSeconds">Optional age threshold in seconds</param>
+        /// <returns>True if cache is available (either existing or newly downloaded)</returns>
+        public async Task<bool> CheckAndUpdateCacheAsync(bool forceCheck = false, long? thresholdSeconds = null)
+        {
+            if (!IsCacheAvailable)
+            {
+                return await DownloadCacheAsync();
+            }
+
+            // Check if we should verify remote timestamp
+            if (forceCheck || await IsCacheOutdatedAsync(thresholdSeconds))
+            {
+                DownloadProgress?.Invoke(this, new CacheDownloadProgress { Status = "缓存已过期，正在更新..." });
+                return await DownloadCacheAsync();
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -2097,6 +2400,7 @@ namespace BeatSaberIndependentMapsManager
             if (!disposed)
             {
                 httpClient?.Dispose();
+                httpHandler?.Dispose();
                 sharedReader?.Dispose();
                 sharedReader = null;
                 disposed = true;

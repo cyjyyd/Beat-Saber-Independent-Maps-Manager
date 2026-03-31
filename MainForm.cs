@@ -68,6 +68,18 @@ namespace BeatSaberIndependentMapsManager
         private LocalCacheManager localCacheManager;
         // 更新管理器
         private UpdateManager updateManager;
+
+        /// <summary>
+        /// 确保本地缓存管理器已初始化并使用正确的代理设置
+        /// </summary>
+        private void EnsureLocalCacheManagerInitialized()
+        {
+            if (localCacheManager == null)
+            {
+                localCacheManager = new LocalCacheManager();
+            }
+            localCacheManager.UseSystemProxy = config.UseSystemProxy;
+        }
         #endregion
         #region 动态库引用
         [DllImport("Everything64.dll", CharSet = CharSet.Unicode)]
@@ -2655,47 +2667,66 @@ namespace BeatSaberIndependentMapsManager
             try
             {
                 // 初始化本地缓存管理器
-                if (localCacheManager == null)
-                    localCacheManager = new LocalCacheManager();
+                EnsureLocalCacheManagerInitialized();
 
-                // 检查缓存是否可用
-                if (!localCacheManager.IsCacheAvailable)
+                // 检查缓存是否可用或已过期
+                bool needDownload = !localCacheManager.IsCacheAvailable;
+                bool isOutdated = false;
+
+                if (localCacheManager.IsCacheAvailable)
                 {
-                    // 提示用户下载缓存
+                    // 检查缓存是否过期（默认7天）
+                    isOutdated = await localCacheManager.IsCacheOutdatedAsync();
+                }
+
+                if (needDownload || isOutdated)
+                {
+                    string message = needDownload
+                        ? "本地缓存未下载。缓存文件约230MB，是否立即下载？\n\n下载后可使用更丰富的筛选条件（排行榜收录、统计数据等）"
+                        : "本地缓存已过期（超过7天），建议更新以获取最新谱面数据。\n\n是否立即更新缓存？";
+
                     var result = MessageBox.Show(
-                        "本地缓存未下载或已过期。缓存文件约230MB，是否立即下载？\n\n下载后可使用更丰富的筛选条件（排行榜收录、统计数据等）",
-                        "需要本地缓存",
+                        message,
+                        needDownload ? "需要本地缓存" : "缓存已过期",
                         MessageBoxButtons.YesNo,
                         MessageBoxIcon.Question);
 
                     if (result != DialogResult.Yes)
                     {
-                        BSIMMStatusUpdate("取消", "已取消", 0);
-                        return;
-                    }
-
-                    // 下载缓存
-                    localCacheManager.DownloadProgress += (s, progress) =>
-                    {
-                        this.BeginInvoke(() =>
+                        if (needDownload)
                         {
-                            if (this.IsDisposed) return;
-                            BSIMMProgress.ProgressBar.Value = Math.Min(100, (int)progress.Percentage);
-                            BSIMMActionText.Text = "下载";
-                            BSIMMStatusText.Text = progress.Status.StartsWith("正在下载")
-                                ? $"{progress.Status} {progress.Percentage:F1}%"
-                                : progress.Status;
-                        });
-                    };
-
-                    BSIMMStatusUpdate("下载", "正在下载本地缓存...", 0);
-                    bool downloaded = await localCacheManager.DownloadCacheAsync();
-
-                    if (!downloaded)
+                            BSIMMStatusUpdate("取消", "已取消", 0);
+                            return;
+                        }
+                        // 如果只是过期但用户拒绝更新，仍可继续使用旧缓存
+                    }
+                    else
                     {
-                        MessageBox.Show("无法下载本地缓存，请检查网络连接", "下载失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        BSIMMStatusUpdate("错误", "下载失败", 0);
-                        return;
+                        // 下载/更新缓存
+                        localCacheManager.DownloadProgress += (s, progress) =>
+                        {
+                            this.BeginInvoke(() =>
+                            {
+                                if (this.IsDisposed) return;
+                                BSIMMProgress.ProgressBar.Value = Math.Min(100, (int)progress.Percentage);
+                                BSIMMActionText.Text = needDownload ? "下载" : "更新";
+                                BSIMMStatusText.Text = progress.Status.StartsWith("正在下载")
+                                    ? $"{progress.Status} {progress.Percentage:F1}%"
+                                    : progress.Status;
+                            });
+                        };
+
+                        BSIMMStatusUpdate(needDownload ? "下载" : "更新", needDownload ? "正在下载本地缓存..." : "正在更新本地缓存...", 0);
+                        bool downloaded = await localCacheManager.DownloadCacheAsync();
+
+                        if (!downloaded)
+                        {
+                            MessageBox.Show("无法下载本地缓存，请检查网络连接", "下载失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            BSIMMStatusUpdate("错误", "下载失败", 0);
+                            if (needDownload)
+                                return;
+                            // 如果是更新失败但旧缓存仍存在，可以继续使用
+                        }
                     }
                 }
 
@@ -3691,15 +3722,61 @@ namespace BeatSaberIndependentMapsManager
                 if (allRequireLocalCache)
                 {
                     // 如果本地缓存管理器未初始化，则创建
-                    if (localCacheManager == null)
-                        localCacheManager = new LocalCacheManager();
+                    EnsureLocalCacheManagerInitialized();
 
-                    // 检查缓存是否可用
-                    if (!localCacheManager.IsCacheAvailable)
+                    // 检查缓存是否可用或已过期
+                    bool needDownload = !localCacheManager.IsCacheAvailable;
+                    bool isOutdated = false;
+
+                    if (localCacheManager.IsCacheAvailable)
+                    {
+                        isOutdated = await localCacheManager.IsCacheOutdatedAsync();
+                    }
+
+                    if (needDownload)
                     {
                         MessageBox.Show("需要本地缓存但未下载，请先在设置中下载本地缓存。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         btnBatchOutput.Enabled = true;
                         return;
+                    }
+
+                    if (isOutdated)
+                    {
+                        var result = MessageBox.Show(
+                            "本地缓存已过期（超过7天），建议更新以获取最新谱面数据。\n\n是否立即更新缓存？选择\"否\"将继续使用旧缓存进行批处理。",
+                            "缓存已过期",
+                            MessageBoxButtons.YesNoCancel,
+                            MessageBoxIcon.Question);
+
+                        if (result == DialogResult.Cancel)
+                        {
+                            btnBatchOutput.Enabled = true;
+                            return;
+                        }
+
+                        if (result == DialogResult.Yes)
+                        {
+                            localCacheManager.DownloadProgress += (s, progress) =>
+                            {
+                                this.BeginInvoke(() =>
+                                {
+                                    if (this.IsDisposed) return;
+                                    BSIMMProgress.ProgressBar.Value = Math.Min(100, (int)progress.Percentage);
+                                    BSIMMActionText.Text = "更新";
+                                    BSIMMStatusText.Text = progress.Status.StartsWith("正在下载")
+                                        ? $"{progress.Status} {progress.Percentage:F1}%"
+                                        : progress.Status;
+                                });
+                            };
+
+                            BSIMMStatusUpdate("更新", "正在更新本地缓存...", 0);
+                            bool downloaded = await localCacheManager.DownloadCacheAsync();
+
+                            if (!downloaded)
+                            {
+                                MessageBox.Show("更新缓存失败，请检查网络连接。将使用旧缓存继续批处理。", "更新失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            }
+                        }
                     }
 
                     // 使用本地缓存进行并行筛选
@@ -3866,8 +3943,7 @@ namespace BeatSaberIndependentMapsManager
                 if (RequiresLocalCache(preset))
                 {
                     // 使用本地缓存
-                    if (localCacheManager == null)
-                        localCacheManager = new LocalCacheManager();
+                    EnsureLocalCacheManagerInitialized();
 
                     if (!localCacheManager.IsCacheAvailable)
                     {
