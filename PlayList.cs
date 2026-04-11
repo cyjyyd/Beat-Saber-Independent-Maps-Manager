@@ -65,5 +65,19 @@ namespace BeatSaberIndependentMapsManager
         {
             Songs.Add(new MapHash(hash));
         }
+
+        /// <summary>
+        /// 添加带高亮难度信息的歌曲条目
+        /// </summary>
+        public void AddSongHashWithDifficulties(string hash, List<HighLightdiff> difficulties)
+        {
+            Songs.Add(new MapHash(
+                Hash: hash,
+                SongName: null,
+                LevelAuthorName: null,
+                LevelID: null,
+                Difficulties: difficulties
+            ));
+        }
     }
 }

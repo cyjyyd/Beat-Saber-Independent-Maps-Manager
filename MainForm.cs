@@ -68,6 +68,8 @@ namespace BeatSaberIndependentMapsManager
         private LocalCacheManager localCacheManager;
         // 更新管理器
         private UpdateManager updateManager;
+        // 高亮难度选择
+        private Dictionary<int, HashSet<(string characteristic, string difficulty)>> _perSongDifficulties;
 
         /// <summary>
         /// 确保本地缓存管理器已初始化并使用正确的代理设置
@@ -2448,7 +2450,7 @@ namespace BeatSaberIndependentMapsManager
             btnOpenFilterBuilder.Click += BtnOpenFilterBuilder_Click;
             btnSelectAll.Click += BtnSelectAll_Click;
             btnSelectInverse.Click += BtnSelectInverse_Click;
-            btnExportSelected.Click += BtnExportSelected_Click;
+            btnExportSelected.Click += BtnHighlightDifficulty_Click;
             btnExportAll.Click += BtnExportAll_Click;
             btnBatchOutput.Click += BtnBatchOutput_Click;
 
@@ -3451,17 +3453,39 @@ namespace BeatSaberIndependentMapsManager
             }
         }
 
-        private void BtnExportSelected_Click(object sender, EventArgs e)
+        /// <summary>
+        /// 高亮难度按钮点击事件：弹出难度选择对话框，暂存高亮信息
+        /// 默认使用筛选后的所有结果，仅在本地缓存搜索模式下可用
+        /// </summary>
+        private void BtnHighlightDifficulty_Click(object sender, EventArgs e)
         {
-            var selectedMaps = GetSelectedMaps();
-            if (selectedMaps.Count == 0)
+            // 优先使用全部筛选结果（本地缓存模式），其次使用 OR 模式全部结果
+            var allMaps = isLocalCacheSearch && allOrSearchResults.Count > 0
+                ? allOrSearchResults
+                : (isOrModeSearch && allOrSearchResults.Count > 0 ? allOrSearchResults : currentSearchResults);
+
+            if (allMaps.Count == 0)
             {
-                MessageBox.Show("请先选择要导出的歌曲！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("当前没有筛选结果！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            // 尝试从当前预设名称中提取封面文字
-            string coverText = ExtractCoverTextFromPresetName(currentFilterPreset?.Name);
-            ExportMapsToPlaylist(selectedMaps, null, coverText);
+
+            // 如果是在线 API 搜索模式（非 OR 模式），提醒用户
+            if (!isLocalCacheSearch && !isOrModeSearch)
+            {
+                MessageBox.Show("高亮难度功能仅支持本地缓存筛选模式。\n\n请先启用本地缓存搜索模式进行筛选。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using (var highlightForm = new DifficultyHighlightForm(allMaps))
+            {
+                if (highlightForm.ShowDialog(this) == DialogResult.OK)
+                {
+                    _perSongDifficulties = highlightForm.PerSongDifficulties;
+                    int totalDiffs = _perSongDifficulties.Sum(kv => kv.Value.Count);
+                    debugLog($"高亮难度已暂存，{_perSongDifficulties.Count} 首歌曲共 {totalDiffs} 个难度标记");
+                }
+            }
         }
 
         private void BtnExportAll_Click(object sender, EventArgs e)
@@ -4181,30 +4205,59 @@ namespace BeatSaberIndependentMapsManager
 
         /// <summary>
         /// 内部方法：将谱面列表导出为歌单
+        /// 如果 _perSongDifficulties 已设置，则自动包含难度信息
         /// </summary>
         private bool ExportMapsToPlaylistInternal(List<BeatSaverMap> maps, string filePath, string playlistName, string coverText = null, bool silent = false)
         {
             try
             {
-                // 如果没有指定封面文字，使用歌单名称
                 if (string.IsNullOrEmpty(coverText))
                     coverText = playlistName;
 
-                // 生成带有文件名的封面图片
                 Image coverImage = GeneratePlaylistCover(coverText);
                 string imgBytes = "data:image/jpg;base64," + ImageToBase64(coverImage, ImageFormat.Jpeg);
 
-                // 使用与曲包导出一致的格式
                 string author = Environment.UserName + "使用BSIMM@万毒不侵 生成";
                 string description = "本歌单由" + Environment.UserName + "使用BSIMM生成\r\nBSIMM由万毒不侵开发，开源且免费，如果你是购买的请要求商家退款\r\n项目地址：https://github.com/cyjyyd/Beat-Saber-Independent-Maps-Manager";
 
                 JsonSerializerSettings settings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
                 PlayList playlist = new PlayList(playlistName, author, description, imgBytes);
 
-                foreach (var map in maps)
+                bool hasDiffs = _perSongDifficulties != null && _perSongDifficulties.Count > 0;
+                int diffCount = 0;
+
+                for (int i = 0; i < maps.Count; i++)
                 {
+                    var map = maps[i];
                     string hash = map.GetHash();
-                    if (!string.IsNullOrEmpty(hash))
+                    if (string.IsNullOrEmpty(hash)) continue;
+
+                    List<HighLightdiff> difficulties = null;
+                    if (hasDiffs && _perSongDifficulties.TryGetValue(i, out var songDiffs) && songDiffs.Count > 0)
+                    {
+                        var version = map.Versions?.FirstOrDefault();
+                        if (version?.Diffs != null)
+                        {
+                            difficulties = new List<HighLightdiff>();
+                            foreach (var diff in version.Diffs)
+                            {
+                                var pair = (diff.Characteristic, diff.Difficulty);
+                                if (songDiffs.Contains(pair))
+                                {
+                                    difficulties.Add(new HighLightdiff(diff.Characteristic, diff.Difficulty));
+                                }
+                            }
+                            if (difficulties.Count == 0)
+                                difficulties = null;
+                        }
+                    }
+
+                    if (difficulties != null)
+                    {
+                        diffCount += difficulties.Count;
+                        playlist.AddSongHashWithDifficulties(hash, difficulties);
+                    }
+                    else
                     {
                         playlist.AddSongHash(hash);
                     }
@@ -4215,9 +4268,13 @@ namespace BeatSaberIndependentMapsManager
 
                 if (!silent)
                 {
-                    MessageBox.Show($"歌单已保存！\n共 {maps.Count} 首歌曲\n保存位置：{filePath}", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    string diffInfo = diffCount > 0 ? $"\n高亮难度: {diffCount} 个" : "";
+                    MessageBox.Show($"歌单已保存！\n共 {maps.Count} 首歌曲{diffInfo}\n保存位置：{filePath}", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
-                debugLog($"歌单已导出: {filePath}");
+                if (diffCount > 0)
+                    debugLog($"歌单已导出: {filePath}（含 {diffCount} 个难度标记）");
+                else
+                    debugLog($"歌单已导出: {filePath}");
                 return true;
             }
             catch (Exception ex)

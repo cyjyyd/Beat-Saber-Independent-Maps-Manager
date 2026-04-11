@@ -752,7 +752,7 @@ namespace BeatSaberIndependentMapsManager
             btnExportSelected.Name = "btnExportSelected";
             btnExportSelected.Size = new System.Drawing.Size(161, 47);
             btnExportSelected.TabIndex = 2;
-            btnExportSelected.Text = "导出选中到歌单";
+            btnExportSelected.Text = "高亮难度";
             btnExportSelected.UseVisualStyleBackColor = true;
             // 
             // btnSelectInverse
