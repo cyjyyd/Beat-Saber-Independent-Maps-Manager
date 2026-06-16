@@ -553,38 +553,31 @@ namespace BeatSaberIndependentMapsManager
         {
             try
             {
-                foreach (SongMap item in delicatedSongList.Values)
+                Dictionary<string, SongMap> snapshot;
+                lock (_viewModel.SyncRoot)
                 {
-                    DirectoryInfo song = new DirectoryInfo(item.songFolder);
-                    string newPath = Path.Combine(path, song.Name);
-                    if (Directory.Exists(newPath) && newPath != item.songFolder)
-                    {
-                        Directory.Delete(newPath, true);
-                    }
-                    else if (Directory.Exists(newPath) && newPath == item.songFolder)
-                    {
-                        continue;
-                    }
-                    if (copyFile)
-                    {
-                        FileSystem.CopyDirectory(item.songFolder, newPath);
-                        debugLog("歌曲：" + item._songName + "复制到目录：" + path);
-                    }
-                    else
-                    {
-                        FileSystem.MoveDirectory(item.songFolder, newPath);
-                        debugLog("歌曲：" + item._songName + "移动到目录：" + path);
-                    }
+                    snapshot = new Dictionary<string, SongMap>(delicatedSongList);
                 }
+
+                _viewModel.SongScanner.CopyOrMoveSongs(snapshot, path, copyFile);
+                
+                foreach (var item in snapshot.Values)
+                {
+                    debugLog($"歌曲：{item._songName} 已{(copyFile ? "复制" : "移动")}到目录：{path}");
+                }
+
                 if (!copyFile)
                 {
-                    delicatedSongList.Clear();
+                    lock (_viewModel.SyncRoot)
+                    {
+                        delicatedSongList.Clear();
+                    }
                     DelicatedSongListView.Clear();
                 }
             }
             catch (IOException)
             {
-                debugLog("移动文件夹到目录:" + path + "失败！请检查文件和文件夹占用情况！");
+                debugLog("操作散装歌曲到目录:" + path + "失败！请检查文件和文件夹占用情况！");
             }
 
         }
@@ -736,7 +729,14 @@ namespace BeatSaberIndependentMapsManager
             {
                 DelicatedSongListView.BeginUpdate();
                 DelicatedSongListView.Items.Clear();
-                foreach (KeyValuePair<string, SongMap> valuePair in delicatedSongList)
+                
+                Dictionary<string, SongMap> snapshot;
+                lock (_viewModel.SyncRoot)
+                {
+                    snapshot = new Dictionary<string, SongMap>(delicatedSongList);
+                }
+
+                foreach (KeyValuePair<string, SongMap> valuePair in snapshot)
                 {
                     ListViewItem item = new ListViewItem(valuePair.Value._songName);
                     item.SubItems.Add(valuePair.Key);
@@ -785,9 +785,12 @@ namespace BeatSaberIndependentMapsManager
                     try
                     {
                         Stopwatch stopwatch = Stopwatch.StartNew();
+                        var infoSnapshot = _viewModel.GetMusicPackInfoSnapshot();
+                        var coverSnapshot = _viewModel.GetMusicPackCoverImagesSnapshot();
+
                         await _viewModel.PlaylistExporter.ExportAllPacksAsync(
-                            musicPackInfo,
-                            musicPackCoverimgs,
+                            infoSnapshot,
+                            coverSnapshot,
                             path,
                             (name, pct) => BSIMMProgressUpdate(pct));
                         stopwatch.Stop();
@@ -1259,22 +1262,33 @@ namespace BeatSaberIndependentMapsManager
                 {
                     if (MessageBox.Show("一键去重将默认保留检索到的第一个曲目，确认继续吗（可在设置中开启高级模式选择要保留的曲目）", "提示", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                     {
-                        // 使用倒序循环避免"Collection was modified"错误
                         for (int i = songListView.Items.Count - 1; i >= 0; i--)
                         {
                             ListViewItem list = songListView.Items[i];
                             if (isDuplicate(list.SubItems[1].Text))
                             {
-                                string currentFolder = musicPackInfo[currentMusicPack][list.SubItems[1].Text].songFolder;
-                                try
+                                string currentFolder = null;
+                                lock (_viewModel.SyncRoot)
                                 {
-                                    Directory.Delete(currentFolder, true);
-                                    debugLog("删除歌曲：" + list.SubItems[1].Text + " 所在文件夹：" + currentFolder + "成功！");
-                                    songListView.Items.RemoveAt(i);
+                                    if (musicPackInfo.ContainsKey(currentMusicPack) && musicPackInfo[currentMusicPack].ContainsKey(list.SubItems[1].Text))
+                                    {
+                                        currentFolder = musicPackInfo[currentMusicPack][list.SubItems[1].Text].songFolder;
+                                        musicPackInfo[currentMusicPack].Remove(list.SubItems[1].Text);
+                                    }
                                 }
-                                catch (Exception)
+
+                                if (currentFolder != null)
                                 {
-                                    debugLog("删除文件夹失败：" + currentFolder + " 文件夹可能不存在或文件被其他程序占用！ ");
+                                    try
+                                    {
+                                        Directory.Delete(currentFolder, true);
+                                        debugLog("删除歌曲：" + list.SubItems[1].Text + " 所在文件夹：" + currentFolder + "成功！");
+                                        songListView.Items.RemoveAt(i);
+                                    }
+                                    catch (Exception)
+                                    {
+                                        debugLog("删除文件夹失败：" + currentFolder + " 文件夹可能不存在或文件被其他程序占用！ ");
+                                    }
                                 }
                             }
                         }
@@ -1426,19 +1440,30 @@ namespace BeatSaberIndependentMapsManager
                 }
                 if (!e.CancelEdit)
                 {
-                    musicPackInfo.Add(e.Label, musicPackInfo[musicPackListView.SelectedItems[0].Text]);
-                    musicPackInfo.Remove(musicPackListView.SelectedItems[0].Text);
-                    Image newImg = musicPackimg.Images[musicPackListView.SelectedItems[0].Text];
+                    string oldName = musicPackListView.SelectedItems[0].Text;
+                    lock (_viewModel.SyncRoot)
+                    {
+                        if (musicPackInfo.ContainsKey(oldName))
+                        {
+                            musicPackInfo.Add(e.Label, musicPackInfo[oldName]);
+                            musicPackInfo.Remove(oldName);
+                            
+                            Image newCover = musicPackCoverimgs[oldName];
+                            musicPackCoverimgs.Add(e.Label, newCover);
+                            musicPackCoverimgs.Remove(oldName);
+                            
+                            string newPath = musicPackPath[oldName];
+                            musicPackPath.Add(e.Label, newPath);
+                            musicPackPath.Remove(oldName);
+                        }
+                    }
+                    
+                    Image newImg = musicPackimg.Images[oldName];
                     musicPackimg.Images.Add(e.Label, newImg);
                     musicPackListView.SelectedItems[0].ImageIndex = musicPackimg.Images.IndexOfKey(e.Label);
-                    musicPackimg.Images.RemoveByKey(musicPackListView.SelectedItems[0].Text);
-                    Image newCover = musicPackCoverimgs[musicPackListView.SelectedItems[0].Text];
-                    musicPackCoverimgs.Add(e.Label, newCover);
-                    musicPackCoverimgs.Remove(musicPackListView.SelectedItems[0].Text);
-                    string newPath = musicPackPath[musicPackListView.SelectedItems[0].Text];
-                    musicPackPath.Add(e.Label, newPath);
-                    musicPackPath.Remove(musicPackListView.SelectedItems[0].Text);
-                    debugLog("曲包名称修改：" + musicPackListView.SelectedItems[0].Text + " 修改为：" + e.Label);
+                    musicPackimg.Images.RemoveByKey(oldName);
+                    
+                    debugLog("曲包名称修改：" + oldName + " 修改为：" + e.Label);
                 }
             }
         }
