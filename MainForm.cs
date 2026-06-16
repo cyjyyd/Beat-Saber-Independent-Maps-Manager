@@ -35,11 +35,8 @@ namespace BeatSaberIndependentMapsManager
         private bool songListinited = true;
         private bool duplicateAdvance = false;
         private string currentMusicPack = "";
-        private byte[] bsVersions = null;
-        private readonly HashSet<string> gameInstance = new();
         private SongMap playSong;
         Dictionary<string, string> SongsHash = new Dictionary<string, string>();
-        List<BSVerInfo> bsVerionSet = null;
         Config config = new Config();
         private Dictionary<string, SongMap> delicatedSongList = new Dictionary<string, SongMap>();
         Dictionary<string, Dictionary<string, SongMap>> musicPackInfo = new Dictionary<string, Dictionary<string, SongMap>>();
@@ -303,279 +300,6 @@ namespace BeatSaberIndependentMapsManager
             progressForm.ShowDialog();
         }
         #endregion
-        #region 游戏实例检测与归集
-        private bool oculusGameDetect(string path)
-        {
-            string gamepath = path + "\\Software\\hyperbolic-magnetism-beat-saber";
-            if (Directory.Exists(gamepath) && File.Exists(gamepath + "\\Beat Saber.exe"))
-            {
-                debugLog("检测到Beat Saber实例目录：" + gamepath);
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-        }
-        private void detectSingleBeatSaberInstance()
-        {
-            string currentSteamLibraryFolder = null;
-            bool isFound = false;
-            RegistryKey key = Registry.LocalMachine.OpenSubKey("SOFTWARE\\WOW6432Node\\Valve\\Steam");
-            RegistryKey OCKey = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Oculus VR, LLC\\Oculus\\Libraries");
-            if (OCKey != null)
-            {
-                string[] folders = OCKey.GetSubKeyNames();
-                foreach (string item in folders)
-                {
-                    RegistryKey folderkey = OCKey.OpenSubKey(item);
-                    string OCGamePath = folderkey.GetValue("OriginalPath").ToString();
-                    isFound = oculusGameDetect(OCGamePath);
-                }
-            }
-            if (key == null)
-            {
-                key = Registry.LocalMachine.OpenSubKey("SOFTWARE\\Valve\\Steam");
-                if (key == null)
-                {
-                    debugLog("未检测到Steam安装目录，无法检测Beat Saber实例目录");
-                    return;
-                }
-                else
-                {
-                    currentSteamLibraryFolder = key.GetValue("InstallPath").ToString();
-                }
-            }
-            else
-            {
-                currentSteamLibraryFolder = key.GetValue("InstallPath").ToString();
-            }
-            if (currentSteamLibraryFolder == null)
-            {
-                debugLog("未检测到Steam安装目录，无法检测Beat Saber实例目录");
-                return;
-            }
-            else
-            {
-                string vdfFile = currentSteamLibraryFolder + "\\steamapps\\libraryfolders.vdf";
-                if (!File.Exists(vdfFile))
-                {
-                    debugLog("未检测到Steam库文件，无法检测Beat Saber实例目录");
-                    return;
-                }
-                else
-                {
-                    string[] vdfLines = File.ReadAllLines(vdfFile);
-                    isFound = false;
-                    foreach (string line in vdfLines)
-                    {
-                        if (line.Contains("path"))
-                        {
-                            string[] lineSplit = line.Split(new char[] { '"' }, StringSplitOptions.RemoveEmptyEntries);
-                            string steamLibraryFolder = lineSplit[3].Replace("\\\\", "\\");
-                            string beatSaberFolder = steamLibraryFolder + "\\steamapps\\common\\Beat Saber";
-                            if (Directory.Exists(beatSaberFolder))
-                            {
-                                string gamePath = beatSaberFolder + "\\Beat Saber.exe";
-                                string modPath = beatSaberFolder + "\\Plugins\\SongCore.dll";
-                                if (File.Exists(gamePath))
-                                {
-                                    if (pirateGameDetect(beatSaberFolder))
-                                    {
-                                        isFound = true;
-                                        debugLog("检测到Beat Saber实例目录：" + beatSaberFolder);
-                                        string ver = BeatSaberVersionDetect(beatSaberFolder);
-                                        debugLog("Beat Saber版本：" + ver);
-                                        if (!BSInstancePath.ContainsKey(ver))
-                                        {
-                                            BSInstancePath.Add(ver, beatSaberFolder);
-                                            InstanceSongCoreReady.Add(ver, modCheck(beatSaberFolder));
-                                        }
-                                        else
-                                        {
-                                            debugLog("检测到相同版本，自动重命名");
-                                            BSInstancePath.Add(Rename(ver), beatSaberFolder);
-                                            InstanceSongCoreReady.Add(Rename(ver), modCheck(beatSaberFolder));
-                                        }
-
-                                    }
-                                    else
-                                    {
-                                        MessageBox.Show("检测到盗版Beat Saber游戏，本软件只支持正版游戏的曲包管理，程序将退出！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                                        Environment.Exit(0);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (!isFound)
-                    {
-                        debugLog("常规模式下未解析到Beat Saber安装目录？请确认您是否安装(推荐安装Everything插件，使用增强模式)");
-                    }
-                }
-            }
-        }
-        private void detectMultiBeatSaberInstance()
-        {
-            Everything_SetSearch("Beat Saber.exe");
-            Everything_SetRequestFlags(EVERYTHING_REQUEST_PATH | EVERYTHING_REQUEST_FILE_NAME);
-            Everything_SetMatchWholeWord(true);
-            Everything_Query(true);
-            var buf = new StringBuilder(300);
-            for (uint i = 0; i < Everything_GetNumResults(); i++)
-            {
-                buf.Clear();
-                Everything_GetResultFullPathName(i, buf, 300);
-                var path = Path.GetDirectoryName(buf.ToString())!;
-                if (gameInstance.Contains(path) || path.Contains("Prefetch") || path.Contains("$RECYCLE.BIN") || path.Contains("OneDrive") || File.GetAttributes(buf.ToString()).HasFlag(FileAttributes.Directory)) continue;
-                gameInstance.Add(path);
-                var searchmod = (string path) =>
-                {
-                    try
-                    {
-                        var gamepath = path + "\\Beat Saber.exe";
-                        if (File.Exists(gamepath))
-                        {
-                            if (pirateGameDetect(path))
-                            {
-                                debugLog("检测到Beat Saber实例目录：" + path);
-                                string ver = BeatSaberVersionDetect(path);
-                                debugLog("Beat Saber版本：" + ver);
-                                if (!BSInstancePath.ContainsKey(ver))
-                                {
-                                    BSInstancePath.Add(ver, path);
-                                    InstanceSongCoreReady.Add(ver, modCheck(path));
-                                }
-                                else
-                                {
-                                    debugLog("检测到相同版本，自动重命名");
-                                    string escapedPrefix = Regex.Escape(ver);
-                                    string pattern = @"^" + escapedPrefix + @"(\[[0-9]+\])?$";
-                                    List<string> duplicateTemp = new List<string>();
-                                    foreach (string storeVer in BSInstancePath.Keys)
-                                    {
-                                        if (Regex.Match(storeVer, pattern).Success)
-                                        {
-                                            duplicateTemp.Add(storeVer);
-                                        }
-                                    }
-                                    string newVer = Rename(duplicateTemp.Last());
-                                    BSInstancePath.Add(newVer, path);
-                                    InstanceSongCoreReady.Add(newVer, modCheck(path));
-                                }
-
-                            }
-                            else
-                            {
-                                MessageBox.Show("检测到盗版Beat Saber游戏，本软件只支持正版游戏的曲包管理，程序将退出！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                                Environment.Exit(0);
-                            }
-                        }
-                    }
-                    catch
-                    {
-                        debugLog("检测Beat Saber实例目录时出现错误！");
-                    }
-                };
-                searchmod(path);
-            }
-        }
-        private bool[] modCheck(string path)
-        {
-            string modpath = path + "\\Plugins";
-            string pendingpath = path + "\\IPA\\Pending";
-            string[] mods = { "\\SiraUtil.dll", "\\BSML.dll", "\\SongCore.dll" };
-            bool[] modStatus = new bool[5];// 0:SiraUtil 1:BSML 2:SongCore 3:Installed(true)或Pending(false) 4:FileNotFound
-            for (int i = 0; i < mods.Length; i++)
-            {
-                modStatus[i] = File.Exists(modpath + mods[i]);
-            }
-            if (modStatus[0] && modStatus[1] && modStatus[2])
-            {
-                modStatus[3] = true;
-            }
-            else
-            {
-                for (int i = 0; i < mods.Length; i++)
-                {
-                    modStatus[i] = File.Exists(pendingpath + mods[i]);
-                }
-                if (modStatus[0] && modStatus[1] && modStatus[2])
-                {
-                    modStatus[3] = false;
-                }
-                else modStatus[4] = true;
-            }
-            return modStatus;
-        }
-        private string BeatSaberVersionDetect(string path)
-        {
-            string globalManager = path + "\\Beat Saber_Data\\globalgamemanagers";
-            string globalManagerContent = null;
-            string formatContent = null;
-            if (!File.Exists(globalManager))
-            {
-                debugLog("未检测到globalgamemanagers文件，无法检测Beat Saber版本");
-                return "未知版本";
-            }
-            else
-            {
-                globalManagerContent = Encoding.UTF8.GetString(File.ReadAllBytes(globalManager)).Substring(0, 5000);
-                string pattern = @"[\w\.]+";
-                MatchCollection matches = Regex.Matches(globalManagerContent, pattern);
-                foreach (Match match in matches)
-                {
-                    formatContent += match.Value;
-                }
-                globalManagerContent = null;
-            }
-            if (bsVersions != null)
-            {
-                try
-                {
-                    bsVerionSet = JsonConvert.DeserializeObject<List<BSVerInfo>>(Encoding.UTF8.GetString(bsVersions));
-                    foreach (BSVerInfo bsver in bsVerionSet)
-                    {
-                        if (formatContent.Contains(bsver.BSVersion))
-                        {
-                            return bsver.BSVersion;
-                        }
-                    }
-                    return "未知版本";
-                }
-                catch (JsonException)
-                {
-                    debugLog("Beat Saber版本控制文件解析失败！文件内容非法！");
-                    return "未知版本";
-                }
-                catch (Exception)
-                {
-                    debugLog("Beat Saber版本控制文件解析失败！文件可能被占用！");
-                    return "未知版本";
-                }
-
-            }
-            if (File.Exists(globalManager))
-            {
-                byte[] globalManagerBytes = File.ReadAllBytes(globalManager);
-                string globalManagerString = Encoding.UTF8.GetString(globalManagerBytes);
-                string pattern = @"m_Version: (\d+)";
-                Match match = Regex.Match(globalManagerString, pattern);
-                if (match.Success)
-                {
-                    return match.Groups[1].Value;
-                }
-                else
-                {
-                    return "未知版本";
-                }
-            }
-            else
-            {
-                return "未知版本";
-            }
-        }
-        #endregion
         #region 工具方法
         void AudioPlayer(SongMap playSong)
         {
@@ -769,27 +493,6 @@ namespace BeatSaberIndependentMapsManager
             {
                 return false;
             }
-        }
-        private bool pirateGameDetect(string gamepath)
-        {
-            string steamapipath = gamepath + "\\Beat Saber_Data\\Plugins\\x86_64\\steam_api64.dll";
-            if (File.Exists(steamapipath))
-            {
-                if (File.ReadAllBytes(steamapipath)[0] == 0x4D && File.ReadAllBytes(steamapipath)[1] == 0x5A)
-                {
-                    string steamapihash = GetFileMD5(steamapipath);
-                    if (steamapihash == "2a09ae29b5613645a4b30e9deea68042" || steamapihash == "f3db5801dc9b75da671b39041e2e8bcf")
-                    {
-                        return true;
-                    }
-                    else return false;
-                }
-                else
-                {
-                    return false;
-                }
-            }
-            else return false;
         }
         #endregion
         #region IMainView 实现
@@ -1250,101 +953,54 @@ namespace BeatSaberIndependentMapsManager
             if (musicPackName != null)
             {
                 debugLog("开始导出bplist文件：" + path + " 曲包：" + musicPackName);
-                Task.Run(async () => await saveMusicPackSonginfo(musicPackName, path));
+                if (musicPackInfo.TryGetValue(musicPackName, out var packSongs))
+                {
+                    var cover = musicPackCoverimgs.TryGetValue(musicPackName, out var img) ? img : null;
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            Stopwatch stopwatch = Stopwatch.StartNew();
+                            await _presenter.PlaylistExporter.ExportMusicPackAsync(
+                                musicPackName, 
+                                packSongs, 
+                                cover, 
+                                path, 
+                                new Progress<int>(pct => BSIMMProgressUpdate(pct)));
+                            stopwatch.Stop();
+                            debugLog($"曲包：{musicPackName} 导出成功！耗时：{(double)stopwatch.ElapsedMilliseconds / 1000}秒。路径：{path}");
+                            BSIMMStatusUpdate("曲包：", musicPackName + "bplist导出成功！路径：" + path, 100);
+                        }
+                        catch (Exception ex)
+                        {
+                            debugLog($"导出曲包 {musicPackName} 失败：{ex.Message}");
+                        }
+                    });
+                }
             }
             else
             {
                 debugLog("开始导出bplist文件：" + path);
-                List<Task> tasks = new List<Task>();
                 Task.Run(async () =>
                 {
-                    foreach (string bplistName in musicPackInfo.Keys)
+                    try
                     {
-                        string currentBplistName = bplistName;
-                        tasks.Add(Task.Run(() => saveMusicPackSonginfo(currentBplistName, path)));
+                        Stopwatch stopwatch = Stopwatch.StartNew();
+                        await _presenter.PlaylistExporter.ExportAllPacksAsync(
+                            musicPackInfo,
+                            musicPackCoverimgs,
+                            path,
+                            (name, pct) => BSIMMProgressUpdate(pct));
+                        stopwatch.Stop();
+                        debugLog($"所有曲包导出成功！总耗时：{(double)stopwatch.ElapsedMilliseconds / 1000}秒。路径：{path}");
+                        BSIMMStatusUpdate("曲包：", "所有bplist导出成功！路径：" + path, 100);
                     }
-                    await Task.WhenAll(tasks);
-                }).ContinueWith(t =>
-                {
-                    if (config.HashCache)
+                    catch (Exception ex)
                     {
-                        _presenter.HashCache.SaveCache();
+                        debugLog($"导出所有曲包失败：{ex.Message}");
                     }
                 });
             }
-        }
-
-        private async Task saveMusicPackSonginfo(string musicPackName, string path)//TODO 线程读写冲突修复
-        {
-            int finishcount = 0;
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            JsonSerializerSettings settings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
-            string imgBytes = "data:image/jpg;base64," + ImageToBase64(musicPackCoverimgs[musicPackName], ImageFormat.Jpeg);
-            string author = Environment.UserName + "使用BSIMM@万毒不侵 生成";
-            string description = "本歌单由" + Environment.UserName + "使用BSIMM生成\r\nBSIMM由万毒不侵开发，开源且免费，如果你是购买的请要求商家退款\r\n项目地址：https://github.com/cyjyyd/Beat-Saber-Independent-Maps-Manager";
-            PlayList playList = new PlayList(musicPackName, author, description, imgBytes);
-            if (config.HashCache)
-            {
-                if (SongsHash != null)
-                {
-                    foreach (KeyValuePair<string, SongMap> hashlist in musicPackInfo[musicPackName])
-                    {
-                        if (!SongsHash.ContainsKey(hashlist.Key))
-                        {
-                            string hashValue = await getSongHash(hashlist.Value);
-                            SongsHash.Add(hashlist.Key, hashValue);
-                            playList.AddSongHash(hashValue);
-                        }
-                        else
-                        {
-                            playList.AddSongHash(SongsHash[hashlist.Key]);
-                        }
-                    }
-                    stopwatch.Stop();
-                    debugLog(("曲包：" + musicPackName + $"导出使用缓存加速成功！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
-                    BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
-                }
-                else
-                {
-                    SongsHash = new Dictionary<string, string>();
-                    foreach (KeyValuePair<string, SongMap> hashlist in musicPackInfo[musicPackName])
-                    {
-                        if (!SongsHash.ContainsKey(hashlist.Key))
-                        {
-                            string hashValue = await getSongHash(hashlist.Value);
-                            SongsHash.Add(hashlist.Key, hashValue);
-                            playList.AddSongHash(hashValue);
-                        }
-                        else playList.AddSongHash(SongsHash[hashlist.Key]);
-                    }
-                    stopwatch.Stop();
-                    debugLog(("曲包：" + musicPackName + $"未找到缓存，已在计算同时缓存！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
-                    BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
-                }
-            }
-            else
-            {
-                foreach (SongMap song in musicPackInfo[musicPackName].Values)
-                {
-                    playList.AddSongHash(await getSongHash(song));
-                    finishcount++;
-                    BSIMMProgressUpdate(calcProgress(finishcount, musicPackInfo[musicPackName].Count));
-                }
-                stopwatch.Stop();
-                debugLog(("曲包：" + musicPackName + $"不使用缓存导出成功！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
-                BSIMMStatusUpdate("导出：", "导出完成！", 100);
-            }
-            FileStream output = File.Create(path + "\\" + musicPackName + ".bplist");
-            byte[] playListContent = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(playList, Formatting.None, settings));
-            output.Write(playListContent, 0, playListContent.Length);
-            debugLog("曲包:" + musicPackName + "导出成功！路径：" + path);
-            BSIMMStatusUpdate("曲包：", musicPackName + "bplist导出成功！路径：" + path, 100);
-            output.Close(); output.Dispose();
-            GC.Collect();
-        }
-        private async Task<string> getSongHash(SongMap songMap)
-        {
-            return await HashCacheService.ComputeSongHashAsync(songMap);
         }
         #endregion
         #region 窗口事件
@@ -2090,43 +1746,21 @@ namespace BeatSaberIndependentMapsManager
             {
                 if (MessageBox.Show("全盘扫描旨在扫描散落的歌曲,建议先在第一页添加歌曲目录，软件会自动排除扫描\n如果已添加歌曲目录，请忽略本提示并点击确认，否则请点击取消", "提示", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) == DialogResult.OK)
                 {
-                    Everything_SetSearch("info.dat");
-                    Everything_SetRequestFlags(EVERYTHING_REQUEST_PATH | EVERYTHING_REQUEST_FILE_NAME);
-                    Everything_SetMatchWholeWord(true);
-                    Everything_Query(true);
-                    StringBuilder buf = new StringBuilder(300);
-                    List<Task> tasks = new List<Task>();
-                    List<string> paths = new List<string>();
-                    SemaphoreSlim semaphore = new SemaphoreSlim(10);
-                    for (uint i = 0; i < Everything_GetNumResults(); i++)
+                    BSIMMStatusUpdate("全盘扫描", "正在进行全盘扫描...", 0);
+                    var excludedPaths = musicPackPath.Values.Select(p => p.ToString()).ToList();
+                    var results = await _presenter.ScanFullDiskAsync(excludedPaths, pct => BSIMMProgressUpdate(pct));
+                    
+                    // 同步到 delicatedSongList
+                    foreach (var kvp in results)
                     {
-                        buf.Clear();
-                        Everything_GetResultFullPathName(i, buf, 300);
-                        var path = Path.GetDirectoryName(buf.ToString())!;
-                        if (path.Contains("Prefetch") || path.Contains("$RECYCLE.BIN") || path.Contains("OneDrive") || Directory.Exists(buf.ToString())) continue;
-                        paths.Add(path);
-                    }
-                    foreach (string path in paths)
-                    {
-                        bool excluded = false;
-                        foreach (string MusicPackDir in musicPackPath.Values)
+                        if (!delicatedSongList.ContainsKey(kvp.Key))
                         {
-                            string partpath = MusicPackDir.ToString();
-                            if (path.Contains(partpath))
-                            {
-                                excluded = true;
-                                break;
-                            }
+                            delicatedSongList[kvp.Key] = kvp.Value;
                         }
-                        if (!excluded)
-                        {
-                            await semaphore.WaitAsync();
-                            tasks.Add(Task.Run(() => { try { addDelicatedSong(path); } finally { semaphore.Release(); } }));
-                        }
-                        excluded = false;
                     }
-                    await Task.WhenAll(tasks);
+
                     displayDelicatedSongList();
+                    BSIMMStatusUpdate("就绪", $"全盘扫描完成！共找到 {results.Count} 首歌曲。", 100);
                 }
             }
             else

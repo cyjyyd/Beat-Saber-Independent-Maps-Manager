@@ -2,14 +2,114 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 
 namespace BeatSaberIndependentMapsManager.Services
 {
     internal class SongScanService
     {
+        #region P/Invoke
+        [DllImport("Everything64.dll", CharSet = CharSet.Unicode)]
+        private static extern uint Everything_SetSearch(string lpSearchString);
+        [DllImport("Everything64.dll")]
+        private static extern bool Everything_Query(bool bWait);
+        [DllImport("Everything64.dll")]
+        private static extern bool Everything_SetMatchWholeWord(bool bEnable);
+        [DllImport("Everything64.dll", CharSet = CharSet.Unicode)]
+        private static extern uint Everything_GetNumResults();
+        [DllImport("Everything64.dll", CharSet = CharSet.Unicode)]
+        private static extern void Everything_GetResultFullPathName(uint nIndex, StringBuilder lpString, uint nMaxCount);
+        [DllImport("Everything64.dll")]
+        private static extern void Everything_SetRequestFlags(uint dwRequestFlags);
+        #endregion
+
+        private const int EVERYTHING_REQUEST_FILE_NAME = 0x00000001;
+        private const int EVERYTHING_REQUEST_PATH = 0x00000002;
+
+        /// <summary>
+        /// Perform a full disk scan using Everything search to find scattered maps.
+        /// </summary>
+        public async Task<Dictionary<string, SongMap>> ScanFullDiskWithEverythingAsync(IEnumerable<string> excludedPaths, Action<int> onProgress = null)
+        {
+            var results = new Dictionary<string, SongMap>();
+            if (!File.Exists("Everything64.dll"))
+                return results;
+
+            Everything_SetSearch("info.dat");
+            Everything_SetRequestFlags(EVERYTHING_REQUEST_PATH | EVERYTHING_REQUEST_FILE_NAME);
+            Everything_SetMatchWholeWord(true);
+            Everything_Query(true);
+
+            var buf = new StringBuilder(300);
+            var paths = new List<string>();
+            uint count = Everything_GetNumResults();
+
+            for (uint i = 0; i < count; i++)
+            {
+                buf.Clear();
+                Everything_GetResultFullPathName(i, buf, 300);
+                var path = Path.GetDirectoryName(buf.ToString())!;
+                if (path.Contains("Prefetch") || path.Contains("$RECYCLE.BIN") || path.Contains("OneDrive") || Directory.Exists(buf.ToString())) 
+                    continue;
+                paths.Add(path);
+            }
+
+            var tasks = new List<Task>();
+            var semaphore = new System.Threading.SemaphoreSlim(10);
+            var listExcludedPaths = excludedPaths?.ToList() ?? new List<string>();
+            int processedCount = 0;
+
+            foreach (string path in paths)
+            {
+                bool excluded = false;
+                foreach (string excludedPath in listExcludedPaths)
+                {
+                    if (path.Contains(excludedPath))
+                    {
+                        excluded = true;
+                        break;
+                    }
+                }
+
+                if (!excluded)
+                {
+                    await semaphore.WaitAsync();
+                    tasks.Add(Task.Run(() =>
+                    {
+                        try
+                        {
+                            var parsed = ParseSongDirectory(path, null);
+                            if (parsed.song != null && !string.IsNullOrEmpty(parsed.bsr))
+                            {
+                                lock (results)
+                                {
+                                    results[parsed.bsr] = parsed.song;
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            semaphore.Release();
+                            var current = System.Threading.Interlocked.Increment(ref processedCount);
+                            onProgress?.Invoke(current * 100 / paths.Count);
+                        }
+                    }));
+                }
+                else
+                {
+                    var current = System.Threading.Interlocked.Increment(ref processedCount);
+                    onProgress?.Invoke(current * 100 / paths.Count);
+                }
+            }
+
+            await Task.WhenAll(tasks);
+            return results;
+        }
+
         /// <summary>
         /// Scan a folder and return parsed results.
         /// Returns: (musicPackName, musicPackSongs, resultCode)

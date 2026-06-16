@@ -139,6 +139,25 @@ namespace BeatSaberIndependentMapsManager.Services
             MusicPackPath[packName] = result.MusicPackPath;
         }
 
+        /// <summary>
+        /// Perform full disk scan using Everything and update presenter state.
+        /// </summary>
+        public async Task<Dictionary<string, SongMap>> ScanFullDiskAsync(IEnumerable<string> excludedPaths, Action<int> onProgress = null)
+        {
+            var results = await SongScanner.ScanFullDiskWithEverythingAsync(excludedPaths, onProgress);
+            lock (DelicatedSongList)
+            {
+                foreach (var kvp in results)
+                {
+                    if (!DelicatedSongList.ContainsKey(kvp.Key))
+                    {
+                        DelicatedSongList[kvp.Key] = kvp.Value;
+                    }
+                }
+            }
+            return results;
+        }
+
         private static string GenerateUniqueName(string baseName, IEnumerable<string> existingKeys)
         {
             string escapedPrefix = System.Text.RegularExpressions.Regex.Escape(baseName);
