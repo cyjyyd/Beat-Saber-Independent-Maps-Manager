@@ -46,7 +46,6 @@ namespace BeatSaberIndependentMapsManager
         private Dictionary<string, Image> musicPackCoverimgs;
         private AudioPreviewService AudioPlayerService => _presenter.AudioPreview;
         // BeatSaver 搜索相关
-        private BeatSaverClient beatSaverClient = new BeatSaverClient();
         private List<BeatSaverMap> currentSearchResults = new List<BeatSaverMap>();
         private int currentPage = 0;
         private int totalPages = 0;
@@ -61,24 +60,10 @@ namespace BeatSaberIndependentMapsManager
         // 筛选构建器相关
         private FilterPreset currentFilterPreset;
         private FilterBuilderForm filterBuilderForm;
-        // 本地缓存管理器
-        private LocalCacheManager localCacheManager;
         // 更新管理器
         private UpdateManager updateManager;
         // 高亮难度选择
         private Dictionary<int, HashSet<(string characteristic, string difficulty)>> _perSongDifficulties;
-
-        /// <summary>
-        /// 确保本地缓存管理器已初始化并使用正确的代理设置
-        /// </summary>
-        private void EnsureLocalCacheManagerInitialized()
-        {
-            if (localCacheManager == null)
-            {
-                localCacheManager = new LocalCacheManager();
-            }
-            localCacheManager.UseSystemProxy = config.UseSystemProxy;
-        }
         #endregion
         #region 动态库引用
         [DllImport("Everything64.dll", CharSet = CharSet.Unicode)]
@@ -1209,20 +1194,6 @@ namespace BeatSaberIndependentMapsManager
                 // 停止音频播放
                 AudioPlayerService.Dispose();
 
-                // 释放本地缓存管理器
-                if (localCacheManager != null)
-                {
-                    localCacheManager.Dispose();
-                    localCacheManager = null;
-                }
-
-                // 释放 BeatSaver 客户端
-                if (beatSaverClient != null)
-                {
-                    beatSaverClient.Dispose();
-                    beatSaverClient = null;
-                }
-
                 // 释放更新管理器
                 if (updateManager != null)
                 {
@@ -1922,6 +1893,21 @@ namespace BeatSaberIndependentMapsManager
         /// <summary>
         /// 使用筛选预设执行搜索
         /// </summary>
+        private async Task DisplayOrSearchPage()
+        {
+            dataGridView1.Rows.Clear();
+            currentSearchResults.Clear();
+
+            int startIndex = currentPage * PageSize;
+            int endIndex = Math.Min(startIndex + PageSize, allOrSearchResults.Count);
+
+            var pageResults = allOrSearchResults.Skip(startIndex).Take(PageSize).ToList();
+            currentSearchResults = pageResults;
+
+            await DisplaySearchResults(pageResults);
+            UpdatePaginationControls();
+        }
+
         private async Task SearchMapsWithFilter(FilterPreset preset, System.Threading.CancellationToken cancellationToken = default)
         {
             try
@@ -1930,38 +1916,67 @@ namespace BeatSaberIndependentMapsManager
                 dataGridView1.Rows.Clear();
                 currentSearchResults.Clear();
 
-                // 检查是否需要本地缓存
-                if (RequiresLocalCache(preset))
+                if (_presenter.BeatSaverSearch.RequiresLocalCache(preset))
                 {
                     await SearchWithLocalCache(preset, cancellationToken);
                     return;
                 }
 
-                // 检查是否有 OR 逻辑需要处理
-                bool hasOrLogic = HasOrLogic(preset);
-
-                // 构建filter检查是否需要Mod二次筛选
-                var filter = BuildSearchFilterFromPreset(preset);
+                bool hasOrLogic = _presenter.BeatSaverSearch.HasOrLogic(preset);
+                var filter = _presenter.BeatSaverSearch.BuildSearchFilterFromPreset(preset);
                 bool needsModFiltering = filter.HasModFiltersToApply && filter.ModFiltersToApply.Count > 1;
 
                 if (hasOrLogic)
                 {
-                    // 使用 OR 逻辑处理：执行多次搜索然后合并
-                    await SearchWithOrLogic(preset);
+                    var result = await _presenter.BeatSaverSearch.SearchWithOrLogicAsync(preset, msg => { if (!IsDisposed) BSIMMActionText.Text = msg; });
+                    allOrSearchResults = result.Results;
+                    totalPages = result.TotalPages;
+                    isOrModeSearch = true;
+                    isLocalCacheSearch = false;
+                    currentPage = 0;
+
+                    if (allOrSearchResults.Count > 0)
+                    {
+                        BSIMMActionText.Text = $"找到 {allOrSearchResults.Count} 个结果（OR 合并）";
+                        await DisplayOrSearchPage();
+                    }
+                    else
+                    {
+                        BSIMMActionText.Text = "未找到匹配的结果";
+                        btnPrevPage.Enabled = false;
+                        btnNextPage.Enabled = false;
+                        lblPageInfo.Text = "第 0/0 页";
+                    }
                 }
                 else if (needsModFiltering)
                 {
-                    // 有多个Mod条件需要AND筛选：获取所有结果后二次筛选
-                    await SearchWithModFiltering(filter);
+                    var result = await _presenter.BeatSaverSearch.SearchWithModFilteringAsync(filter, msg => { if (!IsDisposed) BSIMMActionText.Text = msg; });
+                    allOrSearchResults = result.Results;
+                    totalPages = result.TotalPages;
+                    isOrModeSearch = true; 
+                    isLocalCacheSearch = false;
+                    currentPage = 0;
+
+                    if (allOrSearchResults.Count > 0)
+                    {
+                        BSIMMActionText.Text = $"找到 {allOrSearchResults.Count} 个结果（Mod筛选）";
+                        await DisplayOrSearchPage();
+                    }
+                    else
+                    {
+                        BSIMMActionText.Text = "未找到匹配的结果";
+                        btnPrevPage.Enabled = false;
+                        btnNextPage.Enabled = false;
+                        lblPageInfo.Text = "第 0/0 页";
+                    }
                 }
                 else
                 {
-                    // 纯 AND 逻辑：清除 OR 模式标志
                     isOrModeSearch = false;
                     isLocalCacheSearch = false;
                     allOrSearchResults.Clear();
 
-                    var response = await beatSaverClient.SearchMapsAsync(filter, currentPage);
+                    var response = await _presenter.BeatSaverClient.SearchMapsAsync(filter, currentPage);
 
                     if (response?.Maps != null && response.Maps.Count > 0)
                     {
@@ -2002,29 +2017,7 @@ namespace BeatSaberIndependentMapsManager
             }
         }
 
-        /// <summary>
-        /// 检查预设是否需要本地缓存
-        /// </summary>
-        private bool RequiresLocalCache(FilterPreset preset)
-        {
-            if (preset == null) return false;
 
-            foreach (var group in preset.GetActiveGroups())
-            {
-                // Check if group has UseLocalCache enabled
-                if (group.UseLocalCache)
-                    return true;
-
-                // Also check individual conditions for backward compatibility
-                foreach (var condition in group.GetActiveConditions())
-                {
-                    if (FilterConditionMetadata.RequiresLocalCache(condition.Type))
-                        return true;
-                }
-            }
-
-            return false;
-        }
 
         /// <summary>
         /// 使用本地缓存执行搜索
@@ -2034,16 +2027,16 @@ namespace BeatSaberIndependentMapsManager
             try
             {
                 // 初始化本地缓存管理器
-                EnsureLocalCacheManagerInitialized();
+                _presenter.EnsureLocalCacheInitialized();
 
                 // 检查缓存是否可用或已过期
-                bool needDownload = !localCacheManager.IsCacheAvailable;
+                bool needDownload = !_presenter.LocalCache.IsCacheAvailable;
                 bool isOutdated = false;
 
-                if (localCacheManager.IsCacheAvailable)
+                if (_presenter.LocalCache.IsCacheAvailable)
                 {
                     // 检查缓存是否过期（默认7天）
-                    isOutdated = await localCacheManager.IsCacheOutdatedAsync();
+                    isOutdated = await _presenter.LocalCache.IsCacheOutdatedAsync();
                 }
 
                 if (needDownload || isOutdated)
@@ -2070,7 +2063,7 @@ namespace BeatSaberIndependentMapsManager
                     else
                     {
                         // 下载/更新缓存
-                        localCacheManager.DownloadProgress += (s, progress) =>
+                        _presenter.LocalCache.DownloadProgress += (s, progress) =>
                         {
                             this.BeginInvoke(() =>
                             {
@@ -2084,7 +2077,7 @@ namespace BeatSaberIndependentMapsManager
                         };
 
                         BSIMMStatusUpdate(needDownload ? "下载" : "更新", needDownload ? "正在下载本地缓存..." : "正在更新本地缓存...", 0);
-                        bool downloaded = await localCacheManager.DownloadCacheAsync();
+                        bool downloaded = await _presenter.LocalCache.DownloadCacheAsync();
 
                         if (!downloaded)
                         {
@@ -2123,7 +2116,7 @@ namespace BeatSaberIndependentMapsManager
                                 BSIMMStatusText.Text = $"正在筛选... {percent}%";
                             });
                         });
-                        return localCacheManager.ParallelFilterMaps(preset, progress, cancellationToken);
+                        return _presenter.LocalCache.ParallelFilterMaps(preset, progress, cancellationToken);
                     }, cancellationToken);
                 }
                 else
@@ -2135,7 +2128,7 @@ namespace BeatSaberIndependentMapsManager
                         int lastPercent = 0;
                         int processedCount = 0;
 
-                        foreach (var map in localCacheManager.StreamFilterMaps(preset, null, cancellationToken))
+                        foreach (var map in _presenter.LocalCache.StreamFilterMaps(preset, null, cancellationToken))
                         {
                             if (cancellationToken.IsCancellationRequested)
                                 break;
@@ -2204,604 +2197,9 @@ namespace BeatSaberIndependentMapsManager
             }
         }
 
-        /// <summary>
-        /// 检查预设中是否包含 OR 逻辑
-        /// </summary>
-        private bool HasOrLogic(FilterPreset preset)
-        {
-            if (preset == null) return false;
-
-            var activeGroups = preset.GetActiveGroups();
-
-            // 检查组间是否有 OR
-            foreach (var group in activeGroups)
-            {
-                if (group.GroupOperator == LogicOperator.Or)
-                    return true;
-
-                // 检查组内条件是否有 OR
-                var conditions = group.GetActiveConditions();
-
-                // 检查是否为"仅包含Mod支持条件"的特殊情况
-                // BeatSaver API的Mod参数本身就是OR关系，不需要拆分
-                if (IsModOnlyGroup(conditions))
-                {
-                    // 组内仅有Mod条件，API会处理OR逻辑，跳过此组
-                    continue;
-                }
-
-                foreach (var condition in conditions)
-                {
-                    if (condition.Operator == LogicOperator.Or)
-                        return true;
-                }
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// 检查条件列表是否仅包含Mod支持条件
-        /// BeatSaver API的Mod参数本身就是OR关系，直接拼接即可
-        /// </summary>
-        private bool IsModOnlyGroup(List<FilterCondition> conditions)
-        {
-            if (conditions == null || conditions.Count == 0)
-                return false;
-
-            // Mod支持条件类型
-            var modConditionTypes = new HashSet<FilterConditionType>
-            {
-                FilterConditionType.Chroma,
-                FilterConditionType.Noodle,
-                FilterConditionType.Me,
-                FilterConditionType.Cinema,
-                FilterConditionType.Vivify
-            };
-
-            // 检查所有条件是否都是Mod支持条件
-            foreach (var condition in conditions)
-            {
-                if (!modConditionTypes.Contains(condition.Type))
-                    return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// 使用 OR 逻辑执行搜索（需要多次请求并合并结果）
-        /// </summary>
-        private async Task SearchWithOrLogic(FilterPreset preset)
-        {
-            var activeGroups = preset.GetActiveGroups();
-            if (!activeGroups.Any())
-            {
-                BSIMMActionText.Text = "未找到匹配的结果";
-                return;
-            }
-
-            // 分析条件结构并生成搜索任务
-            var searchFilters = BuildSearchFiltersWithOrLogic(preset);
-
-            BSIMMActionText.Text = $"正在执行 {searchFilters.Count} 个搜索任务...";
-
-            // 收集所有搜索的所有页面结果
-            var allResults = new Dictionary<string, BeatSaverMap>(); // 使用字典去重
-
-            foreach (var filter in searchFilters)
-            {
-                // 对每个搜索任务获取所有页面的结果
-                int page = 0;
-                while (true)
-                {
-                    try
-                    {
-                        var response = await beatSaverClient.SearchMapsAsync(filter, page);
-                        if (response?.Maps == null || response.Maps.Count == 0)
-                            break;
-
-                        foreach (var map in response.Maps)
-                        {
-                            if (!string.IsNullOrEmpty(map.Id) && !allResults.ContainsKey(map.Id))
-                            {
-                                allResults[map.Id] = map;
-                            }
-                        }
-
-                        // 检查是否还有更多页面
-                        if (response.Info != null && page < response.Info.Pages - 1)
-                        {
-                            page++;
-                            BSIMMActionText.Text = $"正在搜索... 已找到 {allResults.Count} 个结果";
-                        }
-                        else if (response.Metadata != null && (page + 1) * response.Metadata.PageSize < response.Metadata.Total)
-                        {
-                            page++;
-                            BSIMMActionText.Text = $"正在搜索... 已找到 {allResults.Count} 个结果";
-                        }
-                        else
-                        {
-                            break;
-                        }
-
-                        // 添加小延迟避免请求过快
-                        await Task.Delay(100);
-                    }
-                    catch
-                    {
-                        break;
-                    }
-                }
-            }
-
-            // 缓存所有结果
-            allOrSearchResults = allResults.Values.ToList();
-            isOrModeSearch = true;
-            isLocalCacheSearch = false; // OR逻辑搜索不是本地缓存搜索
-            currentPage = 0;
-
-            // 计算总页数
-            totalPages = (int)Math.Ceiling((double)allOrSearchResults.Count / PageSize);
-
-            if (allOrSearchResults.Count > 0)
-            {
-                BSIMMActionText.Text = $"找到 {allOrSearchResults.Count} 个结果（OR 合并）";
-                await DisplayOrSearchPage();
-            }
-            else
-            {
-                BSIMMActionText.Text = "未找到匹配的结果";
-                btnPrevPage.Enabled = false;
-                btnNextPage.Enabled = false;
-                lblPageInfo.Text = "第 0/0 页";
-            }
-        }
-
-        /// <summary>
-        /// 显示 OR 搜索的当前页结果
-        /// </summary>
-        private async Task DisplayOrSearchPage()
-        {
-            dataGridView1.Rows.Clear();
-            currentSearchResults.Clear();
-
-            // 计算当前页的数据范围
-            int startIndex = currentPage * PageSize;
-            int endIndex = Math.Min(startIndex + PageSize, allOrSearchResults.Count);
-
-            // 获取当前页的数据
-            var pageResults = allOrSearchResults.Skip(startIndex).Take(PageSize).ToList();
-            currentSearchResults = pageResults;
-
-            // 显示结果
-            await DisplaySearchResults(pageResults);
-
-            // 更新分页控件
-            UpdatePaginationControls();
-        }
-
-        /// <summary>
-        /// 使用Mod二次筛选执行搜索
-        /// 当有多个Mod条件需要AND逻辑时使用
-        /// </summary>
-        private async Task SearchWithModFiltering(BeatSaverSearchFilter filter)
-        {
-            BSIMMActionText.Text = "正在搜索并筛选...";
-
-            // 收集所有页面的结果
-            var allResults = new Dictionary<string, BeatSaverMap>();
-            int page = 0;
-            int totalPagesFromApi = 0;
-
-            while (true)
-            {
-                try
-                {
-                    var response = await beatSaverClient.SearchMapsAsync(filter, page);
-                    if (response?.Maps == null || response.Maps.Count == 0)
-                        break;
-
-                    // 获取总页数
-                    if (page == 0)
-                    {
-                        if (response.Info != null)
-                            totalPagesFromApi = response.Info.Pages;
-                        else if (response.Metadata != null)
-                            totalPagesFromApi = (response.Metadata.Total + response.Metadata.PageSize - 1) / response.Metadata.PageSize;
-                    }
-
-                    foreach (var map in response.Maps)
-                    {
-                        if (!string.IsNullOrEmpty(map.Id) && !allResults.ContainsKey(map.Id))
-                        {
-                            allResults[map.Id] = map;
-                        }
-                    }
-
-                    // 检查是否还有更多页面
-                    if (page >= totalPagesFromApi - 1)
-                        break;
-
-                    page++;
-                    BSIMMActionText.Text = $"正在获取数据... 第 {page + 1}/{totalPagesFromApi} 页";
-
-                    // 添加小延迟避免请求过快
-                    await Task.Delay(100);
-                }
-                catch
-                {
-                    break;
-                }
-            }
-
-            BSIMMActionText.Text = "正在筛选...";
-
-            // 应用Mod二次筛选
-            var filteredResults = beatSaverClient.ApplyModFilters(allResults.Values.ToList(), filter);
-
-            // 缓存筛选后的结果
-            allOrSearchResults = filteredResults;
-            isOrModeSearch = true; // 复用OR模式的分页显示逻辑
-            isLocalCacheSearch = false;
-            currentPage = 0;
-
-            // 计算总页数
-            totalPages = (int)Math.Ceiling((double)allOrSearchResults.Count / PageSize);
-
-            if (allOrSearchResults.Count > 0)
-            {
-                BSIMMActionText.Text = $"找到 {allOrSearchResults.Count} 个结果（Mod筛选）";
-                await DisplayOrSearchPage();
-            }
-            else
-            {
-                BSIMMActionText.Text = "未找到匹配的结果";
-                btnPrevPage.Enabled = false;
-                btnNextPage.Enabled = false;
-                lblPageInfo.Text = "第 0/0 页";
-            }
-        }
-
-        /// <summary>
-        /// 执行单个搜索任务
-        /// </summary>
-        private async Task<List<BeatSaverMap>> ExecuteSearchTask(BeatSaverSearchFilter filter, int page)
-        {
-            try
-            {
-                var response = await beatSaverClient.SearchMapsAsync(filter, page);
-                return response?.Maps ?? new List<BeatSaverMap>();
-            }
-            catch
-            {
-                return new List<BeatSaverMap>();
-            }
-        }
-
-        /// <summary>
-        /// 根据 OR 逻辑拆分生成多个搜索过滤器
-        /// </summary>
-        private List<BeatSaverSearchFilter> BuildSearchFiltersWithOrLogic(FilterPreset preset)
-        {
-            var filters = new List<BeatSaverSearchFilter>();
-            var activeGroups = preset.GetActiveGroups();
-
-            if (!activeGroups.Any())
-            {
-                filters.Add(new BeatSaverSearchFilter());
-                return filters;
-            }
-
-            // 简化处理：将 OR 逻辑拆分为多个独立的搜索
-            // 每遇到 OR，就拆分为一个新的搜索任务
-
-            var currentFilter = new BeatSaverSearchFilter();
-            filters.Add(currentFilter);
-
-            for (int i = 0; i < activeGroups.Count; i++)
-            {
-                var group = activeGroups[i];
-                var conditions = group.GetActiveConditions();
-
-                // 处理组内条件
-                for (int j = 0; j < conditions.Count; j++)
-                {
-                    var condition = conditions[j];
-
-                    if (j == 0 && filters.Count > 1 && i > 0)
-                    {
-                        // 为新的 OR 分支创建新过滤器
-                        if (group.GroupOperator == LogicOperator.Or)
-                        {
-                            currentFilter = new BeatSaverSearchFilter();
-                            filters.Add(currentFilter);
-                        }
-                    }
-
-                    // 如果条件是 OR，需要创建新的过滤器
-                    if (condition.Operator == LogicOperator.Or && j > 0)
-                    {
-                        // 复制当前过滤器的状态
-                        var newFilter = CloneFilter(currentFilter);
-                        // 清除当前条件在新过滤器中的影响（由后续条件添加）
-                        filters.Add(newFilter);
-                        currentFilter = newFilter;
-                    }
-
-                    ApplyConditionToFilter(currentFilter, condition);
-                }
-
-                // 检查下一个组的运算符
-                if (i < activeGroups.Count - 1)
-                {
-                    var nextGroup = activeGroups[i + 1];
-                    if (nextGroup.GroupOperator == LogicOperator.Or)
-                    {
-                        // 准备创建新的 OR 分支
-                        currentFilter = new BeatSaverSearchFilter();
-                        filters.Add(currentFilter);
-                    }
-                }
-            }
-
-            return filters;
-        }
-
-        /// <summary>
-        /// 克隆搜索过滤器
-        /// </summary>
-        private BeatSaverSearchFilter CloneFilter(BeatSaverSearchFilter source)
-        {
-            return new BeatSaverSearchFilter
-            {
-                Query = source.Query,
-                Order = source.Order,
-                MinBpm = source.MinBpm,
-                MaxBpm = source.MaxBpm,
-                MinNps = source.MinNps,
-                MaxNps = source.MaxNps,
-                MinDuration = source.MinDuration,
-                MaxDuration = source.MaxDuration,
-                MinSsStars = source.MinSsStars,
-                MaxSsStars = source.MaxSsStars,
-                MinBlStars = source.MinBlStars,
-                MaxBlStars = source.MaxBlStars,
-                Chroma = source.Chroma,
-                Noodle = source.Noodle,
-                Me = source.Me,
-                Cinema = source.Cinema,
-                Vivify = source.Vivify,
-                Automapper = source.Automapper,
-                Leaderboard = source.Leaderboard,
-                Curated = source.Curated,
-                Verified = source.Verified,
-                ModFiltersToApply = new List<ModFilterCondition>(source.ModFiltersToApply)
-            };
-        }
-
-        /// <summary>
-        /// 从筛选预设构建搜索过滤器
-        /// </summary>
-        private BeatSaverSearchFilter BuildSearchFilterFromPreset(FilterPreset preset)
-        {
-            var filter = new BeatSaverSearchFilter();
-
-            if (preset == null) return filter;
-
-            // Mod支持条件类型
-            var modConditionTypes = new HashSet<FilterConditionType>
-            {
-                FilterConditionType.Chroma,
-                FilterConditionType.Noodle,
-                FilterConditionType.Me,
-                FilterConditionType.Cinema,
-                FilterConditionType.Vivify
-            };
-
-            foreach (var group in preset.GetActiveGroups())
-            {
-                var conditions = group.GetActiveConditions();
-
-                // 追踪Mod条件之间的逻辑关系
-                // 只有AND关系才需要二次筛选，OR关系API直接返回正确结果
-                FilterCondition previousModCondition = null;
-
-                for (int i = 0; i < conditions.Count; i++)
-                {
-                    var condition = conditions[i];
-                    bool isModCondition = modConditionTypes.Contains(condition.Type);
-
-                    if (isModCondition && previousModCondition != null)
-                    {
-                        // 当前Mod条件与前一个Mod条件的关系
-                        // 如果是AND关系，需要添加到ModFiltersToApply进行二次筛选
-                        // 如果是OR关系，API直接返回OR结果，不需要二次筛选
-                        bool needsAndFiltering = (previousModCondition.Operator == LogicOperator.And);
-                        ApplyConditionToFilter(filter, condition, needsAndFiltering);
-                    }
-                    else if (!isModCondition)
-                    {
-                        // 非Mod条件，正常处理
-                        ApplyConditionToFilter(filter, condition, false);
-                    }
-                    else
-                    {
-                        // 第一个Mod条件或独立的Mod条件，检查是否是唯一的Mod条件
-                        // 如果后续没有其他Mod条件或是OR关系，不需要二次筛选
-                        bool hasNextModCondition = false;
-                        bool nextModIsOr = false;
-
-                        for (int j = i + 1; j < conditions.Count; j++)
-                        {
-                            if (modConditionTypes.Contains(conditions[j].Type))
-                            {
-                                hasNextModCondition = true;
-                                // 下一个Mod条件的运算符决定当前条件是否需要二次筛选
-                                nextModIsOr = (conditions[j].Operator == LogicOperator.Or);
-                                break;
-                            }
-                        }
-
-                        // 如果没有后续Mod条件，或后续是OR关系，都不需要二次筛选
-                        bool needsAndFiltering = hasNextModCondition && !nextModIsOr;
-                        ApplyConditionToFilter(filter, condition, needsAndFiltering);
-                    }
-
-                    if (isModCondition)
-                    {
-                        previousModCondition = condition;
-                    }
-                }
-            }
-
-            return filter;
-        }
-
-        /// <summary>
-        /// 将条件应用到搜索过滤器
-        /// </summary>
-        /// <param name="filter">搜索过滤器</param>
-        /// <param name="condition">筛选条件</param>
-        /// <param name="addModToFilter">对于Mod条件，是否添加到二次筛选列表（AND逻辑时需要）</param>
-        private void ApplyConditionToFilter(BeatSaverSearchFilter filter, FilterCondition condition, bool addModToFilter = false)
-        {
-            if (condition.Value == null) return;
-
-            switch (condition.Type)
-            {
-                case FilterConditionType.Custom:
-                    // 自定义条件：将自定义名称和值组合作为额外搜索关键词
-                    if (!string.IsNullOrWhiteSpace(condition.CustomName) && !string.IsNullOrWhiteSpace(condition.Value?.ToString()))
-                    {
-                        // 追加到现有查询中
-                        filter.Query = string.IsNullOrWhiteSpace(filter.Query)
-                            ? $"{condition.CustomName}:{condition.Value}"
-                            : $"{filter.Query} {condition.CustomName}:{condition.Value}";
-                    }
-                    break;
-                case FilterConditionType.Query:
-                    // Handle SearchQueryValue with field type
-                    if (condition.Value is SearchQueryValue queryValue)
-                        filter.Query = queryValue.ToApiQuery();
-                    else
-                        filter.Query = condition.Value.ToString();
-                    break;
-                case FilterConditionType.Order:
-                    filter.Order = condition.Value.ToString();
-                    break;
-                case FilterConditionType.MinBpm:
-                    if (double.TryParse(condition.Value.ToString(), out double minBpm))
-                        filter.MinBpm = minBpm;
-                    break;
-                case FilterConditionType.MaxBpm:
-                    if (double.TryParse(condition.Value.ToString(), out double maxBpm))
-                        filter.MaxBpm = maxBpm;
-                    break;
-                case FilterConditionType.MinNps:
-                    if (double.TryParse(condition.Value.ToString(), out double minNps))
-                        filter.MinNps = minNps;
-                    break;
-                case FilterConditionType.MaxNps:
-                    if (double.TryParse(condition.Value.ToString(), out double maxNps))
-                        filter.MaxNps = maxNps;
-                    break;
-                case FilterConditionType.MinDuration:
-                    if (int.TryParse(condition.Value.ToString(), out int minDur))
-                        filter.MinDuration = minDur;
-                    break;
-                case FilterConditionType.MaxDuration:
-                    if (int.TryParse(condition.Value.ToString(), out int maxDur))
-                        filter.MaxDuration = maxDur;
-                    break;
-                case FilterConditionType.MinSsStars:
-                    if (double.TryParse(condition.Value.ToString(), out double minSs))
-                        filter.MinSsStars = minSs;
-                    break;
-                case FilterConditionType.MaxSsStars:
-                    if (double.TryParse(condition.Value.ToString(), out double maxSs))
-                        filter.MaxSsStars = maxSs;
-                    break;
-                case FilterConditionType.MinBlStars:
-                    if (double.TryParse(condition.Value.ToString(), out double minBl))
-                        filter.MinBlStars = minBl;
-                    break;
-                case FilterConditionType.MaxBlStars:
-                    if (double.TryParse(condition.Value.ToString(), out double maxBl))
-                        filter.MaxBlStars = maxBl;
-                    break;
-                case FilterConditionType.Chroma:
-                    {
-                        bool val = Convert.ToBoolean(condition.Value);
-                        filter.Chroma = val;
-                        if (addModToFilter)
-                            filter.ModFiltersToApply.Add(new ModFilterCondition("Chroma", val));
-                    }
-                    break;
-                case FilterConditionType.Noodle:
-                    {
-                        bool val = Convert.ToBoolean(condition.Value);
-                        filter.Noodle = val;
-                        if (addModToFilter)
-                            filter.ModFiltersToApply.Add(new ModFilterCondition("Noodle", val));
-                    }
-                    break;
-                case FilterConditionType.Me:
-                    {
-                        bool val = Convert.ToBoolean(condition.Value);
-                        filter.Me = val;
-                        if (addModToFilter)
-                            filter.ModFiltersToApply.Add(new ModFilterCondition("Me", val));
-                    }
-                    break;
-                case FilterConditionType.Cinema:
-                    {
-                        bool val = Convert.ToBoolean(condition.Value);
-                        filter.Cinema = val;
-                        if (addModToFilter)
-                            filter.ModFiltersToApply.Add(new ModFilterCondition("Cinema", val));
-                    }
-                    break;
-                case FilterConditionType.Vivify:
-                    {
-                        bool val = Convert.ToBoolean(condition.Value);
-                        filter.Vivify = val;
-                        if (addModToFilter)
-                            filter.ModFiltersToApply.Add(new ModFilterCondition("Vivify", val));
-                    }
-                    break;
-                case FilterConditionType.Ne:
-                    // Ne (Noodle Extensions) 与 Noodle 相同，API用ne参数
-                    {
-                        bool val = Convert.ToBoolean(condition.Value);
-                        filter.Noodle = val;
-                        if (addModToFilter)
-                            filter.ModFiltersToApply.Add(new ModFilterCondition("Noodle", val));
-                    }
-                    break;
-                case FilterConditionType.Automapper:
-                    var autoVal = condition.Value.ToString();
-                    if (autoVal == "仅AI谱")
-                        filter.Automapper = true;
-                    else if (autoVal == "排除AI谱")
-                        filter.Automapper = false;
-                    break;
-                case FilterConditionType.Leaderboard:
-                    filter.Leaderboard = condition.Value.ToString();
-                    break;
-                case FilterConditionType.Curated:
-                    filter.Curated = Convert.ToBoolean(condition.Value);
-                    break;
-                case FilterConditionType.Verified:
-                    filter.Verified = Convert.ToBoolean(condition.Value);
-                    break;
-            }
-        }
-
         #endregion
 
         #region 选择和导出功能
-
         private void BtnSelectAll_Click(object sender, EventArgs e)
         {
             foreach (DataGridViewRow row in dataGridView1.Rows)
@@ -3104,22 +2502,22 @@ namespace BeatSaberIndependentMapsManager
             btnBatchOutput.Enabled = false;
 
             // 检查是否所有预设都需要本地缓存
-            bool allRequireLocalCache = presets.All(p => RequiresLocalCache(p));
+            bool allRequireLocalCache = presets.All(p => _presenter.BeatSaverSearch.RequiresLocalCache(p));
 
             try
             {
                 if (allRequireLocalCache)
                 {
                     // 如果本地缓存管理器未初始化，则创建
-                    EnsureLocalCacheManagerInitialized();
+                    _presenter.EnsureLocalCacheInitialized();
 
                     // 检查缓存是否可用或已过期
-                    bool needDownload = !localCacheManager.IsCacheAvailable;
+                    bool needDownload = !_presenter.LocalCache.IsCacheAvailable;
                     bool isOutdated = false;
 
-                    if (localCacheManager.IsCacheAvailable)
+                    if (_presenter.LocalCache.IsCacheAvailable)
                     {
-                        isOutdated = await localCacheManager.IsCacheOutdatedAsync();
+                        isOutdated = await _presenter.LocalCache.IsCacheOutdatedAsync();
                     }
 
                     if (needDownload)
@@ -3145,7 +2543,7 @@ namespace BeatSaberIndependentMapsManager
 
                         if (result == DialogResult.Yes)
                         {
-                            localCacheManager.DownloadProgress += (s, progress) =>
+                            _presenter.LocalCache.DownloadProgress += (s, progress) =>
                             {
                                 this.BeginInvoke(() =>
                                 {
@@ -3159,7 +2557,7 @@ namespace BeatSaberIndependentMapsManager
                             };
 
                             BSIMMStatusUpdate("更新", "正在更新本地缓存...", 0);
-                            bool downloaded = await localCacheManager.DownloadCacheAsync();
+                            bool downloaded = await _presenter.LocalCache.DownloadCacheAsync();
 
                             if (!downloaded)
                             {
@@ -3185,7 +2583,7 @@ namespace BeatSaberIndependentMapsManager
                                     BSIMMStatusText.Text = $"并行筛选中... {percent}%";
                             });
                         });
-                        return localCacheManager.ParallelBatchFilterSlim(presets, progress);
+                        return _presenter.LocalCache.ParallelBatchFilterSlim(presets, progress);
                     });
 
                     // 并行导出歌单
@@ -3329,12 +2727,12 @@ namespace BeatSaberIndependentMapsManager
             try
             {
                 // 检查是否需要本地缓存
-                if (RequiresLocalCache(preset))
+                if (_presenter.BeatSaverSearch.RequiresLocalCache(preset))
                 {
                     // 使用本地缓存
-                    EnsureLocalCacheManagerInitialized();
+                    _presenter.EnsureLocalCacheInitialized();
 
-                    if (!localCacheManager.IsCacheAvailable)
+                    if (!_presenter.LocalCache.IsCacheAvailable)
                     {
                         throw new Exception("需要本地缓存但未下载");
                     }
@@ -3354,30 +2752,30 @@ namespace BeatSaberIndependentMapsManager
                         if (useSharedCache)
                         {
                             var results = new List<BeatSaverMapSlim>();
-                            foreach (var map in localCacheManager.StreamFilterMapsShared(preset, null))
+                            foreach (var map in _presenter.LocalCache.StreamFilterMapsShared(preset, null))
                             {
                                 results.Add(map);
                             }
                             // 应用结果限制
-                            var limitedResults = localCacheManager.ApplyResultLimitSlim(results, preset);
+                            var limitedResults = _presenter.LocalCache.ApplyResultLimitSlim(results, preset);
                             return limitedResults.Select(m => m.ToFullMap()).ToList();
                         }
                         else
                         {
-                            return localCacheManager.ParallelFilterMaps(preset, progress);
+                            return _presenter.LocalCache.ParallelFilterMaps(preset, progress);
                         }
                     });
                 }
                 else
                 {
                     // 使用API搜索
-                    var filter = BuildSearchFilterFromPreset(preset);
+                    var filter = _presenter.BeatSaverSearch.BuildSearchFilterFromPreset(preset);
                     int page = 0;
                     int totalPagesFromApi = 0;
 
                     while (true)
                     {
-                        var response = await beatSaverClient.SearchMapsAsync(filter, page);
+                        var response = await _presenter.BeatSaverClient.SearchMapsAsync(filter, page);
                         if (response?.Maps == null || response.Maps.Count == 0)
                             break;
 
@@ -3479,14 +2877,14 @@ namespace BeatSaberIndependentMapsManager
                 btnExportSelected.Enabled = false;
 
                 var allMaps = new List<BeatSaverMap>();
-                var filter = BuildSearchFilterFromPreset(currentFilterPreset);
+                var filter = _presenter.BeatSaverSearch.BuildSearchFilterFromPreset(currentFilterPreset);
 
                 // 从第一页开始请求所有页面
                 for (int page = 0; page < totalPages; page++)
                 {
                     BSIMMActionText.Text = $"正在获取第 {page + 1}/{totalPages} 页...";
 
-                    var response = await beatSaverClient.SearchMapsAsync(filter, page);
+                    var response = await _presenter.BeatSaverClient.SearchMapsAsync(filter, page);
                     if (response?.Maps != null && response.Maps.Count > 0)
                     {
                         allMaps.AddRange(response.Maps);
@@ -3727,5 +3125,6 @@ namespace BeatSaberIndependentMapsManager
         #endregion
     }
 }
+
 
 

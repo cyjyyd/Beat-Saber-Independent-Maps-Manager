@@ -20,6 +20,7 @@ namespace BeatSaberIndependentMapsManager.Services
         public HashCacheService HashCache { get; }
         public PlaylistExportService PlaylistExporter { get; }
         public SongScanService SongScanner { get; }
+        public BeatSaverSearchService BeatSaverSearch { get; }
         public LocalCacheManager LocalCache { get; private set; }
 
         // State - music packs and songs
@@ -46,14 +47,12 @@ namespace BeatSaberIndependentMapsManager.Services
             HashCache = new HashCacheService();
             SongScanner = new SongScanService();
             PlaylistExporter = new PlaylistExportService(HashCache, config);
+            LocalCache = new LocalCacheManager() { UseSystemProxy = config.UseSystemProxy };
+            BeatSaverSearch = new BeatSaverSearchService(BeatSaverClient, LocalCache);
         }
 
         public void EnsureLocalCacheInitialized()
         {
-            if (LocalCache == null)
-            {
-                LocalCache = new LocalCacheManager();
-            }
             LocalCache.UseSystemProxy = _config.UseSystemProxy;
         }
 

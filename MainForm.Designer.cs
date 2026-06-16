@@ -28,13 +28,6 @@ namespace BeatSaberIndependentMapsManager
             }
             catch { }
 
-            // 释放BeatSaverClient（静态HttpClient）
-            try
-            {
-                beatSaverClient?.Dispose();
-            }
-            catch { }
-
             // 释放CancellationTokenSource
             try
             {
