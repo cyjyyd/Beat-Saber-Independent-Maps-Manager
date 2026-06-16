@@ -13,13 +13,27 @@ namespace BeatSaberIndependentMapsManager.Services
         private const string CacheFileName = "hash.cache";
         private Dictionary<string, string> _songsHash;
 
+        private readonly object _hashLock = new object();
+
         public Dictionary<string, string> SongsHash
         {
-            get => _songsHash;
-            set => _songsHash = value;
+            get
+            {
+                lock (_hashLock) return _songsHash;
+            }
+            set
+            {
+                lock (_hashLock) _songsHash = value;
+            }
         }
 
-        public bool HasCachedData => _songsHash != null && _songsHash.Count > 0;
+        public bool HasCachedData
+        {
+            get
+            {
+                lock (_hashLock) return _songsHash != null && _songsHash.Count > 0;
+            }
+        }
 
         /// <summary>
         /// Load hash cache from disk.
@@ -46,10 +60,15 @@ namespace BeatSaberIndependentMapsManager.Services
         /// </summary>
         public void SaveCache()
         {
-            if (_songsHash == null)
-                return;
+            Dictionary<string, string> copy;
+            lock (_hashLock)
+            {
+                if (_songsHash == null)
+                    return;
+                copy = new Dictionary<string, string>(_songsHash);
+            }
 
-            string hashResults = JsonConvert.SerializeObject(_songsHash, Formatting.None);
+            string hashResults = JsonConvert.SerializeObject(copy, Formatting.None);
             File.WriteAllText(CacheFileName,
                 Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(hashResults)));
         }
@@ -61,9 +80,12 @@ namespace BeatSaberIndependentMapsManager.Services
             Dictionary<string, SongMap> packSongs,
             Action<int> onProgress = null)
         {
-            if (_songsHash == null)
+            lock (_hashLock)
             {
-                _songsHash = new Dictionary<string, string>();
+                if (_songsHash == null)
+                {
+                    _songsHash = new Dictionary<string, string>();
+                }
             }
 
             int processed = 0;
@@ -71,10 +93,19 @@ namespace BeatSaberIndependentMapsManager.Services
 
             foreach (var kvp in packSongs)
             {
-                if (!_songsHash.ContainsKey(kvp.Key))
+                bool containsKey;
+                lock (_hashLock)
+                {
+                    containsKey = _songsHash.ContainsKey(kvp.Key);
+                }
+
+                if (!containsKey)
                 {
                     string hash = await ComputeSongHashAsync(kvp.Value);
-                    _songsHash[kvp.Key] = hash;
+                    lock (_hashLock)
+                    {
+                        _songsHash[kvp.Key] = hash;
+                    }
                 }
                 processed++;
                 onProgress?.Invoke(processed * 100 / total);
@@ -86,14 +117,20 @@ namespace BeatSaberIndependentMapsManager.Services
         /// </summary>
         public async Task<string> GetOrComputeHashAsync(string key, SongMap songMap)
         {
-            if (_songsHash != null && _songsHash.TryGetValue(key, out string cached))
-                return cached;
-
-            if (_songsHash == null)
-                _songsHash = new Dictionary<string, string>();
+            lock (_hashLock)
+            {
+                if (_songsHash != null && _songsHash.TryGetValue(key, out string cached))
+                    return cached;
+                if (_songsHash == null)
+                    _songsHash = new Dictionary<string, string>();
+            }
 
             string hash = await ComputeSongHashAsync(songMap);
-            _songsHash[key] = hash;
+            
+            lock (_hashLock)
+            {
+                _songsHash[key] = hash;
+            }
             return hash;
         }
 
