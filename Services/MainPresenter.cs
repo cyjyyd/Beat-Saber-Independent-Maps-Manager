@@ -31,6 +31,14 @@ namespace BeatSaberIndependentMapsManager.Services
         public Dictionary<string, string> MusicPackPath { get; } = new();
         public Dictionary<string, Image> MusicPackCoverImages { get; } = new();
         public Dictionary<string, SongMap> DelicatedSongList { get; } = new();
+
+        public List<string> GetMusicPackNames()
+        {
+            lock (_stateLock)
+            {
+                return MusicPackInfo.Keys.ToList();
+            }
+        }
         public Dictionary<string, string> SongsHash
         {
             get => HashCache.SongsHash;
@@ -115,14 +123,15 @@ namespace BeatSaberIndependentMapsManager.Services
             if (result.PackSongs == null || result.PackSongs.Count == 0)
                 return;
 
-            string packName = result.MusicPackName;
-
             lock (_stateLock)
             {
+                string packName = result.MusicPackName;
+
                 // Handle duplicate names
                 if (MusicPackInfo.ContainsKey(packName))
                 {
                     packName = GenerateUniqueName(packName, MusicPackInfo.Keys);
+                    result.MusicPackName = packName; // IMPORTANT: Update the result so UI knows the unique name
                 }
 
                 MusicPackInfo[packName] = new Dictionary<string, SongMap>();

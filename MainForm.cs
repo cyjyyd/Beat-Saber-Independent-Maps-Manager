@@ -690,12 +690,20 @@ namespace BeatSaberIndependentMapsManager
             }
             Invoke(new System.Windows.Forms.MethodInvoker(delegate
             {
-                musicPackCoverimgs.Add(musicPackName, musicPackCover);
+                musicPackCoverimgs[musicPackName] = musicPackCover;
+                if (musicPackimg.Images.ContainsKey(musicPackName))
+                    musicPackimg.Images.RemoveByKey(musicPackName);
                 musicPackimg.Images.Add(musicPackName, musicPackCover);
-                ListViewItem item = new ListViewItem(musicPackName, musicPackName);
-                item.ImageIndex = musicPackimg.Images.IndexOfKey(musicPackName);
-                item.ToolTipText = musicPackPath[musicPackName];
-                musicPackListView.Items.Add(item);
+                
+                // 检查 ListView 中是否已有同名项，避免重复添加
+                if (!musicPackListView.Items.ContainsKey(musicPackName))
+                {
+                    ListViewItem item = new ListViewItem(musicPackName, musicPackName);
+                    item.Name = musicPackName; // Ensure the key is set
+                    item.ImageIndex = musicPackimg.Images.IndexOfKey(musicPackName);
+                    item.ToolTipText = musicPackPath.TryGetValue(musicPackName, out var p) ? p : "";
+                    musicPackListView.Items.Add(item);
+                }
             }));
         }
         private void displaySongList(string musicPackName)
@@ -848,9 +856,10 @@ namespace BeatSaberIndependentMapsManager
                     }
                     if (config.HashCache)
                     {
-                        foreach (KeyValuePair<string, Dictionary<string, SongMap>> HashMusicPack in musicPackInfo)
+                        var packNames = _presenter.GetMusicPackNames();
+                        foreach (string packName in packNames)
                         {
-                            await HashCachePack(HashMusicPack.Key);
+                            await HashCachePack(packName);
                         }
                     }
                 }).ContinueWith(t =>
@@ -893,9 +902,10 @@ namespace BeatSaberIndependentMapsManager
                 addFolder(verifiedPaths[0]);
                 if (config.HashCache)
                 {
-                    foreach (KeyValuePair<string, Dictionary<string, SongMap>> HashMusicPack in musicPackInfo)
+                    var packNames = _presenter.GetMusicPackNames();
+                    foreach (string packName in packNames)
                     {
-                        await HashCachePack(HashMusicPack.Key);
+                        await HashCachePack(packName);
                     }
                 }
             }).ContinueWith(t =>
