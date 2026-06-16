@@ -205,13 +205,38 @@ namespace BeatSaberIndependentMapsManager.Services
                 }
             }
 
+            var packSongs = new Dictionary<string, SongMap>();
+            foreach (var r in results.Where(r => r.song != null))
+            {
+                if (!packSongs.ContainsKey(r.bsr))
+                {
+                    packSongs[r.bsr] = r.song;
+                }
+                else
+                {
+                    string baseBsr = r.bsr;
+                    int duplicateIndex = 1;
+                    string newBsr = $"{baseBsr}[{duplicateIndex}]";
+                    while (packSongs.ContainsKey(newBsr))
+                    {
+                        duplicateIndex++;
+                        newBsr = $"{baseBsr}[{duplicateIndex}]";
+                    }
+                    packSongs[newBsr] = r.song;
+                    r.resultCode = 3; // Mark as duplicate in result code
+                    r.bsr = newBsr;   // Update the bsr to match the actual key used
+                    duplicateCount++;
+                    mapsCount--; // Adjust counts since it originally incremented mapsCount
+                }
+            }
+
             return new SongScanResult
             {
-                ResultType = mapsCount > 0 ? ScanResultType.MusicPack : ScanResultType.None,
+                ResultType = (mapsCount + duplicateCount) > 0 ? ScanResultType.MusicPack : ScanResultType.None,
                 MusicPackName = musicPackName,
                 MusicPackPath = path,
-                PackSongs = results.Where(r => r.song != null).ToDictionary(r => r.bsr, r => r.song),
-                MapsCount = mapsCount,
+                PackSongs = packSongs,
+                MapsCount = mapsCount + duplicateCount, // MapsCount in the original code included the first one, but let's keep total
                 DuplicateCount = duplicateCount,
                 IntegrityCount = integrityCount,
                 OtherCount = otherCount,
