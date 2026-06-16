@@ -38,12 +38,12 @@ namespace BeatSaberIndependentMapsManager
         private SongMap playSong;
         Dictionary<string, string> SongsHash = new Dictionary<string, string>();
         Config config = new Config();
-        private Dictionary<string, SongMap> delicatedSongList = new Dictionary<string, SongMap>();
-        Dictionary<string, Dictionary<string, SongMap>> musicPackInfo = new Dictionary<string, Dictionary<string, SongMap>>();
-        Dictionary<string, string> musicPackPath = new Dictionary<string, string>();
-        Dictionary<string, string> BSInstancePath = new Dictionary<string, string>();
-        Dictionary<string, bool[]> InstanceSongCoreReady = new Dictionary<string, bool[]>();
-        Dictionary<string, Image> musicPackCoverimgs = new Dictionary<string, Image>();
+        private Dictionary<string, SongMap> delicatedSongList;
+        private Dictionary<string, Dictionary<string, SongMap>> musicPackInfo;
+        private Dictionary<string, string> musicPackPath;
+        private Dictionary<string, string> BSInstancePath;
+        private Dictionary<string, bool[]> InstanceSongCoreReady;
+        private Dictionary<string, Image> musicPackCoverimgs;
         private AudioPreviewService AudioPlayerService => _presenter.AudioPreview;
         // BeatSaver 搜索相关
         private BeatSaverClient beatSaverClient = new BeatSaverClient();
@@ -102,6 +102,12 @@ namespace BeatSaberIndependentMapsManager
             InitializeComponent();
             _presenter = new MainPresenter(this, config);
             SongsHash = _presenter.SongsHash;
+            delicatedSongList = _presenter.DelicatedSongList;
+            musicPackInfo = _presenter.MusicPackInfo;
+            musicPackPath = _presenter.MusicPackPath;
+            musicPackCoverimgs = _presenter.MusicPackCoverImages;
+            BSInstancePath = _presenter.GameDetector.BSInstancePath;
+            InstanceSongCoreReady = _presenter.GameDetector.InstanceSongCoreReady;
         }
         private void MainForm_Load(object sender, EventArgs e)
         {
@@ -512,46 +518,47 @@ namespace BeatSaberIndependentMapsManager
         #region 曲包和歌单管理
         private void addFolder(string path)
         {
-            int depth = CalculateFolderDepth(path);
-            switch (depth)
+            BSIMMStatusUpdate("解析：", "正在解析：" + path, 0);
+            var result = _presenter.SongScanner.ScanFolder(path);
+            _presenter.ApplyScanResult(result);
+            HandleScanResultUI(result);
+        }
+
+        private void HandleScanResultUI(SongScanResult result)
+        {
+            switch (result.ResultType)
             {
-                case 0:
-                    if (addDelicatedSong(path) == 2)
+                case ScanResultType.DelicatedSong:
+                    if (result.DelicatedSong?.song != null)
                     {
-                        debugLog("该目录只有一首歌曲，将添加到独立歌曲列表中：" + path);
+                        debugLog("该目录只有一首歌曲，将添加到独立歌曲列表中：" + result.DelicatedSong.song.songFolder);
+                        displayDelicatedSongList();
                     }
                     break;
-                case 1:
-                    if (Directory.GetDirectories(path).Length >= 2)
+                case ScanResultType.DelicatedSongs:
+                    if (result.DelicatedSongs != null && result.DelicatedSongs.Count > 0)
                     {
-                        addMusicPack(path);
+                        debugLog($"发现 {result.DelicatedSongs.Count} 首独立歌曲");
+                        displayDelicatedSongList();
+                    }
+                    break;
+                case ScanResultType.MusicPack:
+                    if (result.MapsCount == 0)
+                    {
+                        debugLog("警告:目录" + result.MusicPackPath + "下没有歌曲！将不会添加曲包");
+                        BSIMMStatusUpdate("解析：", "未检测到完整歌曲目录！跳过", 100);
                     }
                     else
                     {
-                        foreach (string subdir in Directory.GetDirectories(path))
-                        {
-                            addDelicatedSong(subdir);
-                        }
+                        debugLog("曲包:" + result.MusicPackName + " 检测到" + result.MapsCount + "个完整歌曲目录  " + result.DuplicateCount + "个重复歌曲目录  " + result.IntegrityCount + "个不完整目录 " + result.OtherCount + "个非曲包目录");
+                        displayMusicpack(result.MusicPackName);
+                        BSIMMStatusUpdate("就绪", "曲包：" + result.MusicPackName + "添加完成", 100);
                     }
                     break;
-                default:
-                    string[] folders = Directory.GetDirectories(path);
-                    int[] depths = new int[folders.Length];
-                    for (int i = 0; i < folders.Length; i++)
+                case ScanResultType.Multiple:
+                    foreach (var sub in result.SubResults)
                     {
-                        depths[i] = CalculateFolderDepth(folders[i]);
-                    }
-                    var populardepth = depths.GroupBy(x => x).OrderByDescending(g => g.Count()).FirstOrDefault();
-                    if (populardepth.Key == 0)
-                    {
-                        addMusicPack(path);
-                    }
-                    else
-                    {
-                        foreach (var folder in folders)
-                        {
-                            addFolder(folder);
-                        }
+                        HandleScanResultUI(sub);
                     }
                     break;
             }
@@ -595,128 +602,6 @@ namespace BeatSaberIndependentMapsManager
             }
 
         }
-        private int addDelicatedSong(string mapDir, string musicPackName = null)
-        {
-            DirectoryInfo dir = new DirectoryInfo(mapDir);
-            SongMap songMap = null;
-            string dirName = dir.Name;
-            string bsr = "";
-            byte[] mapInfo = null;
-            int spaceIndex = dirName.IndexOf(' ');
-            if (spaceIndex == -1)
-            {
-                bsr = dirName;//如果没有空格，直接使用文件夹名
-                if (bsr.Length > 5)
-                {
-                    debugLog("非标准bsr命名格式! 目录" + mapDir + "可能不是歌曲谱面目录！请检查文件夹的命名格式！");
-                    bsr = "unknown";
-                }
-            }
-            else
-            {
-                bsr = dirName.Substring(0, spaceIndex);//如果有空格，使用空格前
-            }
-            if (bsr.Length > 5 && spaceIndex != -1)
-            {
-                bsr = dirName.Substring(0, 5);
-                if (!Regex.IsMatch(bsr, @"^[a-fA-F0-9]+$"))
-                {
-                    bsr = dirName.Substring(0, 4);
-                    if (!Regex.IsMatch(bsr, @"^[a-fA-F0-9]+$"))
-                    {
-                        debugLog("未知的bsr! 目录" + mapDir + "可能不是歌曲谱面目录！请检查文件夹的命名格式！");
-                    }
-                }
-            }
-            if (File.Exists(mapDir + "\\Info.dat"))
-            {
-                mapInfo = File.ReadAllBytes(mapDir + "\\Info.dat");
-                Dictionary<string, object> mapStruct = new Dictionary<string, object>();
-                try
-                {
-                    mapStruct = JsonConvert.DeserializeObject<Dictionary<string, object>>(Encoding.UTF8.GetString(mapInfo));
-                    songMap = ToEntity<SongMap>(mapStruct);
-                    songMap.songFolder = mapDir;
-                }
-                catch (JsonException)
-                {
-                    debugLog("警告:解析歌曲信息文件失败！" + mapDir + "目录下的info.dat或info.json文件损坏！");
-                    return 0;
-                }
-                catch (Exception)
-                {
-                    debugLog("警告:解析歌曲信息文件失败！" + mapDir + "下的文件可能被锁定或占用！");
-                    return 0;
-                }
-                if (mapIntergrityCheck(mapDir, songMap))
-                {
-                    if (musicPackName != null)
-                    {
-                        if (!musicPackInfo[musicPackName].TryAdd(bsr, songMap))
-                        {
-                            debugLog("警告:检测到重复歌曲：" + songMap._songName + "将自动重命名标注");
-                            string escapedPrefix = Regex.Escape(bsr);
-                            string pattern = @"^" + escapedPrefix + @"(\[[0-9]+\])?$";
-                            List<string> duplicateTemp = new List<string>();
-                            foreach (string storeBsr in musicPackInfo[musicPackName].Keys)
-                            {
-                                if (Regex.Match(storeBsr, pattern).Success)
-                                {
-                                    duplicateTemp.Add(storeBsr);
-                                }
-                            }
-                            string newBsr = Rename(duplicateTemp.Last());
-                            musicPackInfo[musicPackName].Add(newBsr, songMap);
-                            return 3;
-                        }
-                    }
-                    else
-                    {
-                        lock (delicatedSongList)
-                        {
-                            if (!delicatedSongList.TryAdd(bsr, songMap))
-                            {
-                                debugLog("警告:检测到重复歌曲：" + bsr + "，将不会添加到独立歌曲列表中");
-                                return 3;
-                            }
-                        }
-                    }
-                    return 2;
-                }
-                else return 1;
-            }
-            else
-            {
-                return 0;
-            }
-        }
-
-        private bool mapIntergrityCheck(string mapDir, SongMap map)
-        {
-            string[] mapStruct = map.GetDifficultiesFiles();
-            string coverImg = map._coverImageFilename;
-            string musicFile = map._songFilename;
-            if (!File.Exists(mapDir + "\\" + coverImg))
-            {
-                debugLog("警告:检测到缺失封面文件：" + coverImg + "目录：" + mapDir);
-                return false;
-            }
-            if (!File.Exists(mapDir + "\\" + musicFile))
-            {
-                debugLog("警告:检测到缺失音乐文件：" + musicFile + "目录：" + mapDir);
-                return false;
-            }
-            foreach (string mapFile in mapStruct)
-            {
-                if (!File.Exists(mapDir + "\\" + mapFile))
-                {
-                    debugLog("警告:检测到缺失谱面文件：" + mapFile + "目录：" + mapDir);
-                    return false;
-                }
-            }
-            return true;
-
-        }
         private void saveSongFolderSync(XElement element)
         {
             foreach (string instance in BSInstancePath.Keys)
@@ -744,87 +629,7 @@ namespace BeatSaberIndependentMapsManager
                         debugLog("实例：" + instance + "安装mod后未启动游戏，将不会保存曲包列表！");
                     }
                 }
-                ;
             }
-        }
-        private void addMusicPack(string path)
-        {
-            string language = cultureInfo.TwoLetterISOLanguageName;
-            string pattern = @"【(.+?)】";
-            Match match = Regex.Match(path, pattern);
-            string musicPackName = "";
-            int finishcount = 0;
-            int mapsCount = 0;
-            int otherCount = 0;
-            int intergrityCount = 0;
-            int duplicateCount = 0;
-            if (match.Success)
-            {
-                musicPackName = match.Groups[1].Value;
-                debugLog("获取到曲包名称【" + musicPackName + "】");
-                if (musicPackInfo.ContainsKey(musicPackName))
-                {
-                    debugLog("警告:检测到重复括号内曲包命名：" + musicPackName + "，使用完整目录名称");
-                    musicPackName = new DirectoryInfo(path).Name;
-                }
-            }
-            else
-            {
-                debugLog(path + "未检测到曲包名称【】，使用文件夹内名称");
-                musicPackName = new DirectoryInfo(path).Name;
-            }
-            if (musicPackInfo.ContainsKey(musicPackName))
-            {
-                debugLog("警告:检测到重复曲包名称：" + musicPackName + "，将自动重命名！");
-                string escapedPrefix = Regex.Escape(musicPackName);
-                string renamepattern = @"^" + escapedPrefix + @"(\[[0-9]+\])?$";
-                List<string> duplicateTemp = new List<string>();
-                foreach (string storeName in musicPackInfo.Keys)
-                {
-                    if (Regex.Match(storeName, renamepattern).Success)
-                    {
-                        duplicateTemp.Add(storeName);
-                    }
-                }
-                musicPackName = Rename(duplicateTemp.Last());
-            }
-            musicPackInfo.Add(musicPackName, new Dictionary<string, SongMap>());
-            string[] mapsDir = Directory.GetDirectories(path);
-            BSIMMStatusUpdate("解析：", "正在解析曲包：" + musicPackName, 0);
-            foreach (string mapDir in mapsDir)
-            {
-                switch (addDelicatedSong(mapDir, musicPackName))
-                {
-                    case 1:
-                        intergrityCount++;
-                        break;
-                    case 2:
-                        mapsCount++;
-                        break;
-                    case 3:
-                        duplicateCount++;
-                        break;
-                    default:
-                        otherCount++;
-                        break;
-                }
-                finishcount++;
-                BSIMMProgressUpdate(calcProgress(finishcount, mapsDir.Count()));
-            }
-            if (mapsCount == 0)
-            {
-                debugLog("警告:目录" + path + "下没有歌曲！将不会添加曲包");
-                musicPackInfo.Remove(musicPackName);
-                BSIMMStatusUpdate("解析：", "未检测到完整歌曲目录！跳过", 100);
-            }
-            else
-            {
-                debugLog("曲包:" + musicPackName + " 检测到" + mapsCount + "个完整歌曲目录  " + duplicateCount + "个重复歌曲目录  " + intergrityCount + "个不完整目录 " + otherCount + "个非曲包目录");
-                musicPackPath.Add(musicPackName, path);
-                displayMusicpack(musicPackName);
-                BSIMMStatusUpdate("就绪", "曲包：" + musicPackName + "添加完成", 100);
-            }
-            GC.Collect();
         }
         public async Task HashCachePack(string musicPackName)
         {
