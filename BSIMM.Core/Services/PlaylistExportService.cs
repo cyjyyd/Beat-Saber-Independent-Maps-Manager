@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -6,7 +6,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using BeatSaberIndependentMapsManager.Properties;
 using Newtonsoft.Json;
 
 namespace BeatSaberIndependentMapsManager.Services
@@ -93,14 +92,15 @@ namespace BeatSaberIndependentMapsManager.Services
             string playlistName,
             string coverText = null,
             Dictionary<int, HashSet<(string characteristic, string difficulty)>> perSongDifficulties = null,
-            bool silent = false)
+            bool silent = false,
+            Image defaultBackgroundImage = null)
         {
             try
             {
                 if (string.IsNullOrEmpty(coverText))
                     coverText = playlistName;
 
-                Image coverImage = GeneratePlaylistCover(coverText);
+                Image coverImage = GeneratePlaylistCover(coverText, defaultBackgroundImage);
                 string imgBytes = "data:image/jpg;base64," + ImageToBase64(coverImage, ImageFormat.Jpeg);
                 string author = Environment.UserName + "使用BSIMM@万毒不侵 生成";
                 string description = "本歌单由" + Environment.UserName + "使用BSIMM生成\r\n" +
@@ -155,7 +155,7 @@ namespace BeatSaberIndependentMapsManager.Services
         /// <summary>
         /// Generate playlist cover image with text.
         /// </summary>
-        public static Image GeneratePlaylistCover(string playlistName)
+        public static Image GeneratePlaylistCover(string playlistName, Image defaultBackgroundImage = null)
         {
             int width = 256;
             int height = 256;
@@ -163,21 +163,20 @@ namespace BeatSaberIndependentMapsManager.Services
 
             using (Graphics g = Graphics.FromImage(bitmap))
             {
-                try
+                if (defaultBackgroundImage != null)
                 {
-                    Image bgImage = Resources.默认;
-                    g.DrawImage(bgImage, new Rectangle(0, 0, width, height));
-                }
-                catch
-                {
-                    using (var brush = new System.Drawing.Drawing2D.LinearGradientBrush(
-                        new Rectangle(0, 0, width, height),
-                        Color.FromArgb(64, 64, 128),
-                        Color.FromArgb(32, 32, 64),
-                        System.Drawing.Drawing2D.LinearGradientMode.Vertical))
+                    try
                     {
-                        g.FillRectangle(brush, 0, 0, width, height);
+                        g.DrawImage(defaultBackgroundImage, new Rectangle(0, 0, width, height));
                     }
+                    catch
+                    {
+                        DrawGradientBackground(g, width, height);
+                    }
+                }
+                else
+                {
+                    DrawGradientBackground(g, width, height);
                 }
 
                 using (Font font = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold))
@@ -204,6 +203,18 @@ namespace BeatSaberIndependentMapsManager.Services
             }
 
             return bitmap;
+        }
+
+        private static void DrawGradientBackground(Graphics g, int width, int height)
+        {
+            using (var brush = new System.Drawing.Drawing2D.LinearGradientBrush(
+                new Rectangle(0, 0, width, height),
+                Color.FromArgb(64, 64, 128),
+                Color.FromArgb(32, 32, 64),
+                System.Drawing.Drawing2D.LinearGradientMode.Vertical))
+            {
+                g.FillRectangle(brush, 0, 0, width, height);
+            }
         }
 
         /// <summary>
@@ -248,3 +259,4 @@ namespace BeatSaberIndependentMapsManager.Services
         }
     }
 }
+

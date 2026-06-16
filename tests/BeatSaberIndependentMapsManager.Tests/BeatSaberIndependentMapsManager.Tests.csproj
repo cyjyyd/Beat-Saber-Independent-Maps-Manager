@@ -16,6 +16,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\BeatSaberIndependentMapsManager.csproj" />
+    
+    <ProjectReference Include="..\..\BSIMM.Core\BSIMM.Core.csproj" />
   </ItemGroup>
 </Project>
+
+

@@ -2423,7 +2423,7 @@ namespace BeatSaberIndependentMapsManager
                                 // 导出到歌单
                                 string filePath = Path.Combine(outputDir, $"{PlaylistExportService.SanitizeFileName(preset.Name)}.bplist");
                                 var fullMaps = maps.Select(m => m.ToFullMap()).ToList();
-                                bool success = _viewModel.PlaylistExporter.ExportMapsToPlaylist(fullMaps, filePath, preset.Name, coverText, null, true);
+                                bool success = _viewModel.PlaylistExporter.ExportMapsToPlaylist(fullMaps, filePath, preset.Name, coverText, null, true, Properties.Resources.默认);
 
                                 exportResults.Add((i, success, maps.Count, preset.Name));
 
@@ -2488,7 +2488,7 @@ namespace BeatSaberIndependentMapsManager
 
                             // 导出到歌单（静默模式）
                             string filePath = Path.Combine(outputDir, $"{PlaylistExportService.SanitizeFileName(preset.Name)}.bplist");
-                            bool success = _viewModel.PlaylistExporter.ExportMapsToPlaylist(maps, filePath, preset.Name, coverText, null, true);
+                            bool success = _viewModel.PlaylistExporter.ExportMapsToPlaylist(maps, filePath, preset.Name, coverText, null, true, Properties.Resources.默认);
 
                             if (success)
                             {
@@ -2754,7 +2754,7 @@ namespace BeatSaberIndependentMapsManager
                     if (saveDialog.ShowDialog() == DialogResult.OK)
                     {
                         string name = System.IO.Path.GetFileNameWithoutExtension(saveDialog.FileName);
-                        bool success = _viewModel.PlaylistExporter.ExportMapsToPlaylist(maps, saveDialog.FileName, name, coverText, _perSongDifficulties, false);
+                        bool success = _viewModel.PlaylistExporter.ExportMapsToPlaylist(maps, saveDialog.FileName, name, coverText, _perSongDifficulties, false, Properties.Resources.默认);
                         if (success)
                         {
                             MessageBox.Show($"歌单已保存！\n共 {maps.Count} 首歌曲\n保存位置：{saveDialog.FileName}", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -2775,7 +2775,7 @@ namespace BeatSaberIndependentMapsManager
                     Directory.CreateDirectory(presetDir);
 
                 string filePath = Path.Combine(presetDir, $"{PlaylistExportService.SanitizeFileName(playlistName)}.bplist");
-                bool success = _viewModel.PlaylistExporter.ExportMapsToPlaylist(maps, filePath, playlistName, coverText, _perSongDifficulties, true);
+                bool success = _viewModel.PlaylistExporter.ExportMapsToPlaylist(maps, filePath, playlistName, coverText, _perSongDifficulties, true, Properties.Resources.默认);
                 if (success)
                     debugLog($"歌单已导出: {filePath}");
                 else
@@ -2786,6 +2786,7 @@ namespace BeatSaberIndependentMapsManager
         #endregion
     }
 }
+
 
 
 
