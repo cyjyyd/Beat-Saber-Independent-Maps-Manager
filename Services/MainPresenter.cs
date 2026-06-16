@@ -23,6 +23,9 @@ namespace BeatSaberIndependentMapsManager.Services
         public BeatSaverSearchService BeatSaverSearch { get; }
         public LocalCacheManager LocalCache { get; private set; }
 
+        // Thread safety locks
+        private readonly object _stateLock = new object();
+
         // State - music packs and songs
         public Dictionary<string, Dictionary<string, SongMap>> MusicPackInfo { get; } = new();
         public Dictionary<string, string> MusicPackPath { get; } = new();
@@ -88,7 +91,7 @@ namespace BeatSaberIndependentMapsManager.Services
                     if (result.DelicatedSong?.song != null)
                     {
                         string bsr = result.DelicatedSong.bsr;
-                        lock (DelicatedSongList)
+                        lock (_stateLock)
                         {
                             if (!DelicatedSongList.ContainsKey(bsr))
                                 DelicatedSongList[bsr] = result.DelicatedSong.song;
@@ -114,28 +117,31 @@ namespace BeatSaberIndependentMapsManager.Services
 
             string packName = result.MusicPackName;
 
-            // Handle duplicate names
-            if (MusicPackInfo.ContainsKey(packName))
+            lock (_stateLock)
             {
-                packName = GenerateUniqueName(packName, MusicPackInfo.Keys);
-            }
-
-            MusicPackInfo[packName] = new Dictionary<string, SongMap>();
-            foreach (var kvp in result.PackSongs)
-            {
-                if (!MusicPackInfo[packName].ContainsKey(kvp.Key))
+                // Handle duplicate names
+                if (MusicPackInfo.ContainsKey(packName))
                 {
-                    MusicPackInfo[packName][kvp.Key] = kvp.Value;
+                    packName = GenerateUniqueName(packName, MusicPackInfo.Keys);
                 }
-                else
-                {
-                    // Handle duplicate BSR within pack
-                    string uniqueKey = GenerateUniqueName(kvp.Key, MusicPackInfo[packName].Keys);
-                    MusicPackInfo[packName][uniqueKey] = kvp.Value;
-                }
-            }
 
-            MusicPackPath[packName] = result.MusicPackPath;
+                MusicPackInfo[packName] = new Dictionary<string, SongMap>();
+                foreach (var kvp in result.PackSongs)
+                {
+                    if (!MusicPackInfo[packName].ContainsKey(kvp.Key))
+                    {
+                        MusicPackInfo[packName][kvp.Key] = kvp.Value;
+                    }
+                    else
+                    {
+                        // Handle duplicate BSR within pack
+                        string uniqueKey = GenerateUniqueName(kvp.Key, MusicPackInfo[packName].Keys);
+                        MusicPackInfo[packName][uniqueKey] = kvp.Value;
+                    }
+                }
+
+                MusicPackPath[packName] = result.MusicPackPath;
+            }
         }
 
         /// <summary>
@@ -144,7 +150,7 @@ namespace BeatSaberIndependentMapsManager.Services
         public async Task<Dictionary<string, SongMap>> ScanFullDiskAsync(IEnumerable<string> excludedPaths, Action<int> onProgress = null)
         {
             var results = await SongScanner.ScanFullDiskWithEverythingAsync(excludedPaths, onProgress);
-            lock (DelicatedSongList)
+            lock (_stateLock)
             {
                 foreach (var kvp in results)
                 {

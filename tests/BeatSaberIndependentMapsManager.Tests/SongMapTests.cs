@@ -1,11 +1,12 @@
 using BeatSaberIndependentMapsManager;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json.Linq;
+using Xunit;
 
 namespace BeatSaberIndependentMapsManager.Tests;
 
 public class SongMapTests
 {
+    [Fact]
     public void GetDifficulties_ReturnsEmpty_WhenDifficultyBeatmapSetsIsNull()
     {
         SongMap songMap = new SongMap
@@ -15,8 +16,10 @@ public class SongMapTests
 
         string[] result = songMap.GetDifficulties();
 
-        Assert.IsEmpty(result);
+        Assert.Empty(result);
     }
+
+    [Fact]
     public void GetDifficultiesFiles_IgnoresInvalidEntries_AndReturnsOnlyValidNames()
     {
         SongMap songMap = new SongMap
@@ -38,7 +41,7 @@ public class SongMapTests
 
         string[] result = songMap.GetDifficultiesFiles();
 
-        Assert.ContainsSingle(result);
-        Assert.AreEqual("Expert.dat", result[0]);
+        Assert.Single(result);
+        Assert.Equal("Expert.dat", result[0]);
     }
 }
