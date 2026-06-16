@@ -1,0 +1,164 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using BeatSaberIndependentMapsManager.Abstractions;
+
+namespace BeatSaberIndependentMapsManager.Services
+{
+    internal class MainPresenter
+    {
+        private readonly IMainView _view;
+        private readonly Config _config;
+
+        public GameInstanceDetector GameDetector { get; }
+        public AudioPreviewService AudioPreview { get; }
+        public HashCacheService HashCache { get; }
+        public PlaylistExportService PlaylistExporter { get; }
+        public SongScanService SongScanner { get; }
+        public LocalCacheManager LocalCache { get; private set; }
+
+        // State - music packs and songs
+        public Dictionary<string, Dictionary<string, SongMap>> MusicPackInfo { get; } = new();
+        public Dictionary<string, string> MusicPackPath { get; } = new();
+        public Dictionary<string, Image> MusicPackCoverImages { get; } = new();
+        public Dictionary<string, SongMap> DelicatedSongList { get; } = new();
+        public Dictionary<string, string> SongsHash
+        {
+            get => HashCache.SongsHash;
+            set => HashCache.SongsHash = value;
+        }
+
+        // BeatSaver client
+        public BeatSaverClient BeatSaverClient { get; } = new();
+
+        public MainPresenter(IMainView view, Config config)
+        {
+            _view = view;
+            _config = config;
+
+            GameDetector = new GameInstanceDetector();
+            AudioPreview = new AudioPreviewService();
+            HashCache = new HashCacheService();
+            SongScanner = new SongScanService();
+            PlaylistExporter = new PlaylistExportService(HashCache, config);
+        }
+
+        public void EnsureLocalCacheInitialized()
+        {
+            if (LocalCache == null)
+            {
+                LocalCache = new LocalCacheManager();
+            }
+            LocalCache.UseSystemProxy = _config.UseSystemProxy;
+        }
+
+        /// <summary>
+        /// Initialize game instance detection.
+        /// </summary>
+        public void InitializeGameDetection()
+        {
+            string versionFilePath = Path.Combine(Application.StartupPath, "assets\\json\\bs-versions.json");
+            GameDetector.LoadVersionFile(versionFilePath);
+
+            bool found = GameDetector.Detect();
+            if (!found)
+            {
+                _view.Log("未检测到Beat Saber实例");
+            }
+
+            if (_config.HashCache)
+            {
+                HashCache.LoadCache();
+            }
+        }
+
+        /// <summary>
+        /// Process song scanning results to update MainForm's state.
+        /// This is called after SongScanner.ScanFolder() in the UI thread context.
+        /// </summary>
+        public void ApplyScanResult(SongScanResult result)
+        {
+            switch (result.ResultType)
+            {
+                case ScanResultType.DelicatedSong:
+                    if (result.DelicatedSong?.song != null)
+                    {
+                        string bsr = result.DelicatedSong.bsr;
+                        lock (DelicatedSongList)
+                        {
+                            if (!DelicatedSongList.ContainsKey(bsr))
+                                DelicatedSongList[bsr] = result.DelicatedSong.song;
+                        }
+                    }
+                    break;
+
+                case ScanResultType.MusicPack:
+                    ApplyMusicPackResult(result);
+                    break;
+
+                case ScanResultType.Multiple:
+                    foreach (var sub in result.SubResults)
+                        ApplyScanResult(sub);
+                    break;
+            }
+        }
+
+        private void ApplyMusicPackResult(SongScanResult result)
+        {
+            if (result.PackSongs == null || result.PackSongs.Count == 0)
+                return;
+
+            string packName = result.MusicPackName;
+
+            // Handle duplicate names
+            if (MusicPackInfo.ContainsKey(packName))
+            {
+                packName = GenerateUniqueName(packName, MusicPackInfo.Keys);
+            }
+
+            MusicPackInfo[packName] = new Dictionary<string, SongMap>();
+            foreach (var kvp in result.PackSongs)
+            {
+                if (!MusicPackInfo[packName].ContainsKey(kvp.Key))
+                {
+                    MusicPackInfo[packName][kvp.Key] = kvp.Value;
+                }
+                else
+                {
+                    // Handle duplicate BSR within pack
+                    string uniqueKey = GenerateUniqueName(kvp.Key, MusicPackInfo[packName].Keys);
+                    MusicPackInfo[packName][uniqueKey] = kvp.Value;
+                }
+            }
+
+            MusicPackPath[packName] = result.MusicPackPath;
+        }
+
+        private static string GenerateUniqueName(string baseName, IEnumerable<string> existingKeys)
+        {
+            string escapedPrefix = System.Text.RegularExpressions.Regex.Escape(baseName);
+            string pattern = @"^" + escapedPrefix + @"(\[[0-9]+\])?$";
+            var matches = existingKeys
+                .Where(k => System.Text.RegularExpressions.Regex.Match(k, pattern).Success)
+                .ToList();
+
+            if (matches.Count == 0)
+                return baseName;
+
+            var last = matches[^1];
+            var renamePattern = @"\[([0-9]+)\]$";
+            var match = System.Text.RegularExpressions.Regex.Match(last, renamePattern);
+            if (match.Success)
+            {
+                int count = Convert.ToInt32(match.Groups[1].Value) + 1;
+                return System.Text.RegularExpressions.Regex.Replace(last, renamePattern, $"[{count}]");
+            }
+            return baseName + "[1]";
+        }
+    }
+}

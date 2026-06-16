@@ -11,7 +11,9 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
+using BeatSaberIndependentMapsManager.Abstractions;
 using BeatSaberIndependentMapsManager.Properties;
+using BeatSaberIndependentMapsManager.Services;
 using Newtonsoft.Json;
 using System.Diagnostics;
 using Microsoft.Win32;
@@ -20,14 +22,13 @@ using System.Xml.Linq;
 using System.Threading.Tasks;
 using System.Drawing.Imaging;
 using Microsoft.VisualBasic.FileIO;
-using NAudio.Vorbis;
-using NAudio.Wave;
 
 namespace BeatSaberIndependentMapsManager
 {
-    public partial class MainForm : Form
+    public partial class MainForm : Form, IMainView
     {
         #region 全局变量
+        private readonly MainPresenter _presenter;
         private const int EVERYTHING_REQUEST_FILE_NAME = 0x00000001;
         private const int EVERYTHING_REQUEST_PATH = 0x00000002;
         private bool multiInstanceDetect = true;
@@ -46,8 +47,7 @@ namespace BeatSaberIndependentMapsManager
         Dictionary<string, string> BSInstancePath = new Dictionary<string, string>();
         Dictionary<string, bool[]> InstanceSongCoreReady = new Dictionary<string, bool[]>();
         Dictionary<string, Image> musicPackCoverimgs = new Dictionary<string, Image>();
-        WaveOut waveOut = new WaveOut();
-        WaveStream currentAudioReader;
+        private AudioPreviewService AudioPlayerService => _presenter.AudioPreview;
         // BeatSaver 搜索相关
         private BeatSaverClient beatSaverClient = new BeatSaverClient();
         private List<BeatSaverMap> currentSearchResults = new List<BeatSaverMap>();
@@ -103,6 +103,8 @@ namespace BeatSaberIndependentMapsManager
         public MainForm()
         {
             InitializeComponent();
+            _presenter = new MainPresenter(this, config);
+            SongsHash = _presenter.SongsHash;
         }
         private void MainForm_Load(object sender, EventArgs e)
         {
@@ -120,45 +122,28 @@ namespace BeatSaberIndependentMapsManager
             //双语的适配以后再做
             Thread update = new Thread(updateDetect) { IsBackground = true };
             update.Start();
+            // 使用服务进行游戏实例检测
+            multiInstanceDetect = _presenter.GameDetector.IsEverythingAvailable;
             if (!File.Exists("Everything64.dll"))
             {
                 debugLog("未检测到Everything64.dll文件，所有增强功能将不可用！");
-                multiInstanceDetect = false;
             }
-            Process[] everythingService = Process.GetProcessesByName("Everything");
-            if (everythingService.Length > 1 || (everythingService.Length == 1 && everythingService[0].PagedMemorySize64 > 2048 * 1024))
+            if (multiInstanceDetect)
             {
                 debugLog("检测到Everything增强扩展，将使用增强模式检测Beat Saber实例目录");
-                debugLog("如果未检测到实例，请尝试重启Everything软件");
-                multiInstanceDetect = true;
             }
             else
             {
                 debugLog("未检测到Everything增强扩展，将使用普通模式检测Beat Saber实例目录");
-                multiInstanceDetect = false;
             }
-            if (File.Exists(Application.StartupPath + "\\assets\\json\\bs-versions.json"))
-            {
-                bsVersions = File.ReadAllBytes(Application.StartupPath + "\\assets\\json\\bs-versions.json");
-            }
-            else
-            {
-                debugLog("未找到Beat Saber版本控制文件，请检查程序文件目录是否完整！多版本检测将禁用！");
-                multiInstanceDetect = false;
-            }
-            if (multiInstanceDetect)
-            {
-                Thread detect = new Thread(detectMultiBeatSaberInstance) { IsBackground = true };
-                detect.Start();
-            }
-            else
-            {
-                Thread detect = new Thread(detectSingleBeatSaberInstance) { IsBackground = true };
-                detect.Start();
-            }
+            _presenter.InitializeGameDetection();
+            // 同步检测结果到MainForm字段（向后兼容）
+            BSInstancePath = _presenter.GameDetector.BSInstancePath;
+            InstanceSongCoreReady = _presenter.GameDetector.InstanceSongCoreReady;
+            multiInstanceDetect = _presenter.GameDetector.MultiInstanceDetect;
             if (config.HashCache)
             {
-                readHash();
+                _presenter.HashCache.LoadCache();
             }
             // 初始化新的筛选构建器面板
             InitializeFilterBuilderPanel();
@@ -596,54 +581,41 @@ namespace BeatSaberIndependentMapsManager
         {
             try
             {
-                string playPath = playSong.songFolder + "\\" + playSong._songFilename;
-                if (File.Exists(playPath))
+                if (string.IsNullOrEmpty(playSong?._songFilename) || string.IsNullOrEmpty(playSong?.songFolder))
                 {
-                    // 释放旧的音频流
-                    currentAudioReader?.Dispose();
-                    waveOut.Stop();
+                    debugLog("播放失败：歌曲信息不完整！");
+                    return;
+                }
 
-                    if (playSong._songFilename.EndsWith("wav"))
-                    {
-                        currentAudioReader = new WaveFileReader(playPath);
-                    }
-                    else if (playSong._songFilename.EndsWith("ogg") || playSong._songFilename.EndsWith("egg"))
-                    {
-                        currentAudioReader = new VorbisWaveReader(playPath);
-                    }
-                    else
-                    {
-                        debugLog("播放失败！文件：" + playSong._songFilename + "格式不被支持！");
-                        BSIMMStatusUpdate("播放器：", "已停止", 0);
-                        return;
-                    }
-
-                    waveOut.Init(currentAudioReader);
-                    waveOut.Play();
+                bool success = AudioPlayerService.TryPlay(playSong.songFolder, playSong._songFilename);
+                if (success)
+                {
                     BSIMMStatusUpdate("播放器：", "正在播放" + playSong._songName, 50);
                     btnPlay.Text = btnPlay2.Text = "暂停";
                     PlaybackTimer.Enabled = true;
 
-                    // 设置进度条
-                    trackProgress.Maximum = (int)currentAudioReader.TotalTime.TotalSeconds;
+                    int totalSeconds = (int)AudioPlayerService.TotalTime.TotalSeconds;
+                    trackProgress.Maximum = totalSeconds;
                     trackProgress.SetValueSilent(0);
-                    trackProgress2.Maximum = trackProgress.Maximum;
+                    trackProgress2.Maximum = totalSeconds;
                     trackProgress2.SetValueSilent(0);
                 }
                 else
                 {
-                    debugLog("播放失败！文件不存在！");
+                    string playPath = Path.Combine(playSong.songFolder, playSong._songFilename);
+                    if (!File.Exists(playPath))
+                        debugLog("播放失败！文件不存在！");
+                    else if (!playSong._songFilename.EndsWith("wav") && !playSong._songFilename.EndsWith("ogg") && !playSong._songFilename.EndsWith("egg"))
+                        debugLog("播放失败！文件：" + playSong._songFilename + "格式不被支持！");
+                    else
+                        debugLog("播放失败,未知错误");
                     BSIMMStatusUpdate("播放器：", "已停止", 0);
                 }
-            }
-            catch (IOException)
-            {
-                debugLog("播放失败！文件可能被占用或已损坏！");
-                BSIMMStatusUpdate("播放器：", "已停止", 0);
             }
             catch (Exception)
             {
                 debugLog("播放失败,未知错误");
+                BSIMMStatusUpdate("播放器：", "已停止", 0);
             }
         }
         public void readHash()
@@ -818,6 +790,20 @@ namespace BeatSaberIndependentMapsManager
                 }
             }
             else return false;
+        }
+        #endregion
+        #region IMainView 实现
+        void IMainView.Log(string message) => debugLog(message);
+        void IMainView.UpdateStatus(string action, string status, int progress) => BSIMMStatusUpdate(action, status, progress);
+        void IMainView.UpdateProgress(int progress) => BSIMMProgressUpdate(progress);
+        void IMainView.InvokeLog(string message)
+        {
+            if (IsDisposed) return;
+            try
+            {
+                Invoke(new System.Windows.Forms.MethodInvoker(delegate { debugLog(message); }));
+            }
+            catch { }
         }
         #endregion
         #region 曲包和歌单管理
@@ -1139,35 +1125,10 @@ namespace BeatSaberIndependentMapsManager
         }
         public async Task HashCachePack(string musicPackName)
         {
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            int count = 0;
-            if (SongsHash != null)
+            if (musicPackInfo.TryGetValue(musicPackName, out var packSongs))
             {
-                foreach (KeyValuePair<string, SongMap> hashlist in musicPackInfo[musicPackName])
-                {
-                    if (!SongsHash.ContainsKey(hashlist.Key))
-                    {
-                        SongsHash.Add(hashlist.Key, await getSongHash(hashlist.Value));
-                    }
-                    else
-                    {
-                        count++;
-                        BSIMMProgressUpdate(calcProgress(count, SongsHash.Count));
-                    }
-                }
-                stopwatch.Stop();
-                debugLog(($"曲包歌曲已有缓存，查漏补缺！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
-                BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
-            }
-            else
-            {
-                SongsHash = new Dictionary<string, string>();
-                foreach (KeyValuePair<string, SongMap> hashlist in musicPackInfo[musicPackName])
-                {
-                    SongsHash.Add(hashlist.Key, await getSongHash(hashlist.Value));
-                }
-                stopwatch.Stop();
-                debugLog(($"建立缓存成功！总耗时： {(double)stopwatch.ElapsedMilliseconds / 1000} 秒"));
+                await _presenter.HashCache.EnsurePackHashesAsync(packSongs, pct => BSIMMProgressUpdate(pct));
+                debugLog($"曲包缓存完成！");
                 BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
             }
             GC.Collect();
@@ -1307,9 +1268,7 @@ namespace BeatSaberIndependentMapsManager
                 {
                     if (config.HashCache)
                     {
-                        string HashResults = JsonConvert.SerializeObject(SongsHash, Formatting.None);
-                        File.WriteAllText("hash.cache", Convert.ToBase64String(Encoding.UTF8.GetBytes(HashResults)));
-                        HashResults = "";
+                        _presenter.HashCache.SaveCache();
                     }
                 });
             }
@@ -1385,20 +1344,7 @@ namespace BeatSaberIndependentMapsManager
         }
         private async Task<string> getSongHash(SongMap songMap)
         {
-            using SHA1 sha1 = SHA1.Create();
-            foreach (string filePath in new[] { songMap.songFolder + "\\Info.dat" }.Concat(songMap.GetDifficultiesFiles().Select(f => songMap.songFolder + "\\" + f)))
-            {
-                using FileStream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-                byte[] buffer = new byte[65536]; // 64KB buffer
-                int bytesRead;
-                while ((bytesRead = await fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
-                {
-                    sha1.TransformBlock(buffer, 0, bytesRead, null, 0);
-                }
-            }
-            sha1.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-            byte[] hashBytes = sha1.Hash;
-            return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+            return await HashCacheService.ComputeSongHashAsync(songMap);
         }
         #endregion
         #region 窗口事件
@@ -1465,9 +1411,7 @@ namespace BeatSaberIndependentMapsManager
                 {
                     if (config.HashCache)
                     {
-                        string HashResults = JsonConvert.SerializeObject(SongsHash, Formatting.None);
-                        File.WriteAllText("hash.cache", Convert.ToBase64String(Encoding.UTF8.GetBytes(HashResults)));
-                        HashResults = "";
+                        _presenter.HashCache.SaveCache();
                     }
                 });
             }
@@ -1512,9 +1456,7 @@ namespace BeatSaberIndependentMapsManager
             {
                 if (config.HashCache)
                 {
-                    string HashResults = JsonConvert.SerializeObject(SongsHash, Formatting.None);
-                    File.WriteAllText("hash.cache", Convert.ToBase64String(Encoding.UTF8.GetBytes(HashResults)));
-                    HashResults = "";
+                    _presenter.HashCache.SaveCache();
                 }
             });
         }
@@ -1538,7 +1480,7 @@ namespace BeatSaberIndependentMapsManager
         {
             // 停止当前播放
             PlaybackTimer.Enabled = false;
-            waveOut.Stop();
+            AudioPlayerService.Stop();
             btnPlay.Text = "播放";
             trackProgress.SetValueSilent(0);
             trackProgress2.SetValueSilent(0);
@@ -1600,27 +1542,27 @@ namespace BeatSaberIndependentMapsManager
 
         private void trackVolume_ValueChanged(object sender, EventArgs e)
         {
-            waveOut.Volume = (float)trackVolume.Value / 100;
+            AudioPlayerService.Volume = (float)trackVolume.Value / 100;
         }
         private void trackVolume2_ValueChanged(object sender, EventArgs e)
         {
-            waveOut.Volume = (float)trackVolume2.Value / 100;
+            AudioPlayerService.Volume = (float)trackVolume2.Value / 100;
         }
 
         private void trackProgress_ValueChanged(object sender, EventArgs e)
         {
-            if (currentAudioReader != null && waveOut.PlaybackState != PlaybackState.Stopped)
+            if (!AudioPlayerService.IsStopped)
             {
-                currentAudioReader.CurrentTime = TimeSpan.FromSeconds(trackProgress.Value);
+                AudioPlayerService.CurrentTime = TimeSpan.FromSeconds(trackProgress.Value);
                 trackProgress2.SetValueSilent(trackProgress.Value);
             }
         }
 
         private void trackProgress2_ValueChanged(object sender, EventArgs e)
         {
-            if (currentAudioReader != null && waveOut.PlaybackState != PlaybackState.Stopped)
+            if (!AudioPlayerService.IsStopped)
             {
-                currentAudioReader.CurrentTime = TimeSpan.FromSeconds(trackProgress2.Value);
+                AudioPlayerService.CurrentTime = TimeSpan.FromSeconds(trackProgress2.Value);
                 trackProgress.SetValueSilent(trackProgress2.Value);
             }
         }
@@ -1636,10 +1578,9 @@ namespace BeatSaberIndependentMapsManager
             }
             else
             {
-                // 暂停
-                if (waveOut.PlaybackState == PlaybackState.Playing)
+                if (AudioPlayerService.IsPlaying)
                 {
-                    waveOut.Pause();
+                    AudioPlayerService.Pause();
                     btnPlay.Text = btnPlay2.Text = "播放";
                     BSIMMStatusUpdate("播放器：", "已暂停", 0);
                 }
@@ -1665,10 +1606,9 @@ namespace BeatSaberIndependentMapsManager
             }
             else
             {
-                // 暂停
-                if (waveOut.PlaybackState == PlaybackState.Playing)
+                if (AudioPlayerService.IsPlaying)
                 {
-                    waveOut.Pause();
+                    AudioPlayerService.Pause();
                     btnPlay.Text = btnPlay2.Text = "播放";
                     BSIMMStatusUpdate("播放器：", "已暂停", 0);
                 }
@@ -1682,19 +1622,17 @@ namespace BeatSaberIndependentMapsManager
 
         private void PlaybackTimer_Tick(object sender, EventArgs e)
         {
-            if (waveOut.PlaybackState == PlaybackState.Stopped)
+            if (AudioPlayerService.IsStopped)
             {
                 btnPlay.Text = btnPlay2.Text = "播放";
                 BSIMMStatusUpdate("播放器：", "已停止", 0);
                 PlaybackTimer.Enabled = false;
-                // 重置进度条
                 trackProgress.SetValueSilent(0);
                 trackProgress2.SetValueSilent(0);
             }
-            else if (currentAudioReader != null)
+            else
             {
-                // 更新进度条位置
-                int currentPos = (int)currentAudioReader.CurrentTime.TotalSeconds;
+                int currentPos = AudioPlayerService.GetPositionSeconds();
                 if (currentPos <= trackProgress.Maximum)
                 {
                     trackProgress.SetValueSilent(currentPos);
@@ -1808,18 +1746,7 @@ namespace BeatSaberIndependentMapsManager
                 }
 
                 // 停止音频播放
-                if (waveOut != null)
-                {
-                    waveOut.Stop();
-                    waveOut.Dispose();
-                    waveOut = null;
-                }
-
-                if (currentAudioReader != null)
-                {
-                    currentAudioReader.Dispose();
-                    currentAudioReader = null;
-                }
+                AudioPlayerService.Dispose();
 
                 // 释放本地缓存管理器
                 if (localCacheManager != null)
@@ -2100,9 +2027,8 @@ namespace BeatSaberIndependentMapsManager
         }
         private void DelicatedSongListView_SelectedIndexChanged(object sender, EventArgs e)
         {
-            // 停止当前播放
             PlaybackTimer.Enabled = false;
-            waveOut.Stop();
+            AudioPlayerService.Stop();
             btnPlay.Text = "播放";
             btnPlay2.Text = "播放";
             trackProgress.SetValueSilent(0);
