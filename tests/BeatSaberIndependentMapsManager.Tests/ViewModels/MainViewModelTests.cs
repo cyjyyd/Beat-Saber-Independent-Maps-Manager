@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Xunit;
 using BeatSaberIndependentMapsManager.Services;
+using BeatSaberIndependentMapsManager.ViewModels;
 using BeatSaberIndependentMapsManager.Abstractions;
 
 namespace BeatSaberIndependentMapsManager.Tests.Services
@@ -22,11 +23,11 @@ namespace BeatSaberIndependentMapsManager.Tests.Services
         public async Task ApplyScanResult_ConcurrentAccess_DoesNotThrowException()
         {
             var config = new Config();
-            var presenter = new MainPresenter(new DummyMainView(), config);
+            var viewModel = new MainViewModel(new DummyMainView(), config);
 
             var tasks = new List<Task>();
 
-            // Simulate concurrent scan results applying to the same presenter state
+            // Simulate concurrent scan results applying to the same viewModel state
             for (int i = 0; i < 50; i++)
             {
                 int index = i;
@@ -44,7 +45,7 @@ namespace BeatSaberIndependentMapsManager.Tests.Services
                         }
                     };
 
-                    presenter.ApplyScanResult(result);
+                    viewModel.ApplyScanResult(result);
                 }));
 
                 tasks.Add(Task.Run(() =>
@@ -55,15 +56,16 @@ namespace BeatSaberIndependentMapsManager.Tests.Services
                         DelicatedSong = new ParsedSongResult { bsr = "C" + index, song = new SongMap() }
                     };
 
-                    presenter.ApplyScanResult(result);
+                    viewModel.ApplyScanResult(result);
                 }));
             }
 
             var exception = await Record.ExceptionAsync(async () => await Task.WhenAll(tasks));
 
             Assert.Null(exception); // Must not throw ArgumentException from Dictionary concurrent operations
-            Assert.NotEmpty(presenter.MusicPackInfo);
-            Assert.NotEmpty(presenter.DelicatedSongList);
+            Assert.NotEmpty(viewModel.MusicPackInfo);
+            Assert.NotEmpty(viewModel.DelicatedSongList);
         }
     }
 }
+

@@ -1,3 +1,5 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -7,10 +9,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using BeatSaberIndependentMapsManager.Abstractions;
+using BeatSaberIndependentMapsManager.Services;
 
-namespace BeatSaberIndependentMapsManager.Services
+namespace BeatSaberIndependentMapsManager.ViewModels
 {
-    internal class MainPresenter
+    internal partial class MainViewModel : ObservableObject
     {
         private readonly IMainView _view;
         private readonly Config _config;
@@ -22,6 +25,16 @@ namespace BeatSaberIndependentMapsManager.Services
         public SongScanService SongScanner { get; }
         public BeatSaverSearchService BeatSaverSearch { get; }
         public LocalCacheManager LocalCache { get; private set; }
+
+        // MVVM Observable Properties
+        [ObservableProperty]
+        private string _statusText = "就绪";
+
+        [ObservableProperty]
+        private string _actionText = "信息";
+
+        [ObservableProperty]
+        private int _progressValue = 0;
 
         // Thread safety locks
         private readonly object _stateLock = new object();
@@ -48,7 +61,7 @@ namespace BeatSaberIndependentMapsManager.Services
         // BeatSaver client
         public BeatSaverClient BeatSaverClient { get; } = new();
 
-        public MainPresenter(IMainView view, Config config)
+        public MainViewModel(IMainView view, Config config)
         {
             _view = view;
             _config = config;

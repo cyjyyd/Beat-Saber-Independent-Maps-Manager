@@ -14,6 +14,7 @@ using System.Windows.Forms;
 using BeatSaberIndependentMapsManager.Abstractions;
 using BeatSaberIndependentMapsManager.Properties;
 using BeatSaberIndependentMapsManager.Services;
+using BeatSaberIndependentMapsManager.ViewModels;
 using Newtonsoft.Json;
 using System.Diagnostics;
 using Microsoft.Win32;
@@ -28,7 +29,7 @@ namespace BeatSaberIndependentMapsManager
     public partial class MainForm : Form, IMainView
     {
         #region 全局变量
-        private readonly MainPresenter _presenter;
+        private readonly MainViewModel _viewModel;
         private const int EVERYTHING_REQUEST_FILE_NAME = 0x00000001;
         private const int EVERYTHING_REQUEST_PATH = 0x00000002;
         private bool multiInstanceDetect = true;
@@ -44,7 +45,7 @@ namespace BeatSaberIndependentMapsManager
         private Dictionary<string, string> BSInstancePath;
         private Dictionary<string, bool[]> InstanceSongCoreReady;
         private Dictionary<string, Image> musicPackCoverimgs;
-        private AudioPreviewService AudioPlayerService => _presenter.AudioPreview;
+        private AudioPreviewService AudioPlayerService => _viewModel.AudioPreview;
         // BeatSaver 搜索相关
         private List<BeatSaverMap> currentSearchResults = new List<BeatSaverMap>();
         private int currentPage = 0;
@@ -85,14 +86,14 @@ namespace BeatSaberIndependentMapsManager
         public MainForm()
         {
             InitializeComponent();
-            _presenter = new MainPresenter(this, config);
-            SongsHash = _presenter.SongsHash;
-            delicatedSongList = _presenter.DelicatedSongList;
-            musicPackInfo = _presenter.MusicPackInfo;
-            musicPackPath = _presenter.MusicPackPath;
-            musicPackCoverimgs = _presenter.MusicPackCoverImages;
-            BSInstancePath = _presenter.GameDetector.BSInstancePath;
-            InstanceSongCoreReady = _presenter.GameDetector.InstanceSongCoreReady;
+            _viewModel = new MainViewModel(this, config);
+            SongsHash = _viewModel.SongsHash;
+            delicatedSongList = _viewModel.DelicatedSongList;
+            musicPackInfo = _viewModel.MusicPackInfo;
+            musicPackPath = _viewModel.MusicPackPath;
+            musicPackCoverimgs = _viewModel.MusicPackCoverImages;
+            BSInstancePath = _viewModel.GameDetector.BSInstancePath;
+            InstanceSongCoreReady = _viewModel.GameDetector.InstanceSongCoreReady;
         }
         private void MainForm_Load(object sender, EventArgs e)
         {
@@ -111,7 +112,7 @@ namespace BeatSaberIndependentMapsManager
             Thread update = new Thread(updateDetect) { IsBackground = true };
             update.Start();
             // 使用服务进行游戏实例检测
-            multiInstanceDetect = _presenter.GameDetector.IsEverythingAvailable;
+            multiInstanceDetect = _viewModel.GameDetector.IsEverythingAvailable;
             if (!File.Exists("Everything64.dll"))
             {
                 debugLog("未检测到Everything64.dll文件，所有增强功能将不可用！");
@@ -124,14 +125,14 @@ namespace BeatSaberIndependentMapsManager
             {
                 debugLog("未检测到Everything增强扩展，将使用普通模式检测Beat Saber实例目录");
             }
-            _presenter.InitializeGameDetection();
+            _viewModel.InitializeGameDetection();
             // 同步检测结果到MainForm字段（向后兼容）
-            BSInstancePath = _presenter.GameDetector.BSInstancePath;
-            InstanceSongCoreReady = _presenter.GameDetector.InstanceSongCoreReady;
-            multiInstanceDetect = _presenter.GameDetector.MultiInstanceDetect;
+            BSInstancePath = _viewModel.GameDetector.BSInstancePath;
+            InstanceSongCoreReady = _viewModel.GameDetector.InstanceSongCoreReady;
+            multiInstanceDetect = _viewModel.GameDetector.MultiInstanceDetect;
             if (config.HashCache)
             {
-                _presenter.HashCache.LoadCache();
+                _viewModel.HashCache.LoadCache();
             }
             // 初始化新的筛选构建器面板
             InitializeFilterBuilderPanel();
@@ -504,8 +505,8 @@ namespace BeatSaberIndependentMapsManager
         private void addFolder(string path)
         {
             BSIMMStatusUpdate("解析：", "正在解析：" + path, 0);
-            var result = _presenter.SongScanner.ScanFolder(path);
-            _presenter.ApplyScanResult(result);
+            var result = _viewModel.SongScanner.ScanFolder(path);
+            _viewModel.ApplyScanResult(result);
             HandleScanResultUI(result);
         }
 
@@ -620,7 +621,7 @@ namespace BeatSaberIndependentMapsManager
         {
             if (musicPackInfo.TryGetValue(musicPackName, out var packSongs))
             {
-                await _presenter.HashCache.EnsurePackHashesAsync(packSongs, pct => BSIMMProgressUpdate(pct));
+                await _viewModel.HashCache.EnsurePackHashesAsync(packSongs, pct => BSIMMProgressUpdate(pct));
                 debugLog($"曲包缓存完成！");
                 BSIMMStatusUpdate("缓存：", "缓存完成！", 100);
             }
@@ -759,7 +760,7 @@ namespace BeatSaberIndependentMapsManager
                         try
                         {
                             Stopwatch stopwatch = Stopwatch.StartNew();
-                            await _presenter.PlaylistExporter.ExportMusicPackAsync(
+                            await _viewModel.PlaylistExporter.ExportMusicPackAsync(
                                 musicPackName, 
                                 packSongs, 
                                 cover, 
@@ -784,7 +785,7 @@ namespace BeatSaberIndependentMapsManager
                     try
                     {
                         Stopwatch stopwatch = Stopwatch.StartNew();
-                        await _presenter.PlaylistExporter.ExportAllPacksAsync(
+                        await _viewModel.PlaylistExporter.ExportAllPacksAsync(
                             musicPackInfo,
                             musicPackCoverimgs,
                             path,
@@ -856,7 +857,7 @@ namespace BeatSaberIndependentMapsManager
                     }
                     if (config.HashCache)
                     {
-                        var packNames = _presenter.GetMusicPackNames();
+                        var packNames = _viewModel.GetMusicPackNames();
                         foreach (string packName in packNames)
                         {
                             await HashCachePack(packName);
@@ -866,7 +867,7 @@ namespace BeatSaberIndependentMapsManager
                 {
                     if (config.HashCache)
                     {
-                        _presenter.HashCache.SaveCache();
+                        _viewModel.HashCache.SaveCache();
                     }
                 });
             }
@@ -902,7 +903,7 @@ namespace BeatSaberIndependentMapsManager
                 addFolder(verifiedPaths[0]);
                 if (config.HashCache)
                 {
-                    var packNames = _presenter.GetMusicPackNames();
+                    var packNames = _viewModel.GetMusicPackNames();
                     foreach (string packName in packNames)
                     {
                         await HashCachePack(packName);
@@ -912,7 +913,7 @@ namespace BeatSaberIndependentMapsManager
             {
                 if (config.HashCache)
                 {
-                    _presenter.HashCache.SaveCache();
+                    _viewModel.HashCache.SaveCache();
                 }
             });
         }
@@ -1534,7 +1535,7 @@ namespace BeatSaberIndependentMapsManager
                 {
                     BSIMMStatusUpdate("全盘扫描", "正在进行全盘扫描...", 0);
                     var excludedPaths = musicPackPath.Values.Select(p => p.ToString()).ToList();
-                    var results = await _presenter.ScanFullDiskAsync(excludedPaths, pct => BSIMMProgressUpdate(pct));
+                    var results = await _viewModel.ScanFullDiskAsync(excludedPaths, pct => BSIMMProgressUpdate(pct));
                     
                     // 同步到 delicatedSongList
                     foreach (var kvp in results)
@@ -1926,19 +1927,19 @@ namespace BeatSaberIndependentMapsManager
                 dataGridView1.Rows.Clear();
                 currentSearchResults.Clear();
 
-                if (_presenter.BeatSaverSearch.RequiresLocalCache(preset))
+                if (_viewModel.BeatSaverSearch.RequiresLocalCache(preset))
                 {
                     await SearchWithLocalCache(preset, cancellationToken);
                     return;
                 }
 
-                bool hasOrLogic = _presenter.BeatSaverSearch.HasOrLogic(preset);
-                var filter = _presenter.BeatSaverSearch.BuildSearchFilterFromPreset(preset);
+                bool hasOrLogic = _viewModel.BeatSaverSearch.HasOrLogic(preset);
+                var filter = _viewModel.BeatSaverSearch.BuildSearchFilterFromPreset(preset);
                 bool needsModFiltering = filter.HasModFiltersToApply && filter.ModFiltersToApply.Count > 1;
 
                 if (hasOrLogic)
                 {
-                    var result = await _presenter.BeatSaverSearch.SearchWithOrLogicAsync(preset, msg => { if (!IsDisposed) BSIMMActionText.Text = msg; });
+                    var result = await _viewModel.BeatSaverSearch.SearchWithOrLogicAsync(preset, msg => { if (!IsDisposed) BSIMMActionText.Text = msg; });
                     allOrSearchResults = result.Results;
                     totalPages = result.TotalPages;
                     isOrModeSearch = true;
@@ -1960,7 +1961,7 @@ namespace BeatSaberIndependentMapsManager
                 }
                 else if (needsModFiltering)
                 {
-                    var result = await _presenter.BeatSaverSearch.SearchWithModFilteringAsync(filter, msg => { if (!IsDisposed) BSIMMActionText.Text = msg; });
+                    var result = await _viewModel.BeatSaverSearch.SearchWithModFilteringAsync(filter, msg => { if (!IsDisposed) BSIMMActionText.Text = msg; });
                     allOrSearchResults = result.Results;
                     totalPages = result.TotalPages;
                     isOrModeSearch = true; 
@@ -1986,7 +1987,7 @@ namespace BeatSaberIndependentMapsManager
                     isLocalCacheSearch = false;
                     allOrSearchResults.Clear();
 
-                    var response = await _presenter.BeatSaverClient.SearchMapsAsync(filter, currentPage);
+                    var response = await _viewModel.BeatSaverClient.SearchMapsAsync(filter, currentPage);
 
                     if (response?.Maps != null && response.Maps.Count > 0)
                     {
@@ -2037,16 +2038,16 @@ namespace BeatSaberIndependentMapsManager
             try
             {
                 // 初始化本地缓存管理器
-                _presenter.EnsureLocalCacheInitialized();
+                _viewModel.EnsureLocalCacheInitialized();
 
                 // 检查缓存是否可用或已过期
-                bool needDownload = !_presenter.LocalCache.IsCacheAvailable;
+                bool needDownload = !_viewModel.LocalCache.IsCacheAvailable;
                 bool isOutdated = false;
 
-                if (_presenter.LocalCache.IsCacheAvailable)
+                if (_viewModel.LocalCache.IsCacheAvailable)
                 {
                     // 检查缓存是否过期（默认7天）
-                    isOutdated = await _presenter.LocalCache.IsCacheOutdatedAsync();
+                    isOutdated = await _viewModel.LocalCache.IsCacheOutdatedAsync();
                 }
 
                 if (needDownload || isOutdated)
@@ -2073,7 +2074,7 @@ namespace BeatSaberIndependentMapsManager
                     else
                     {
                         // 下载/更新缓存
-                        _presenter.LocalCache.DownloadProgress += (s, progress) =>
+                        _viewModel.LocalCache.DownloadProgress += (s, progress) =>
                         {
                             this.BeginInvoke(() =>
                             {
@@ -2087,7 +2088,7 @@ namespace BeatSaberIndependentMapsManager
                         };
 
                         BSIMMStatusUpdate(needDownload ? "下载" : "更新", needDownload ? "正在下载本地缓存..." : "正在更新本地缓存...", 0);
-                        bool downloaded = await _presenter.LocalCache.DownloadCacheAsync();
+                        bool downloaded = await _viewModel.LocalCache.DownloadCacheAsync();
 
                         if (!downloaded)
                         {
@@ -2126,7 +2127,7 @@ namespace BeatSaberIndependentMapsManager
                                 BSIMMStatusText.Text = $"正在筛选... {percent}%";
                             });
                         });
-                        return _presenter.LocalCache.ParallelFilterMaps(preset, progress, cancellationToken);
+                        return _viewModel.LocalCache.ParallelFilterMaps(preset, progress, cancellationToken);
                     }, cancellationToken);
                 }
                 else
@@ -2138,7 +2139,7 @@ namespace BeatSaberIndependentMapsManager
                         int lastPercent = 0;
                         int processedCount = 0;
 
-                        foreach (var map in _presenter.LocalCache.StreamFilterMaps(preset, null, cancellationToken))
+                        foreach (var map in _viewModel.LocalCache.StreamFilterMaps(preset, null, cancellationToken))
                         {
                             if (cancellationToken.IsCancellationRequested)
                                 break;
@@ -2306,22 +2307,22 @@ namespace BeatSaberIndependentMapsManager
             btnBatchOutput.Enabled = false;
 
             // 检查是否所有预设都需要本地缓存
-            bool allRequireLocalCache = presets.All(p => _presenter.BeatSaverSearch.RequiresLocalCache(p));
+            bool allRequireLocalCache = presets.All(p => _viewModel.BeatSaverSearch.RequiresLocalCache(p));
 
             try
             {
                 if (allRequireLocalCache)
                 {
                     // 如果本地缓存管理器未初始化，则创建
-                    _presenter.EnsureLocalCacheInitialized();
+                    _viewModel.EnsureLocalCacheInitialized();
 
                     // 检查缓存是否可用或已过期
-                    bool needDownload = !_presenter.LocalCache.IsCacheAvailable;
+                    bool needDownload = !_viewModel.LocalCache.IsCacheAvailable;
                     bool isOutdated = false;
 
-                    if (_presenter.LocalCache.IsCacheAvailable)
+                    if (_viewModel.LocalCache.IsCacheAvailable)
                     {
-                        isOutdated = await _presenter.LocalCache.IsCacheOutdatedAsync();
+                        isOutdated = await _viewModel.LocalCache.IsCacheOutdatedAsync();
                     }
 
                     if (needDownload)
@@ -2347,7 +2348,7 @@ namespace BeatSaberIndependentMapsManager
 
                         if (result == DialogResult.Yes)
                         {
-                            _presenter.LocalCache.DownloadProgress += (s, progress) =>
+                            _viewModel.LocalCache.DownloadProgress += (s, progress) =>
                             {
                                 this.BeginInvoke(() =>
                                 {
@@ -2361,7 +2362,7 @@ namespace BeatSaberIndependentMapsManager
                             };
 
                             BSIMMStatusUpdate("更新", "正在更新本地缓存...", 0);
-                            bool downloaded = await _presenter.LocalCache.DownloadCacheAsync();
+                            bool downloaded = await _viewModel.LocalCache.DownloadCacheAsync();
 
                             if (!downloaded)
                             {
@@ -2387,7 +2388,7 @@ namespace BeatSaberIndependentMapsManager
                                     BSIMMStatusText.Text = $"并行筛选中... {percent}%";
                             });
                         });
-                        return _presenter.LocalCache.ParallelBatchFilterSlim(presets, progress);
+                        return _viewModel.LocalCache.ParallelBatchFilterSlim(presets, progress);
                     });
 
                     // 并行导出歌单
@@ -2422,7 +2423,7 @@ namespace BeatSaberIndependentMapsManager
                                 // 导出到歌单
                                 string filePath = Path.Combine(outputDir, $"{PlaylistExportService.SanitizeFileName(preset.Name)}.bplist");
                                 var fullMaps = maps.Select(m => m.ToFullMap()).ToList();
-                                bool success = _presenter.PlaylistExporter.ExportMapsToPlaylist(fullMaps, filePath, preset.Name, coverText, null, true);
+                                bool success = _viewModel.PlaylistExporter.ExportMapsToPlaylist(fullMaps, filePath, preset.Name, coverText, null, true);
 
                                 exportResults.Add((i, success, maps.Count, preset.Name));
 
@@ -2487,7 +2488,7 @@ namespace BeatSaberIndependentMapsManager
 
                             // 导出到歌单（静默模式）
                             string filePath = Path.Combine(outputDir, $"{PlaylistExportService.SanitizeFileName(preset.Name)}.bplist");
-                            bool success = _presenter.PlaylistExporter.ExportMapsToPlaylist(maps, filePath, preset.Name, coverText, null, true);
+                            bool success = _viewModel.PlaylistExporter.ExportMapsToPlaylist(maps, filePath, preset.Name, coverText, null, true);
 
                             if (success)
                             {
@@ -2531,12 +2532,12 @@ namespace BeatSaberIndependentMapsManager
             try
             {
                 // 检查是否需要本地缓存
-                if (_presenter.BeatSaverSearch.RequiresLocalCache(preset))
+                if (_viewModel.BeatSaverSearch.RequiresLocalCache(preset))
                 {
                     // 使用本地缓存
-                    _presenter.EnsureLocalCacheInitialized();
+                    _viewModel.EnsureLocalCacheInitialized();
 
-                    if (!_presenter.LocalCache.IsCacheAvailable)
+                    if (!_viewModel.LocalCache.IsCacheAvailable)
                     {
                         throw new Exception("需要本地缓存但未下载");
                     }
@@ -2556,30 +2557,30 @@ namespace BeatSaberIndependentMapsManager
                         if (useSharedCache)
                         {
                             var results = new List<BeatSaverMapSlim>();
-                            foreach (var map in _presenter.LocalCache.StreamFilterMapsShared(preset, null))
+                            foreach (var map in _viewModel.LocalCache.StreamFilterMapsShared(preset, null))
                             {
                                 results.Add(map);
                             }
                             // 应用结果限制
-                            var limitedResults = _presenter.LocalCache.ApplyResultLimitSlim(results, preset);
+                            var limitedResults = _viewModel.LocalCache.ApplyResultLimitSlim(results, preset);
                             return limitedResults.Select(m => m.ToFullMap()).ToList();
                         }
                         else
                         {
-                            return _presenter.LocalCache.ParallelFilterMaps(preset, progress);
+                            return _viewModel.LocalCache.ParallelFilterMaps(preset, progress);
                         }
                     });
                 }
                 else
                 {
                     // 使用API搜索
-                    var filter = _presenter.BeatSaverSearch.BuildSearchFilterFromPreset(preset);
+                    var filter = _viewModel.BeatSaverSearch.BuildSearchFilterFromPreset(preset);
                     int page = 0;
                     int totalPagesFromApi = 0;
 
                     while (true)
                     {
-                        var response = await _presenter.BeatSaverClient.SearchMapsAsync(filter, page);
+                        var response = await _viewModel.BeatSaverClient.SearchMapsAsync(filter, page);
                         if (response?.Maps == null || response.Maps.Count == 0)
                             break;
 
@@ -2681,14 +2682,14 @@ namespace BeatSaberIndependentMapsManager
                 btnExportSelected.Enabled = false;
 
                 var allMaps = new List<BeatSaverMap>();
-                var filter = _presenter.BeatSaverSearch.BuildSearchFilterFromPreset(currentFilterPreset);
+                var filter = _viewModel.BeatSaverSearch.BuildSearchFilterFromPreset(currentFilterPreset);
 
                 // 从第一页开始请求所有页面
                 for (int page = 0; page < totalPages; page++)
                 {
                     BSIMMActionText.Text = $"正在获取第 {page + 1}/{totalPages} 页...";
 
-                    var response = await _presenter.BeatSaverClient.SearchMapsAsync(filter, page);
+                    var response = await _viewModel.BeatSaverClient.SearchMapsAsync(filter, page);
                     if (response?.Maps != null && response.Maps.Count > 0)
                     {
                         allMaps.AddRange(response.Maps);
@@ -2753,7 +2754,7 @@ namespace BeatSaberIndependentMapsManager
                     if (saveDialog.ShowDialog() == DialogResult.OK)
                     {
                         string name = System.IO.Path.GetFileNameWithoutExtension(saveDialog.FileName);
-                        bool success = _presenter.PlaylistExporter.ExportMapsToPlaylist(maps, saveDialog.FileName, name, coverText, _perSongDifficulties, false);
+                        bool success = _viewModel.PlaylistExporter.ExportMapsToPlaylist(maps, saveDialog.FileName, name, coverText, _perSongDifficulties, false);
                         if (success)
                         {
                             MessageBox.Show($"歌单已保存！\n共 {maps.Count} 首歌曲\n保存位置：{saveDialog.FileName}", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -2774,7 +2775,7 @@ namespace BeatSaberIndependentMapsManager
                     Directory.CreateDirectory(presetDir);
 
                 string filePath = Path.Combine(presetDir, $"{PlaylistExportService.SanitizeFileName(playlistName)}.bplist");
-                bool success = _presenter.PlaylistExporter.ExportMapsToPlaylist(maps, filePath, playlistName, coverText, _perSongDifficulties, true);
+                bool success = _viewModel.PlaylistExporter.ExportMapsToPlaylist(maps, filePath, playlistName, coverText, _perSongDifficulties, true);
                 if (success)
                     debugLog($"歌单已导出: {filePath}");
                 else
@@ -2785,6 +2786,7 @@ namespace BeatSaberIndependentMapsManager
         #endregion
     }
 }
+
 
 
 
