@@ -10,7 +10,7 @@ namespace BeatSaberIndependentMapsManager
         /// <summary>
         /// 当前版本号 (不含 v 前缀)
         /// </summary>
-        public const string CurrentVersion = "1.0.0";
+        public const string CurrentVersion = "1.1.0";
 
         /// <summary>
         /// 带有 v 前缀的版本字符串，符合 GitHub Release tag 规范

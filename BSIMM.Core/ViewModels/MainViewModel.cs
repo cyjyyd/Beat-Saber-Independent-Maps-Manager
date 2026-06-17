@@ -38,6 +38,7 @@ namespace BeatSaberIndependentMapsManager.ViewModels
 
         // Thread safety locks
         private readonly object _stateLock = new object();
+        public object SyncRoot => _stateLock;
 
         // State - music packs and songs
         public Dictionary<string, Dictionary<string, SongMap>> MusicPackInfo { get; } = new();
@@ -56,6 +57,27 @@ namespace BeatSaberIndependentMapsManager.ViewModels
         {
             get => HashCache.SongsHash;
             set => HashCache.SongsHash = value;
+        }
+
+        public Dictionary<string, Dictionary<string, SongMap>> GetMusicPackInfoSnapshot()
+        {
+            lock (_stateLock)
+            {
+                var snapshot = new Dictionary<string, Dictionary<string, SongMap>>();
+                foreach (var kvp in MusicPackInfo)
+                {
+                    snapshot[kvp.Key] = new Dictionary<string, SongMap>(kvp.Value);
+                }
+                return snapshot;
+            }
+        }
+
+        public Dictionary<string, Image> GetMusicPackCoverImagesSnapshot()
+        {
+            lock (_stateLock)
+            {
+                return new Dictionary<string, Image>(MusicPackCoverImages);
+            }
         }
 
         // BeatSaver client

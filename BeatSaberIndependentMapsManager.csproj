@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);BSIMM.Core\**\*;BSIMM.Avalonia\**\*</DefaultItemExcludes>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <DefaultItemExcludes>$(DefaultItemExcludes);BSIMM.Avalonia\**\*</DefaultItemExcludes>
     <TargetFramework>net9.0-windows10.0.17763.0</TargetFramework>
@@ -15,7 +16,7 @@
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
     <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
+    <ApplicationVersion>1.1.0.%2a</ApplicationVersion>
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
@@ -24,6 +25,7 @@
     <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
   </PropertyGroup>
   <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);BSIMM.Core\**\*;BSIMM.Avalonia\**\*</DefaultItemExcludes>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <DefaultItemExcludes>$(DefaultItemExcludes);BSIMM.Avalonia\**\*</DefaultItemExcludes>
     <LangVersion>latest</LangVersion>
@@ -37,27 +39,32 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
   <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);BSIMM.Core\**\*;BSIMM.Avalonia\**\*</DefaultItemExcludes>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <DefaultItemExcludes>$(DefaultItemExcludes);BSIMM.Avalonia\**\*</DefaultItemExcludes>
     <TargetZone>LocalIntranet</TargetZone>
   </PropertyGroup>
   <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);BSIMM.Core\**\*;BSIMM.Avalonia\**\*</DefaultItemExcludes>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <DefaultItemExcludes>$(DefaultItemExcludes);BSIMM.Avalonia\**\*</DefaultItemExcludes>
     <GenerateManifests>false</GenerateManifests>
   </PropertyGroup>
   <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);BSIMM.Core\**\*;BSIMM.Avalonia\**\*</DefaultItemExcludes>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <DefaultItemExcludes>$(DefaultItemExcludes);BSIMM.Avalonia\**\*</DefaultItemExcludes>
     <ApplicationIcon>aa2yv-q2dg9-001.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);BSIMM.Core\**\*;BSIMM.Avalonia\**\*</DefaultItemExcludes>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <DefaultItemExcludes>$(DefaultItemExcludes);BSIMM.Avalonia\**\*</DefaultItemExcludes>
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
     <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 	<PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);BSIMM.Core\**\*;BSIMM.Avalonia\**\*</DefaultItemExcludes>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <DefaultItemExcludes>$(DefaultItemExcludes);BSIMM.Avalonia\**\*</DefaultItemExcludes>
 		<ServerGarbageCollection>true</ServerGarbageCollection>
@@ -78,7 +85,7 @@
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.7.2">
       <Visible>False</Visible>
-      <ProductName>Microsoft .NET Framework 4.7.2 %28x86 ºÍ x64%29</ProductName>
+      <ProductName>Microsoft .NET Framework 4.7.2 %28x86 ï¿½ï¿½ x64%29</ProductName>
       <Install>true</Install>
     </BootstrapperPackage>
     <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
@@ -114,7 +121,11 @@
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
     <PackageReference Include="System.Security.AccessControl" Version="6.0.1" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="BSIMM.Core\BSIMM.Core.csproj" />
+  </ItemGroup>
 </Project>
+
 
 
 
