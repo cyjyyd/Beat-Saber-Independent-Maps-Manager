@@ -81,6 +81,7 @@
   <ItemGroup>
     <Compile Remove="LocalCacheFilterTest.cs" />
     <Compile Remove="tests\**\*.cs" />
+    <Compile Remove="packages\**\*.cs" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.7.2">
@@ -125,8 +126,3 @@
     <ProjectReference Include="BSIMM.Core\BSIMM.Core.csproj" />
   </ItemGroup>
 </Project>
-
-
-
-
-
