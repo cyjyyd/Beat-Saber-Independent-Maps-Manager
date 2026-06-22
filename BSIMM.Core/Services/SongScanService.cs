@@ -115,7 +115,7 @@ namespace BeatSaberIndependentMapsManager.Services
         /// Returns: (musicPackName, musicPackSongs, resultCode)
         /// resultCode: 0=no songs, 1=music pack added, 2=delicated song added
         /// </summary>
-        public SongScanResult ScanFolder(string path)
+        public SongScanResult ScanFolder(string path, Action<int> onProgress = null)
         {
             int depth = CalculateFolderDepth(path);
             switch (depth)
@@ -135,16 +135,18 @@ namespace BeatSaberIndependentMapsManager.Services
                 case 1:
                     if (Directory.GetDirectories(path).Length >= 2)
                     {
-                        return ScanMusicPack(path);
+                        return ScanMusicPack(path, onProgress);
                     }
                     else
                     {
                         var songs = new List<ParsedSongResult>();
-                        foreach (string subdir in Directory.GetDirectories(path))
+                        var subdirs = Directory.GetDirectories(path);
+                        for (int i = 0; i < subdirs.Length; i++)
                         {
-                            var result = ParseSongDirectory(subdir, null);
+                            var result = ParseSongDirectory(subdirs[i], null);
                             if (result.song != null)
                                 songs.Add(result);
+                            onProgress?.Invoke((i + 1) * 100 / subdirs.Length);
                         }
                         return new SongScanResult
                         {
@@ -162,13 +164,16 @@ namespace BeatSaberIndependentMapsManager.Services
                         .OrderByDescending(g => g.Count()).FirstOrDefault();
                     if (populardepth?.Key == 0)
                     {
-                        return ScanMusicPack(path);
+                        return ScanMusicPack(path, onProgress);
                     }
                     else
                     {
                         var results = new List<SongScanResult>();
-                        foreach (var folder in folders)
-                            results.Add(ScanFolder(folder));
+                        for (int i = 0; i < folders.Length; i++)
+                        {
+                            results.Add(ScanFolder(folders[i])); // Sub-folders might not accurately report global progress, keep simple
+                            onProgress?.Invoke((i + 1) * 100 / folders.Length);
+                        }
                         return new SongScanResult
                         {
                             ResultType = ScanResultType.Multiple,
@@ -181,7 +186,7 @@ namespace BeatSaberIndependentMapsManager.Services
         /// <summary>
         /// Scan a music pack directory (folder containing multiple song subdirectories).
         /// </summary>
-        public SongScanResult ScanMusicPack(string path)
+        public SongScanResult ScanMusicPack(string path, Action<int> onProgress = null)
         {
             string musicPackName = ExtractMusicPackName(path);
             if (string.IsNullOrEmpty(musicPackName))
@@ -192,9 +197,9 @@ namespace BeatSaberIndependentMapsManager.Services
             int mapsCount = 0, duplicateCount = 0, integrityCount = 0, otherCount = 0;
 
             string[] mapsDir = Directory.GetDirectories(path);
-            foreach (string mapDir in mapsDir)
+            for (int i = 0; i < mapsDir.Length; i++)
             {
-                var result = ParseSongDirectory(mapDir, musicPackName);
+                var result = ParseSongDirectory(mapsDir[i], musicPackName);
                 results.Add(result);
                 switch (result.resultCode)
                 {
@@ -203,6 +208,7 @@ namespace BeatSaberIndependentMapsManager.Services
                     case 3: duplicateCount++; break;
                     default: otherCount++; break;
                 }
+                onProgress?.Invoke((i + 1) * 100 / mapsDir.Length);
             }
 
             var packSongs = new Dictionary<string, SongMap>();
@@ -426,7 +432,7 @@ namespace BeatSaberIndependentMapsManager.Services
         }
     }
 
-    internal enum ScanResultType
+    public enum ScanResultType
     {
         None,
         DelicatedSong,
@@ -435,7 +441,7 @@ namespace BeatSaberIndependentMapsManager.Services
         Multiple
     }
 
-    internal class SongScanResult
+    public class SongScanResult
     {
         public ScanResultType ResultType { get; set; }
         public string MusicPackName { get; set; }
@@ -451,7 +457,7 @@ namespace BeatSaberIndependentMapsManager.Services
         public int OtherCount { get; set; }
     }
 
-    internal class ParsedSongResult
+    public class ParsedSongResult
     {
         public int resultCode { get; set; } // 0=none, 1=integrity fail, 2=success, 3=duplicate
         public string bsr { get; set; }

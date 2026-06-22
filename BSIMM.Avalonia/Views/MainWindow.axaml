@@ -1,20 +1,391 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:BSIMM.Avalonia.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        xmlns:vm="using:BeatSaberIndependentMapsManager.ViewModels"
+        xmlns:models="using:BeatSaberIndependentMapsManager"
+        xmlns:conv="using:BSIMM.Avalonia.Converters"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="800"
         x:Class="BSIMM.Avalonia.Views.MainWindow"
-        x:DataType="vm:MainWindowViewModel"
+        x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="BSIMM.Avalonia">
+        Title="BSIMM - Beat Saber Independent Maps Manager (Avalonia)"
+        Background="{DynamicResource AppBackgroundBrush}"
+        Foreground="{DynamicResource TextPrimaryBrush}">
 
-    <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
-        <vm:MainWindowViewModel/>
-    </Design.DataContext>
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="AppBackgroundBrush">#F4F7FC</SolidColorBrush>
+                    <SolidColorBrush x:Key="PanelBackgroundBrush">#FFFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="BorderBrush">#D5DDEB</SolidColorBrush>
+                    <SolidColorBrush x:Key="BorderHoverBrush">#B8C4DA</SolidColorBrush>
+                    
+                    <SolidColorBrush x:Key="TextPrimaryBrush">#1A1E24</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextSecondaryBrush">#5A6A85</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextMutedBrush">#9AA8C2</SolidColorBrush>
+                    
+                    <!-- Blue buttons in Light mode -->
+                    <SolidColorBrush x:Key="BsBlueBgBrush">#E0F2FE</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsBlueBorderBrush">#0078D4</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsBlueHoverBgBrush">#CBE8FE</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsBlueHoverBorderBrush">#005A9E</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsBlueTextBrush">#005A9E</SolidColorBrush>
 
-    <TextBlock Text="{Binding Greeting}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <!-- Red buttons in Light mode -->
+                    <SolidColorBrush x:Key="BsRedBgBrush">#FDE7E9</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsRedBorderBrush">#E81123</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsRedHoverBgBrush">#FCD1D6</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsRedHoverBorderBrush">#A80000</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsRedTextBrush">#A80000</SolidColorBrush>
 
+                    <SolidColorBrush x:Key="ButtonBackgroundBrush">#FFFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="ButtonHoverBrush">#E4E9F2</SolidColorBrush>
+
+                    <SolidColorBrush x:Key="HighlightBlueBrush">#0078D4</SolidColorBrush>
+                    <SolidColorBrush x:Key="HighlightRedBrush">#E81123</SolidColorBrush>
+                    
+                    <BoxShadows x:Key="CoverShadow">0 4 15 0 #20000000</BoxShadows>
+                </ResourceDictionary>
+                
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="AppBackgroundBrush">#0B0E14</SolidColorBrush>
+                    <SolidColorBrush x:Key="PanelBackgroundBrush">#12161E</SolidColorBrush>
+                    <SolidColorBrush x:Key="BorderBrush">#1C2433</SolidColorBrush>
+                    <SolidColorBrush x:Key="BorderHoverBrush">#2D3A50</SolidColorBrush>
+                    
+                    <SolidColorBrush x:Key="TextPrimaryBrush">#FFFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextSecondaryBrush">#8E9EBC</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextMutedBrush">#4B6082</SolidColorBrush>
+                    
+                    <!-- Blue buttons in Dark mode -->
+                    <SolidColorBrush x:Key="BsBlueBgBrush">#005A88</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsBlueBorderBrush">#00C3FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsBlueHoverBgBrush">#0072AB</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsBlueHoverBorderBrush">#00D2FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsBlueTextBrush">#FFFFFF</SolidColorBrush>
+
+                    <!-- Red buttons in Dark mode -->
+                    <SolidColorBrush x:Key="BsRedBgBrush">#880026</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsRedBorderBrush">#FF0048</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsRedHoverBgBrush">#AB0030</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsRedHoverBorderBrush">#FF1B51</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsRedTextBrush">#FFFFFF</SolidColorBrush>
+
+                    <SolidColorBrush x:Key="ButtonBackgroundBrush">#1C2433</SolidColorBrush>
+                    <SolidColorBrush x:Key="ButtonHoverBrush">#253246</SolidColorBrush>
+
+                    <SolidColorBrush x:Key="HighlightBlueBrush">#00D2FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="HighlightRedBrush">#FF1B51</SolidColorBrush>
+
+                    <BoxShadows x:Key="CoverShadow">0 4 15 0 #2000D2FF</BoxShadows>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Window.Styles>
+        <Style Selector="Button">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="15,8" />
+            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.15" />
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderHoverBrush}" />
+        </Style>
+
+        <!-- Beat Saber Blue Button -->
+        <Style Selector="Button.bs-blue">
+            <Setter Property="Background" Value="{DynamicResource BsBlueBgBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BsBlueBorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource BsBlueTextBrush}" />
+        </Style>
+        <Style Selector="Button.bs-blue:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource BsBlueHoverBgBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BsBlueHoverBorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource BsBlueTextBrush}" />
+        </Style>
+
+        <!-- Beat Saber Red Button -->
+        <Style Selector="Button.bs-red">
+            <Setter Property="Background" Value="{DynamicResource BsRedBgBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BsRedBorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource BsRedTextBrush}" />
+        </Style>
+        <Style Selector="Button.bs-red:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource BsRedHoverBgBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BsRedHoverBorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource BsRedTextBrush}" />
+        </Style>
+
+        <!-- Theme Switcher Button -->
+        <Style Selector="Button.theme-btn">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="Padding" Value="10,8" />
+        </Style>
+        <Style Selector="Button.theme-btn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderHoverBrush}" />
+        </Style>
+
+        <!-- ListBox Styling -->
+        <Style Selector="ListBoxItem">
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Margin" Value="4,2" />
+            <Setter Property="Padding" Value="8,6" />
+        </Style>
+        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
+        </Style>
+        
+        <!-- Custom TabItem Styling -->
+        <Style Selector="TabItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+            <Setter Property="FontSize" Value="15" />
+        </Style>
+        <Style Selector="TabItem:selected">
+            <Setter Property="Foreground" Value="{DynamicResource HighlightBlueBrush}" />
+        </Style>
+        <Style Selector="TabItem:pointerover /template/ ContentPresenter">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Top Menu/Toolbar -->
+        <Border Grid.Row="0" Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
+            <DockPanel Margin="10,5">
+                <Menu DockPanel.Dock="Left" Background="Transparent">
+                    <MenuItem Header="_文件" Foreground="{DynamicResource TextPrimaryBrush}">
+                        <MenuItem Header="添加歌曲文件夹" Name="MenuOpenFolder" Click="OnAddFolderClick" />
+                        <Separator Background="{DynamicResource BorderBrush}" />
+                        <MenuItem Header="_退出" Name="MenuExit" Click="OnExitClick" />
+                    </MenuItem>
+                    <MenuItem Header="_工具" Foreground="{DynamicResource TextPrimaryBrush}">
+                        <MenuItem Header="同步目录至游戏 (SongCore)" Click="OnSaveToSongCoreClick" />
+                        <MenuItem Header="导出选中歌单 (.bplist)" Click="OnExportSelectedBplistClick" />
+                        <MenuItem Header="导出全部歌单 (.bplist)" Click="OnExportAllBplistClick" />
+                        <Separator Background="{DynamicResource BorderBrush}" />
+                        <MenuItem Header="一键去重" Name="MenuDeduplication" Click="OnDeduplicationClick" />
+                    </MenuItem>
+                </Menu>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+                    <Button Classes="theme-btn" ToolTip.Tip="切换主题">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <PathIcon Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10c1.38 0 2.5-1.12 2.5-2.5 0-.61-.23-1.16-.6-1.57-.34-.38-.55-.89-.55-1.43 0-1.1.9-2 2-2h1.65c2.97 0 5.35-2.39 5.35-5.35C22 6.58 17.52 2 12 2zm-3.5 12c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3-4c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm4 0c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm2.5 4c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z" Width="16" Height="16" />
+                            <TextBlock Text="主题" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuItem Header="跟随系统" Click="OnThemeSystemClick">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="M4 4.5A2.5 2.5 0 0 0 1.5 7v7A2.5 2.5 0 0 0 4 16.5h3.5v2H5.25a.75.75 0 0 0 0 1.5h13.5a.75.75 0 0 0 0-1.5h-2.25v-2H20a2.5 2.5 0 0 0 2.5-2.5V7A2.5 2.5 0 0 0 20 4.5H4ZM3 7a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Zm6.5 9.5h5v2h-5v-2Z" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="明亮模式" Click="OnThemeLightClick">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="M12 2.25a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V3a.75.75 0 0 1 .75-.75ZM4.522 4.522a.75.75 0 0 1 1.06 0l1.59 1.59a.75.75 0 0 1-1.06 1.06l-1.59-1.59a.75.75 0 0 1 0-1.06ZM19.478 4.522a.75.75 0 0 1 0 1.06l-1.59 1.59a.75.75 0 0 1-1.06-1.06l1.59-1.59a.75.75 0 0 1 1.06 0ZM12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm-6.5 5a.75.75 0 0 1-.75.75H2.5a.75.75 0 0 1 0-1.5h2.25a.75.75 0 0 1 .75.75ZM22.5 12a.75.75 0 0 1-.75.75h-2.25a.75.75 0 0 1 0-1.5h2.25a.75.75 0 0 1 .75.75ZM6.112 16.828a.75.75 0 1 1-1.06 1.06l-1.59-1.59a.75.75 0 1 1 1.06-1.06l1.59 1.59ZM17.888 16.828a.75.75 0 1 1 1.06 1.06l1.59-1.59a.75.75 0 1 1-1.06-1.06l-1.59 1.59ZM12 18.75a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V19.5a.75.75 0 0 1 .75-.75Z" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="暗黑模式" Click="OnThemeDarkClick">
+                                    <MenuItem.Icon>
+                                        <PathIcon Data="M12.181 3.523a.75.75 0 0 1 .655 1.107 7.5 7.5 0 1 0 7.641 7.641.75.75 0 0 1 1.107.655 9 9 0 1 1-9.403-9.403Z" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                    <Button Content="添加曲包文件夹" Click="OnAddFolderClick" Classes="bs-blue" />
+                    <Button Content="一键去重" Click="OnDeduplicationClick" Classes="bs-red" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Main Content (Tabs) -->
+        <TabControl Grid.Row="1" Margin="10" Background="Transparent">
+            <!-- Tab 1: Music Packs -->
+            <TabItem Header="歌包文件夹">
+                <Grid ColumnDefinitions="250,5,*,5,320" Margin="0,10,0,0">
+                    <!-- Left: Music Packs List -->
+                    <Border Grid.Column="0" Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="6" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                        <Grid RowDefinitions="Auto,*,Auto">
+                            <TextBlock Text="曲包列表" FontWeight="Bold" Margin="12,10" Foreground="{DynamicResource HighlightBlueBrush}" />
+                            <ListBox Grid.Row="1" ItemsSource="{Binding MusicPacks}" 
+                                     SelectedItem="{Binding SelectedMusicPack}" 
+                                     Background="Transparent" BorderThickness="0">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- Music Pack Info Panel -->
+                            <Border Grid.Row="2" Background="{DynamicResource AppBackgroundBrush}" CornerRadius="0,0,6,6" Padding="15" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
+                                <StackPanel Spacing="10" IsVisible="{Binding SelectedMusicPack, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                    <Border Width="120" Height="120" CornerRadius="8" ClipToBounds="True" Background="#0B0E14" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" BoxShadow="0 2 10 0 #10000000">
+                                        <Panel>
+                                            <TextBlock Text="无封面" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextMutedBrush}" />
+                                            <Image Source="{Binding MusicPackCoverPath, Converter={x:Static conv:PathToBitmapConverter.Instance}}" Stretch="UniformToFill" />
+                                        </Panel>
+                                    </Border>
+                                    <Button Content="更换封面" Click="OnChangePackCoverClick" Classes="bs-blue" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="5" />
+                                    
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <TextBlock Text="包含歌曲: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding MusicPackSongCount}" Foreground="{DynamicResource HighlightRedBrush}" FontWeight="Bold" HorizontalAlignment="Right" />
+                                    </Grid>
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <TextBlock Text="缓存状态: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding IsMusicPackHashCached, Converter={x:Static conv:BoolToStringConverter.Instance}}" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" />
+                                    </Grid>
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <TextBlock Text="SongCore: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding IsMusicPackSynced, Converter={x:Static conv:BoolToStringConverter.Instance}}" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <GridSplitter Grid.Column="1" Background="Transparent" />
+
+                    <!-- Middle: Selected Pack Songs List -->
+                    <Border Grid.Column="2" Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="6" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                        <Grid RowDefinitions="Auto,*">
+                            <TextBlock Text="歌曲列表" FontWeight="Bold" Margin="12,10" Foreground="{DynamicResource HighlightRedBrush}" />
+                            <ListBox Grid.Row="1" ItemsSource="{Binding Songs}" 
+                                     SelectedItem="{Binding SelectedSong}" 
+                                     Background="Transparent" BorderThickness="0">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:SongMap">
+                                        <Grid ColumnDefinitions="*,100,60">
+                                            <TextBlock Text="{Binding _songName}" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Bsr}" Foreground="{DynamicResource HighlightBlueBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="{Binding _beatsPerMinute, StringFormat='{}{0:0.##}'}" Foreground="{DynamicResource HighlightRedBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+
+                    <GridSplitter Grid.Column="3" Background="Transparent" />
+
+                    <!-- Right: Selected Song Details & Audio Preview -->
+                    <Border Grid.Column="4" Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="6" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20">
+                        <Grid RowDefinitions="Auto,*,Auto" 
+                              DataContext="{Binding SelectedSong}"
+                              IsVisible="{Binding Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <!-- Title / Cover -->
+                            <StackPanel Grid.Row="0" Spacing="10" HorizontalAlignment="Center">
+                                <Border Width="160" Height="160" Background="{DynamicResource AppBackgroundBrush}" CornerRadius="12" ClipToBounds="True" BorderBrush="{DynamicResource HighlightBlueBrush}" BorderThickness="2" BoxShadow="{DynamicResource CoverShadow}">
+                                    <Panel>
+                                        <TextBlock Text="无封面" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextMutedBrush}" />
+                                        <Image Source="{Binding FullCoverImagePath, Converter={x:Static conv:PathToBitmapConverter.Instance}}" Stretch="UniformToFill" />
+                                    </Panel>
+                                </Border>
+                                <TextBlock Text="{Binding _songName}" FontWeight="Bold" FontSize="18" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                <TextBlock Text="{Binding _songSubName}" FontSize="13" Foreground="{DynamicResource HighlightBlueBrush}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" IsVisible="{Binding _songSubName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                <TextBlock Text="{Binding _songAuthorName}" FontSize="13" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <!-- Metadata (Scrollable) -->
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,15,0,15" Padding="0,0,15,0">
+                                <StackPanel Spacing="12">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <TextBlock Text="BSR: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Bsr}" Foreground="{DynamicResource HighlightBlueBrush}" FontWeight="Bold" HorizontalAlignment="Right" />
+                                    </Grid>
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <TextBlock Text="谱师: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding _levelAuthorName}" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" TextWrapping="Wrap" />
+                                    </Grid>
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <TextBlock Text="BPM: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding _beatsPerMinute, StringFormat='{}{0:0.##}'}" Foreground="{DynamicResource HighlightRedBrush}" FontWeight="Bold" HorizontalAlignment="Right" />
+                                    </Grid>
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <TextBlock Text="环境: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding _environmentName}" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" TextWrapping="Wrap" />
+                                    </Grid>
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <TextBlock Text="难度: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding DifficultiesString}" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" TextWrapping="Wrap" />
+                                    </Grid>
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <TextBlock Text="目录: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding songFolder}" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" HorizontalAlignment="Right" FontSize="11" />
+                                    </Grid>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <!-- Audio Player Controls -->
+                            <StackPanel Grid.Row="2" Spacing="15" Margin="0,5,0,0">
+                                <ProgressBar Name="AudioProgressBar" Height="6" Minimum="0" Maximum="100" Value="0" Foreground="{DynamicResource HighlightBlueBrush}" Background="{DynamicResource BorderBrush}" CornerRadius="3" />
+                                <Grid ColumnDefinitions="*,*">
+                                    <Button Grid.Column="0" Content="播放试听" Click="OnPlayPreviewClick" Classes="bs-blue" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="0,0,5,0" />
+                                    <Button Grid.Column="1" Content="暂停" Click="OnPausePreviewClick" Classes="bs-red" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="5,0,0,0" />
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- Tab 2: Independent Songs -->
+            <TabItem Header="单曲文件夹">
+                <Grid RowDefinitions="Auto,*" Margin="0,10,0,0">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+                        <Button Content="全盘扫描歌曲 (Everything)" Click="OnFullScanClick" Classes="bs-blue" />
+                    </StackPanel>
+
+                    <Border Grid.Row="1" Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="6" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                        <ListBox ItemsSource="{Binding DelicatedSongs}" SelectedItem="{Binding SelectedDelicatedSong}" Background="Transparent" BorderThickness="0">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:SongMap">
+                                    <Grid ColumnDefinitions="*,100,80,350" Margin="5,2">
+                                        <TextBlock Text="{Binding _songName}" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Bsr}" Foreground="{DynamicResource HighlightBlueBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding _beatsPerMinute, StringFormat='{}{0:0.##}'}" Foreground="{DynamicResource HighlightRedBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="3" Text="{Binding songFolder}" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Right" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Border>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <!-- Bottom Status Bar -->
+        <Border Grid.Row="2" Background="{DynamicResource AppBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="15,8">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Column="0" Text="{Binding GameInstancesText}" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" FontSize="11" Margin="0,0,15,0" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ActionText}" Foreground="{DynamicResource HighlightBlueBrush}" FontWeight="Bold" />
+                    <TextBlock Text="|" Foreground="{DynamicResource BorderHoverBrush}" />
+                    <TextBlock Text="{Binding StatusText}" Foreground="{DynamicResource TextSecondaryBrush}" />
+                </StackPanel>
+                <ProgressBar Grid.Column="2" Width="200" Height="8" Minimum="0" Maximum="100" 
+                             Value="{Binding ProgressValue}" 
+                             Foreground="{DynamicResource HighlightRedBrush}" Background="{DynamicResource BorderBrush}" CornerRadius="4" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+    </Grid>
 </Window>

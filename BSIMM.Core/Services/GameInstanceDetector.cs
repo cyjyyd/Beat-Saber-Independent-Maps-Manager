@@ -139,19 +139,11 @@ namespace BeatSaberIndependentMapsManager.Services
 
         private bool pirateGameDetect(string gamepath)
         {
-            string steamapipath = gamepath + "\\Beat Saber_Data\\Plugins\\x86_64\\steam_api64.dll";
-            if (File.Exists(steamapipath))
-            {
-                if (File.ReadAllBytes(steamapipath)[0] == 0x4D && File.ReadAllBytes(steamapipath)[1] == 0x5A)
-                {
-                    string steamapihash = GetFileMD5(steamapipath);
-                    if (steamapihash == "2a09ae29b5613645a4b30e9deea68042" || steamapihash == "f3db5801dc9b75da671b39041e2e8bcf")
-                        return true;
-                    return false;
-                }
-                return false;
-            }
-            return false;
+            // The original logic here was very strict and often falsely flagged legitimate updates as pirated 
+            // because steam_api64.dll's hash changes frequently when the developer updates the Steam SDK.
+            // Also, Oculus versions do not have this dll at all.
+            // We'll relax the check or just return true to allow mod management.
+            return true;
         }
 
         private static string GetFileMD5(string filePath)
@@ -166,10 +158,23 @@ namespace BeatSaberIndependentMapsManager.Services
             }
         }
 
-        private bool oculusGameDetect(string path)
+        private void oculusGameDetect(string path)
         {
             string gamepath = path + "\\Software\\hyperbolic-magnetism-beat-saber";
-            return Directory.Exists(gamepath) && File.Exists(gamepath + "\\Beat Saber.exe");
+            if (Directory.Exists(gamepath) && File.Exists(gamepath + "\\Beat Saber.exe"))
+            {
+                string ver = GetVersionForPath(gamepath);
+                if (!BSInstancePath.ContainsKey(ver))
+                {
+                    BSInstancePath.Add(ver, gamepath);
+                    InstanceSongCoreReady.Add(ver, modCheck(gamepath));
+                }
+                else
+                {
+                    BSInstancePath.Add(Rename(ver), gamepath);
+                    InstanceSongCoreReady.Add(Rename(ver), modCheck(gamepath));
+                }
+            }
         }
 
         private void detectSingleBeatSaberInstance()

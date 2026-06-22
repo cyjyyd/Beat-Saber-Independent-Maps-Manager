@@ -9,5 +9,6 @@ namespace BeatSaberIndependentMapsManager.Abstractions
         void UpdateProgress(int progress);
         void InvokeLog(string message);
         bool IsDisposed { get; }
+        void RunOnUIThread(Action action);
     }
 }

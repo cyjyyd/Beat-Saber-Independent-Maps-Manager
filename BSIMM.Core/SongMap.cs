@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace BeatSaberIndependentMapsManager
 {
-    internal class SongMap
+    public class SongMap
     {
 
         public SongMap() { }
@@ -83,6 +83,39 @@ namespace BeatSaberIndependentMapsManager
         public string songFolder
         {
             get; set;
+        }
+
+        [Newtonsoft.Json.JsonIgnore]
+        public string Bsr
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(songFolder)) return null;
+                var dirName = Path.GetFileName(songFolder);
+                var match = System.Text.RegularExpressions.Regex.Match(dirName, @"^([0-9a-fA-F]+)\s");
+                return match.Success ? match.Groups[1].Value.ToLower() : null;
+            }
+        }
+
+        [Newtonsoft.Json.JsonIgnore]
+        public string FullCoverImagePath
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(songFolder) || string.IsNullOrEmpty(_coverImageFilename)) return null;
+                string path = Path.Combine(songFolder, _coverImageFilename);
+                return File.Exists(path) ? path : null;
+            }
+        }
+        
+        [Newtonsoft.Json.JsonIgnore]
+        public string DifficultiesString
+        {
+            get
+            {
+                var diffs = GetDifficulties();
+                return diffs != null && diffs.Length > 0 ? string.Join(", ", diffs) : "未知";
+            }
         }
 
         public string[] GetDifficulties()

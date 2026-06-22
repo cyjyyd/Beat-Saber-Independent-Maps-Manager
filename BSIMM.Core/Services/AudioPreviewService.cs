@@ -53,7 +53,7 @@ namespace BeatSaberIndependentMapsManager.Services
         /// Try to load and play a song file.
         /// Returns true if playback started successfully.
         /// </summary>
-        public bool TryPlay(string songFolder, string songFilename)
+        public bool TryPlay(string songFolder, string songFilename, double previewStartTime = 0, double previewDuration = 0)
         {
             try
             {
@@ -77,8 +77,32 @@ namespace BeatSaberIndependentMapsManager.Services
                     return false;
                 }
 
+                IWaveProvider providerToPlay = _currentAudioReader;
+
+                if (previewStartTime > 0 || previewDuration > 0)
+                {
+                    var sampleProvider = _currentAudioReader.ToSampleProvider();
+                    var offsetProvider = new NAudio.Wave.SampleProviders.OffsetSampleProvider(sampleProvider);
+
+                    if (previewStartTime > 0)
+                    {
+                        offsetProvider.SkipOver = TimeSpan.FromSeconds(previewStartTime);
+                        // Also update the reader's position for accurate CurrentTime reporting if needed,
+                        // but actually OffsetSampleProvider skips internally by reading and discarding.
+                        // For better performance with large files, setting reader position directly is better:
+                        _currentAudioReader.CurrentTime = TimeSpan.FromSeconds(previewStartTime);
+                        offsetProvider.SkipOver = TimeSpan.Zero; // Since we seeked the stream directly
+                    }
+                    if (previewDuration > 0)
+                    {
+                        offsetProvider.Take = TimeSpan.FromSeconds(previewDuration);
+                    }
+                    
+                    providerToPlay = offsetProvider.ToWaveProvider();
+                }
+
                 _waveOut = new WaveOut();
-                _waveOut.Init(_currentAudioReader);
+                _waveOut.Init(providerToPlay);
                 _waveOut.Play();
                 return true;
             }

@@ -5,7 +5,6 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 
 namespace BeatSaberIndependentMapsManager
 {
@@ -54,9 +53,9 @@ namespace BeatSaberIndependentMapsManager
         }
         #endregion
 
-        public Config() 
+        public Config()
         {
-            iniFilePath = Application.StartupPath+"\\BSIMM.ini";
+            iniFilePath = Path.Combine(AppContext.BaseDirectory, "BSIMM.ini");
             if (File.Exists(iniFilePath))
             {
                 if(ReadIniData("Settings","HashCache","",iniFilePath)=="")

@@ -10,11 +10,16 @@ namespace BeatSaberIndependentMapsManager.Tests.Services
 {
     public class DummyMainView : IMainView
     {
+        private readonly object _runLock = new();
         public bool IsDisposed => false;
         public void InvokeLog(string message) { }
         public void Log(string message) { }
         public void UpdateProgress(int progress) { }
         public void UpdateStatus(string action, string status, int progress) { }
+        public void RunOnUIThread(Action action)
+        {
+            lock (_runLock) { action(); }
+        }
     }
 
     public class MainPresenterTests

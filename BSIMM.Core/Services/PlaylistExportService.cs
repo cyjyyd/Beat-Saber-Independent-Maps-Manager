@@ -31,7 +31,19 @@ namespace BeatSaberIndependentMapsManager.Services
             string outputPath,
             IProgress<int> progress = null)
         {
-            string imgBytes = "data:image/jpg;base64," + ImageToBase64(coverImage, ImageFormat.Jpeg);
+            string imgBytes;
+            if (coverImage != null)
+            {
+                imgBytes = "data:image/jpg;base64," + ImageToBase64(coverImage, ImageFormat.Jpeg);
+            }
+            else
+            {
+                using (var generatedCover = GenerateDefaultCover(musicPackName))
+                {
+                    imgBytes = "data:image/jpg;base64," + ImageToBase64(generatedCover, ImageFormat.Jpeg);
+                }
+            }
+            
             string author = Environment.UserName + "使用BSIMM@万毒不侵 生成";
             string description = "本歌单由" + Environment.UserName + "使用BSIMM生成\r\n" +
                 "BSIMM由万毒不侵开发，开源且免费，如果你是购买的请要求商家退款\r\n" +
@@ -70,7 +82,6 @@ namespace BeatSaberIndependentMapsManager.Services
             foreach (var pack in musicPackInfo)
             {
                 Image cover = musicPackCoverimgs.TryGetValue(pack.Key, out var img) ? img : null;
-                if (cover == null) continue;
 
                 tasks.Add(ExportMusicPackAsync(pack.Key, pack.Value, cover, outputPath,
                     new Progress<int>(pct => onProgress?.Invoke(pack.Key, pct))));
@@ -250,12 +261,42 @@ namespace BeatSaberIndependentMapsManager.Services
         /// </summary>
         public static string ImageToBase64(Image image, ImageFormat format)
         {
+            if (image == null) return "";
             using (var memoryStream = new MemoryStream())
             {
                 image.Save(memoryStream, format);
                 byte[] imageBytes = memoryStream.ToArray();
                 return Convert.ToBase64String(imageBytes);
             }
+        }
+
+        public static Image GenerateDefaultCover(string text)
+        {
+            Bitmap bmp = new Bitmap(256, 256);
+            using (Graphics gfx = Graphics.FromImage(bmp))
+            {
+                gfx.Clear(Color.FromArgb(40, 40, 40));
+                
+                StringFormat format = new StringFormat()
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center
+                };
+                
+                Font font = new Font("黑体", 36, FontStyle.Bold);
+                Brush brush = Brushes.White;
+                
+                // Draw title in center
+                gfx.DrawString(text, font, brush, new RectangleF(0, 0, 256, 256), format);
+                
+                // Draw watermark
+                font = new Font("黑体", 12, FontStyle.Bold);
+                SizeF textSize = gfx.MeasureString("BSIMM自动生成@万毒不侵", font);
+                float x = 256 - textSize.Width - 5;
+                float y = 256 - textSize.Height - 5;
+                gfx.DrawString("BSIMM自动生成@万毒不侵", font, brush, x, y);
+            }
+            return bmp;
         }
     }
 }

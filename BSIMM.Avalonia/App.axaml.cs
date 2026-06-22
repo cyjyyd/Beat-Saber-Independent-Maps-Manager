@@ -1,11 +1,10 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Data.Core;
-using Avalonia.Data.Core.Plugins;
-using System.Linq;
 using Avalonia.Markup.Xaml;
-using BSIMM.Avalonia.ViewModels;
+using BSIMM.Avalonia.Services;
 using BSIMM.Avalonia.Views;
+using BeatSaberIndependentMapsManager;
+using BeatSaberIndependentMapsManager.ViewModels;
 
 namespace BSIMM.Avalonia;
 
@@ -20,10 +19,15 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow
-            {
-                DataContext = new MainWindowViewModel(),
-            };
+            var config = new Config();
+            var mainWindow = new MainWindow();
+            var mainView = new AvaloniaMainView(mainWindow);
+            var mainViewModel = new MainViewModel(mainView, config);
+
+            mainWindow.DataContext = mainViewModel;
+            desktop.MainWindow = mainWindow;
+
+            mainViewModel.InitializeGameDetection();
         }
 
         base.OnFrameworkInitializationCompleted();

@@ -500,6 +500,22 @@ namespace BeatSaberIndependentMapsManager
             }
             catch { }
         }
+        void IMainView.RunOnUIThread(Action action)
+        {
+            if (IsDisposed) return;
+            if (InvokeRequired)
+            {
+                try
+                {
+                    Invoke(action);
+                }
+                catch { }
+            }
+            else
+            {
+                action();
+            }
+        }
         #endregion
         #region 曲包和歌单管理
         private void addFolder(string path)
