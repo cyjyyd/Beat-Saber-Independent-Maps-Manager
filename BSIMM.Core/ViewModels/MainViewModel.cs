@@ -27,6 +27,7 @@ namespace BeatSaberIndependentMapsManager.ViewModels
         public SongScanService SongScanner { get; }
         public BeatSaverSearchService BeatSaverSearch { get; }
         public LocalCacheManager LocalCache { get; private set; }
+        public Config Config => _config;
 
         // MVVM Observable Properties
         [ObservableProperty]

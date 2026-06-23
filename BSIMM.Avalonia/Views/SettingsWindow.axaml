@@ -1,0 +1,84 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BSIMM.Avalonia.Views.SettingsWindow"
+        Title="设置" Width="520" Height="560"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="{DynamicResource AppBackgroundBrush}"
+        Foreground="{DynamicResource TextPrimaryBrush}">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="AppBackgroundBrush">#F4F7FC</SolidColorBrush>
+                    <SolidColorBrush x:Key="PanelBackgroundBrush">#FFFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="BorderBrush">#D5DDEB</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextPrimaryBrush">#1A1E24</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextSecondaryBrush">#5A6A85</SolidColorBrush>
+                    <SolidColorBrush x:Key="HighlightBlueBrush">#0078D4</SolidColorBrush>
+                    <SolidColorBrush x:Key="HighlightRedBrush">#E81123</SolidColorBrush>
+                    <SolidColorBrush x:Key="HighlightOrangeBrush">#FF4500</SolidColorBrush>
+                    <SolidColorBrush x:Key="HighlightGreenBrush">#2E8B57</SolidColorBrush>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="AppBackgroundBrush">#0B0E14</SolidColorBrush>
+                    <SolidColorBrush x:Key="PanelBackgroundBrush">#12161E</SolidColorBrush>
+                    <SolidColorBrush x:Key="BorderBrush">#1C2433</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextPrimaryBrush">#FFFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextSecondaryBrush">#8E9EBC</SolidColorBrush>
+                    <SolidColorBrush x:Key="HighlightBlueBrush">#00D2FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="HighlightRedBrush">#FF1B51</SolidColorBrush>
+                    <SolidColorBrush x:Key="HighlightOrangeBrush">#FF6347</SolidColorBrush>
+                    <SolidColorBrush x:Key="HighlightGreenBrush">#3CB371</SolidColorBrush>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid RowDefinitions="*,Auto" Margin="16">
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="16">
+
+                <!-- Local Cache Section -->
+                <Border Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="本地缓存" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource HighlightBlueBrush}" />
+
+                        <CheckBox Name="ChkLocalCache" Content="启用本地缓存" Click="OnLocalCacheChanged" />
+
+                        <!-- Cache Status -->
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="状态：" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" />
+                            <TextBlock Name="LblCacheStatus" Text="未下载" VerticalAlignment="Center" FontWeight="Bold" Foreground="{DynamicResource HighlightRedBrush}" />
+                        </StackPanel>
+
+                        <!-- Progress Bar -->
+                        <ProgressBar Name="ProgressCache" Minimum="0" Maximum="100" Value="0" Height="18" IsVisible="False" />
+
+                        <!-- Download Button -->
+                        <Button Name="BtnDownloadCache" Content="下载本地缓存" Click="OnDownloadCacheClick" Classes="bs-blue" HorizontalAlignment="Left" MinWidth="160" />
+
+                        <TextBlock Text="缓存文件约230MB，下载后可使用更丰富的筛选条件（排行榜收录、统计数据等）"
+                                   TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- General Settings -->
+                <Border Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="常规设置" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource HighlightBlueBrush}" />
+
+                        <CheckBox Name="ChkHashCache" Content="启用哈希缓存（加速歌单导出）" />
+                        <CheckBox Name="ChkSystemProxy" Content="使用系统代理（推荐国内用户开启）" Click="OnSystemProxyChanged" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Bottom -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,12,0,0">
+            <Button Content="关闭" Click="OnCloseClick" Width="80" />
+        </StackPanel>
+    </Grid>
+</Window>

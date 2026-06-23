@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using BeatSaberIndependentMapsManager;
@@ -568,6 +570,31 @@ public partial class MainWindow : Window
                 {
                     vm.StatusText = "本地缓存不可用，请先在设置中下载缓存";
                     vm.ProgressValue = 100;
+                    // Offer to download cache
+                    bool download = await ShowConfirmDialogAsync("下载缓存", "本地缓存未下载。缓存文件约230MB，是否立即下载？\n\n下载后可使用更丰富的筛选条件（排行榜收录、统计数据等）");
+                    if (download)
+                    {
+                        await DownloadCacheWithProgressAsync(vm);
+                        if (vm.LocalCache.IsCacheAvailable)
+                        {
+                            vm.StatusText = "缓存下载完成，正在筛选...";
+                            // Retry the filter now that cache is available
+                            var retryResults = await Task.Run(() => vm.LocalCache.ParallelFilterMaps(preset, new Progress<int>(pct =>
+                            {
+                                Dispatcher.UIThread.Post(() => vm.ProgressValue = pct);
+                            })));
+                            _totalResults = retryResults.Count;
+                            _totalPages = (_totalResults + 20 - 1) / 20;
+                            _currentPage = page;
+                            int startIdx = page * 20;
+                            int endIdx = Math.Min(startIdx + 20, _totalResults);
+                            _currentSearchResults = retryResults.Skip(startIdx).Take(20).ToList();
+                            searchResultsList.ItemsSource = _currentSearchResults;
+                            UpdatePaginationControls();
+                            vm.StatusText = $"本地缓存筛选完成：共 {_totalResults} 条，当前第 {_currentPage + 1}/{_totalPages} 页";
+                            _ = PrefetchCoversAsync(_currentSearchResults, _coverLoadCts.Token);
+                        }
+                    }
                     return;
                 }
 
@@ -874,5 +901,206 @@ public partial class MainWindow : Window
     private static bool IsDuplicate(string str)
     {
         return Regex.IsMatch(str, @"\[([0-9]+)\]$");
+    }
+
+    private async Task<bool> ShowConfirmDialogAsync(string title, string message)
+    {
+        var dlg = new Window
+        {
+            Title = title,
+            Width = 400,
+            Height = 200,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false,
+            ShowInTaskbar = false,
+            Background = this.TryFindResource("AppBackgroundBrush", out var bg) && bg is IBrush ib ? ib : Brush.Parse("#1A1E24")
+        };
+        var panel = new StackPanel { Margin = new Thickness(20), Spacing = 16 };
+        panel.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Foreground = Brush.Parse("#FFFFFF") });
+        var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 10 };
+        var btnNo = new Button { Content = "否", Width = 70 };
+        var btnYes = new Button { Content = "是", Width = 70, Classes = { "bs-blue" } };
+        btnPanel.Children.Add(btnNo);
+        btnPanel.Children.Add(btnYes);
+        panel.Children.Add(btnPanel);
+        dlg.Content = panel;
+
+        btnYes.Click += (s, e) => dlg.Close(true);
+        btnNo.Click += (s, e) => dlg.Close(false);
+
+        return await dlg.ShowDialog<bool>(this);
+    }
+
+    private async Task DownloadCacheWithProgressAsync(MainViewModel vm)
+    {
+        vm.ActionText = "下载：";
+        vm.StatusText = "正在下载本地缓存...";
+        vm.ProgressValue = 0;
+
+        vm.LocalCache.DownloadProgress += (s, p) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                vm.ProgressValue = (int)p.Percentage;
+                vm.StatusText = p.Status != null && p.Status.StartsWith("正在下载")
+                    ? $"{p.Status} {p.Percentage:F1}%"
+                    : (p.Status ?? "下载中...");
+            });
+        };
+
+        await vm.LocalCache.DownloadCacheAsync();
+        vm.ProgressValue = 100;
+    }
+
+    private async void OnBatchExportClick(object? sender, RoutedEventArgs e)
+    {
+        var vm = ViewModel;
+        var batchWindow = new BatchExportWindow();
+        await batchWindow.ShowDialog(this);
+
+        if (batchWindow.SelectedPresets.Count == 0) return;
+
+        await BatchExportPresetsAsync(vm, batchWindow.SelectedPresets, batchWindow.OutputDirectory);
+    }
+
+    private async Task BatchExportPresetsAsync(MainViewModel vm, List<FilterPreset> presets, string outputDir)
+    {
+        if (!Directory.Exists(outputDir)) Directory.CreateDirectory(outputDir);
+
+        vm.ActionText = "批处理：";
+        vm.StatusText = $"正在批处理导出 {presets.Count} 个预设...";
+        vm.ProgressValue = 0;
+
+        int successCount = 0, failCount = 0, zeroResultCount = 0;
+
+        // Check if all presets require local cache (fast path)
+        bool allRequireLocalCache = presets.All(p => vm.BeatSaverSearch.RequiresLocalCache(p));
+
+        if (allRequireLocalCache)
+        {
+            vm.EnsureLocalCacheInitialized();
+            if (!vm.LocalCache.IsCacheAvailable)
+            {
+                vm.StatusText = "需要本地缓存但未下载，请先在设置中下载本地缓存。";
+                vm.ProgressValue = 100;
+                return;
+            }
+
+            // Check if cache is outdated
+            bool outdated = await vm.LocalCache.IsCacheOutdatedAsync();
+            if (outdated)
+            {
+                bool update = await ShowConfirmDialogAsync("缓存已过期", "本地缓存已过期（超过7天），建议更新以获取最新谱面数据。\n\n是否立即更新缓存？\n选择「否」将继续使用旧缓存进行批处理。");
+                if (update)
+                {
+                    await DownloadCacheWithProgressAsync(vm);
+                }
+            }
+
+            // Parallel batch filter
+            vm.StatusText = "正在并行筛选中...";
+            List<List<BeatSaverMapSlim>> filterResults;
+            try
+            {
+                filterResults = await Task.Run(() => vm.LocalCache.ParallelBatchFilterSlim(presets, new Progress<int>(pct =>
+                {
+                    Dispatcher.UIThread.Post(() => vm.ProgressValue = pct / 2);
+                })));
+            }
+            catch (Exception ex)
+            {
+                vm.StatusText = $"批处理筛选失败: {ex.Message}";
+                vm.ProgressValue = 100;
+                return;
+            }
+
+            // Parallel export
+            int total = presets.Count;
+            int done = 0;
+            var doneLock = new object();
+
+            await Task.Run(() =>
+            {
+                var options = new ParallelOptions { MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, total) };
+                Parallel.For(0, total, options, i =>
+                {
+                    var preset = presets[i];
+                    var maps = filterResults[i];
+                    if (maps == null || maps.Count == 0)
+                    {
+                        System.Threading.Interlocked.Increment(ref zeroResultCount);
+                        return;
+                    }
+
+                    try
+                    {
+                        string coverText = PlaylistExportService.ExtractCoverTextFromPresetName(preset.Name);
+                        string filePath = Path.Combine(outputDir, PlaylistExportService.SanitizeFileName(preset.Name) + ".bplist");
+                        var fullMaps = maps.Select(m => m.ToFullMap()).ToList();
+                        bool ok = vm.PlaylistExporter.ExportMapsToPlaylist(fullMaps, filePath, preset.Name, coverText, silent: true);
+                        if (ok)
+                            System.Threading.Interlocked.Increment(ref successCount);
+                        else
+                            System.Threading.Interlocked.Increment(ref failCount);
+                    }
+                    catch
+                    {
+                        System.Threading.Interlocked.Increment(ref failCount);
+                    }
+
+                    lock (doneLock)
+                    {
+                        done++;
+                        int pct = 50 + done * 50 / total;
+                        Dispatcher.UIThread.Post(() => vm.ProgressValue = pct);
+                    }
+                });
+            });
+        }
+        else
+        {
+            // Online API path (serial)
+            vm.StatusText = "正在通过API获取数据（较慢）...";
+            int total = presets.Count;
+            int done = 0;
+            foreach (var preset in presets)
+            {
+                try
+                {
+                    var maps = await vm.BeatSaverSearch.FetchAllMapsForPresetAsync(preset, useSharedCache: false, pct =>
+                    {
+                        Dispatcher.UIThread.Post(() => vm.ProgressValue = done * 100 / total + pct / total);
+                    });
+
+                    if (maps == null || maps.Count == 0)
+                    {
+                        zeroResultCount++;
+                    }
+                    else
+                    {
+                        string coverText = PlaylistExportService.ExtractCoverTextFromPresetName(preset.Name);
+                        string filePath = Path.Combine(outputDir, PlaylistExportService.SanitizeFileName(preset.Name) + ".bplist");
+                        bool ok = vm.PlaylistExporter.ExportMapsToPlaylist(maps, filePath, preset.Name, coverText, silent: true);
+                        if (ok) successCount++; else failCount++;
+                    }
+                }
+                catch
+                {
+                    failCount++;
+                }
+                done++;
+                vm.ProgressValue = done * 100 / total;
+            }
+        }
+
+        vm.StatusText = $"批处理完成: 成功 {successCount}, 失败 {failCount}, 无结果 {zeroResultCount}";
+        vm.ProgressValue = 100;
+    }
+
+    private async void OnSettingsClick(object? sender, RoutedEventArgs e)
+    {
+        var vm = ViewModel;
+        var settingsWindow = new SettingsWindow(vm.Config, vm.LocalCache);
+        await settingsWindow.ShowDialog(this);
     }
 }

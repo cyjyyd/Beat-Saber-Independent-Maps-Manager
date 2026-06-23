@@ -8,6 +8,7 @@ using global::Avalonia.Media;
 using BeatSaberIndependentMapsManager;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 namespace BSIMM.Avalonia.Views
@@ -16,6 +17,12 @@ namespace BSIMM.Avalonia.Views
     {
         private StackPanel _groupsPanel = null!;
         private Border _emptyPlaceholder = null!;
+        private ComboBox _cboPreset = null!;
+        private TextBlock _lblFilterSummary = null!;
+
+        private List<FilterPreset> _savedPresets = new();
+        private string _presetsDir = Path.Combine(AppContext.BaseDirectory, "presets");
+
         public FilterPreset? CurrentPreset { get; private set; }
         public event EventHandler<FilterPreset>? SearchRequested;
 
@@ -26,8 +33,19 @@ namespace BSIMM.Avalonia.Views
             AvaloniaXamlLoader.Load(this);
             _groupsPanel = this.FindControl<StackPanel>("GroupsPanel")!;
             _emptyPlaceholder = this.FindControl<Border>("EmptyPlaceholder")!;
+            _cboPreset = this.FindControl<ComboBox>("CboPreset")!;
+            _lblFilterSummary = this.FindControl<TextBlock>("LblFilterSummary")!;
+
+            LoadSavedPresets();
             CurrentPreset = preset ?? new FilterPreset("新预设");
+            if (CurrentPreset.Groups.Count == 0)
+            {
+                var g = new FilterGroup("条件组1");
+                g.AddCondition(new FilterCondition(FilterConditionType.Query));
+                CurrentPreset.AddGroup(g);
+            }
             RebuildUI();
+            UpdatePresetCombo();
         }
 
         private IBrush? GetBrush(string key)
@@ -37,9 +55,72 @@ namespace BSIMM.Avalonia.Views
             return null;
         }
 
+        private void LoadSavedPresets()
+        {
+            _savedPresets.Clear();
+            try
+            {
+                if (Directory.Exists(_presetsDir))
+                {
+                    foreach (var file in Directory.GetFiles(_presetsDir, "*.bsf"))
+                    {
+                        var p = FilterPreset.LoadFromFile(file);
+                        if (p != null) _savedPresets.Add(p);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void UpdatePresetCombo()
+        {
+            var names = _savedPresets.Select(p => p.Name).ToList();
+            _cboPreset.ItemsSource = names;
+            if (CurrentPreset != null)
+            {
+                var idx = _savedPresets.FindIndex(p => p.Name == CurrentPreset.Name);
+                _cboPreset.SelectedIndex = idx >= 0 ? idx : -1;
+            }
+            _cboPreset.SelectionChanged += (s, e) =>
+            {
+                if (_cboPreset.SelectedIndex >= 0 && _cboPreset.SelectedIndex < _savedPresets.Count)
+                {
+                    CurrentPreset = _savedPresets[_cboPreset.SelectedIndex].Clone();
+                    RebuildUI();
+                }
+            };
+        }
+
+        private void UpdateFilterSummary()
+        {
+            if (CurrentPreset == null || CurrentPreset.Groups.Count == 0)
+            {
+                _lblFilterSummary.Text = "当前筛选：无";
+                return;
+            }
+            var sb = new System.Text.StringBuilder("当前筛选：");
+            for (int i = 0; i < CurrentPreset.Groups.Count; i++)
+            {
+                var g = CurrentPreset.Groups[i];
+                if (!g.IsEnabled) continue;
+                var parts = new List<string>();
+                foreach (var c in g.Conditions)
+                {
+                    if (!c.IsEnabled) continue;
+                    parts.Add(FilterConditionMetadata.GetDisplayName(c.Type));
+                }
+                if (parts.Count > 0)
+                    sb.Append($"[{string.Join($" {g.GroupOperator} ", parts)}]");
+                if (i < CurrentPreset.Groups.Count - 1)
+                    sb.Append($" {CurrentPreset.Groups[i].GroupOperator} ");
+            }
+            _lblFilterSummary.Text = sb.ToString();
+        }
+
         private void RebuildUI()
         {
             _groupsPanel.Children.Clear();
+            UpdateFilterSummary();
 
             if (CurrentPreset == null || CurrentPreset.Groups.Count == 0)
             {
@@ -72,7 +153,7 @@ namespace BSIMM.Avalonia.Views
             // === Group Header ===
             var headerPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
             var chkEnabled = new CheckBox { Content = "启用", IsChecked = group.IsEnabled, VerticalAlignment = VerticalAlignment.Center };
-            chkEnabled.IsCheckedChanged += (s, e) => group.IsEnabled = chkEnabled.IsChecked ?? true;
+            chkEnabled.IsCheckedChanged += (s, e) => { group.IsEnabled = chkEnabled.IsChecked ?? true; UpdateFilterSummary(); };
 
             var lblName = new TextBlock
             {
@@ -90,9 +171,9 @@ namespace BSIMM.Avalonia.Views
                 VerticalAlignment = VerticalAlignment.Center,
                 MinWidth = 140
             };
-            cmbOperator.SelectionChanged += (s, e) => group.GroupOperator = cmbOperator.SelectedIndex == 0 ? LogicOperator.And : LogicOperator.Or;
+            cmbOperator.SelectionChanged += (s, e) => { group.GroupOperator = cmbOperator.SelectedIndex == 0 ? LogicOperator.And : LogicOperator.Or; UpdateFilterSummary(); };
 
-            var chkCache = new CheckBox { Content = "本地缓存", IsChecked = group.UseLocalCache, VerticalAlignment = VerticalAlignment.Center };
+            var chkCache = new CheckBox { Content = "本地缓存", IsChecked = group.UseLocalCache, VerticalAlignment = VerticalAlignment.Center, Foreground = GetBrush("HighlightBlueBrush") };
             chkCache.IsCheckedChanged += (s, e) => group.UseLocalCache = chkCache.IsChecked ?? false;
 
             var btnRemoveGroup = new Button { Content = "删除组", VerticalAlignment = VerticalAlignment.Center };
@@ -110,31 +191,64 @@ namespace BSIMM.Avalonia.Views
             outerStack.Children.Add(sep);
 
             // === Conditions List ===
-            var conditionsPanel = new StackPanel { Spacing = 6, Margin = new Thickness(0, 0, 0, 0) };
+            var conditionsPanel = new StackPanel { Spacing = 6, Margin = new Thickness(0, 0, 0, 0), Tag = group };
             foreach (var condition in group.Conditions)
             {
                 conditionsPanel.Children.Add(CreateConditionControl(condition, group));
             }
             outerStack.Children.Add(conditionsPanel);
 
-            // === Add Condition Button ===
-            var btnAddCondition = new Button
+            // === Add Condition Combo ===
+            var addCondPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
+            var cboAddCondition = new ComboBox { MinWidth = 220, VerticalAlignment = VerticalAlignment.Center };
+            PopulateConditionTypes(cboAddCondition, group.UseLocalCache);
+            cboAddCondition.SelectionChanged += (s, e) =>
             {
-                Content = "+ 添加条件",
-                Margin = new Thickness(0, 4, 0, 0),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                Classes = { "bs-blue" }
+                if (cboAddCondition.SelectedIndex <= 0) return;
+                var tag = cboAddCondition.SelectedItem as ConditionComboItem;
+                if (tag == null || tag.Type == FilterConditionType.None) return;
+                var newCond = new FilterCondition(tag.Type);
+                group.Conditions.Add(newCond);
+                conditionsPanel.Children.Add(CreateConditionControl(newCond, group));
+                cboAddCondition.SelectedIndex = 0;
             };
-            btnAddCondition.Click += (s, e) =>
-            {
-                var newCondition = new FilterCondition(FilterConditionType.Query);
-                group.Conditions.Add(newCondition);
-                conditionsPanel.Children.Add(CreateConditionControl(newCondition, group));
-            };
-            outerStack.Children.Add(btnAddCondition);
+            addCondPanel.Children.Add(new TextBlock { Text = "+ 添加条件：", VerticalAlignment = VerticalAlignment.Center, Foreground = GetBrush("TextSecondaryBrush") });
+            addCondPanel.Children.Add(cboAddCondition);
+            outerStack.Children.Add(addCondPanel);
 
             groupBorder.Child = outerStack;
             return groupBorder;
+        }
+
+        private class ConditionComboItem
+        {
+            public FilterConditionType Type { get; set; }
+            public string Display { get; set; } = "";
+            public bool IsSeparator { get; set; }
+            public override string ToString() => Display;
+        }
+
+        private void PopulateConditionTypes(ComboBox cbo, bool useLocalCache)
+        {
+            var items = new List<ConditionComboItem>
+            {
+                new ConditionComboItem { Type = FilterConditionType.None, Display = "-- 添加条件 --" }
+            };
+
+            var grouped = FilterConditionMetadata.GetGroupedConditions();
+            foreach (var cat in grouped)
+            {
+                if (!useLocalCache && cat.Key == "本地缓存专属") continue;
+
+                items.Add(new ConditionComboItem { Type = FilterConditionType.None, Display = $"── {cat.Key} ──", IsSeparator = true });
+                foreach (var type in cat.Value)
+                {
+                    if (!useLocalCache && FilterConditionMetadata.RequiresLocalCache(type)) continue;
+                    items.Add(new ConditionComboItem { Type = type, Display = "  " + FilterConditionMetadata.GetDisplayName(type) });
+                }
+            }
+            cbo.ItemsSource = items;
+            cbo.SelectedIndex = 0;
         }
 
         private StackPanel CreateConditionControl(FilterCondition condition, FilterGroup group)
@@ -143,27 +257,25 @@ namespace BSIMM.Avalonia.Views
 
             // Enable checkbox
             var chkEnabled = new CheckBox { IsChecked = condition.IsEnabled, VerticalAlignment = VerticalAlignment.Center };
-            chkEnabled.IsCheckedChanged += (s, e) => condition.IsEnabled = chkEnabled.IsChecked ?? true;
+            chkEnabled.IsCheckedChanged += (s, e) => { condition.IsEnabled = chkEnabled.IsChecked ?? true; UpdateFilterSummary(); };
             panel.Children.Add(chkEnabled);
 
-            // Condition type dropdown - build a flat list with category labels
+            // Condition type dropdown
+            var typeItems = new List<ConditionComboItem>();
             var groupedConditions = FilterConditionMetadata.GetGroupedConditions();
-            var typeItems = new List<string>();
-            var typeMap = new List<FilterConditionType>();
             foreach (var category in groupedConditions)
             {
-                typeItems.Add($"── {category.Key} ──");
-                typeMap.Add(FilterConditionType.None); // separator marker
+                if (!group.UseLocalCache && category.Key == "本地缓存专属") continue;
+                typeItems.Add(new ConditionComboItem { Type = FilterConditionType.None, Display = $"── {category.Key} ──", IsSeparator = true });
                 foreach (var type in category.Value)
                 {
-                    typeItems.Add("  " + FilterConditionMetadata.GetDisplayName(type));
-                    typeMap.Add(type);
+                    if (!group.UseLocalCache && FilterConditionMetadata.RequiresLocalCache(type)) continue;
+                    typeItems.Add(new ConditionComboItem { Type = type, Display = "  " + FilterConditionMetadata.GetDisplayName(type) });
                 }
             }
-            var cmbType = new ComboBox { ItemsSource = typeItems, MinWidth = 180, VerticalAlignment = VerticalAlignment.Center };
-            var currentDisplayName = "  " + FilterConditionMetadata.GetDisplayName(condition.Type);
-            cmbType.SelectedIndex = typeItems.IndexOf(currentDisplayName);
-            if (cmbType.SelectedIndex < 0) cmbType.SelectedIndex = typeItems.IndexOf("  搜索关键词");
+            var cmbType = new ComboBox { MinWidth = 180, VerticalAlignment = VerticalAlignment.Center, ItemsSource = typeItems };
+            var matchIdx = typeItems.FindIndex(t => t.Type == condition.Type);
+            cmbType.SelectedIndex = matchIdx >= 0 ? matchIdx : typeItems.FindIndex(t => t.Type == FilterConditionType.Query);
             panel.Children.Add(cmbType);
 
             // Value input (dynamic based on type)
@@ -185,11 +297,12 @@ namespace BSIMM.Avalonia.Views
             cmbType.SelectionChanged += (s, e) =>
             {
                 if (cmbType.SelectedIndex < 0) return;
-                var selectedType = typeMap[cmbType.SelectedIndex];
-                if (selectedType == FilterConditionType.None) return; // category separator
-                condition.Type = selectedType;
+                var item = cmbType.SelectedItem as ConditionComboItem;
+                if (item == null || item.Type == FilterConditionType.None) return;
+                condition.Type = item.Type;
                 condition.SetDefaultValue();
                 UpdateValueInput(valuePanel, condition);
+                UpdateFilterSummary();
             };
 
             return panel;
@@ -232,10 +345,10 @@ namespace BSIMM.Avalonia.Views
 
                 case FilterValueType.Range:
                     var rangeVal = condition.Value as RangeValue ?? new RangeValue();
-                    var minNum = new NumericUpDown { Value = (decimal?)(rangeVal.Min ?? 0), MinWidth = 80, PlaceholderText = "最小" };
-                    var maxNum = new NumericUpDown { Value = (decimal?)(rangeVal.Max ?? 0), MinWidth = 80, PlaceholderText = "最大" };
-                    minNum.ValueChanged += (s, e) => { var r = condition.Value as RangeValue ?? new RangeValue(); r.Min = (double?)(minNum.Value); condition.Value = r; };
-                    maxNum.ValueChanged += (s, e) => { var r = condition.Value as RangeValue ?? new RangeValue(); r.Max = (double?)(maxNum.Value); condition.Value = r; };
+                    var minNum = new NumericUpDown { Value = (decimal)(double.IsNaN(rangeVal.MinRaw) ? 0 : rangeVal.MinRaw), MinWidth = 80, PlaceholderText = "最小" };
+                    var maxNum = new NumericUpDown { Value = (decimal)(double.IsNaN(rangeVal.MaxRaw) ? 0 : rangeVal.MaxRaw), MinWidth = 80, PlaceholderText = "最大" };
+                    minNum.ValueChanged += (s, e) => { var r = condition.Value as RangeValue ?? new RangeValue(); r.MinRaw = (double)(minNum.Value ?? 0); condition.Value = r; };
+                    maxNum.ValueChanged += (s, e) => { var r = condition.Value as RangeValue ?? new RangeValue(); r.MaxRaw = (double)(maxNum.Value ?? 0); condition.Value = r; };
                     panel.Children.Add(minNum);
                     panel.Children.Add(new TextBlock { Text = "~", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0) });
                     panel.Children.Add(maxNum);
@@ -290,41 +403,37 @@ namespace BSIMM.Avalonia.Views
             }
         }
 
+        // === Preset Management ===
+
         private void OnNewPresetClick(object? sender, RoutedEventArgs e)
         {
             CurrentPreset = new FilterPreset("新预设");
+            var g = new FilterGroup("条件组1");
+            g.AddCondition(new FilterCondition(FilterConditionType.Query));
+            CurrentPreset.AddGroup(g);
+            _cboPreset.SelectedIndex = -1;
             RebuildUI();
         }
 
-        private async void OnLoadPresetClick(object? sender, RoutedEventArgs e)
+        private void OnSavePresetClick(object? sender, RoutedEventArgs e)
         {
-            var topLevel = GetTopLevel(this);
-            if (topLevel == null) return;
-            var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            if (CurrentPreset == null) return;
+            if (!Directory.Exists(_presetsDir)) Directory.CreateDirectory(_presetsDir);
+
+            // If preset name matches an existing one, overwrite
+            var existing = _savedPresets.FirstOrDefault(p => p.Name == CurrentPreset.Name);
+            if (existing != null)
             {
-                Title = "加载筛选预设",
-                AllowMultiple = false,
-                FileTypeFilter = new[]
-                {
-                    new FilePickerFileType("筛选预设文件 (*.bsf)") { Patterns = new[] { "*.bsf" } },
-                    new FilePickerFileType("JSON文件 (*.json)") { Patterns = new[] { "*.json" } },
-                    new FilePickerFileType("所有文件") { Patterns = new[] { "*.*" } }
-                }
-            });
-            if (files != null && files.Count > 0)
-            {
-                string path = files[0].Path.LocalPath;
-                var preset = FilterPreset.LoadFromFile(path);
-                if (preset != null)
-                {
-                    CurrentPreset = preset;
-                    RebuildUI();
-                }
+                _savedPresets.Remove(existing);
             }
+            _savedPresets.Add(CurrentPreset);
+            CurrentPreset.SaveToFile(Path.Combine(_presetsDir, CurrentPreset.Name + ".bsf"));
+            UpdatePresetCombo();
         }
 
-        private async void OnSavePresetClick(object? sender, RoutedEventArgs e)
+        private async void OnSaveAsPresetClick(object? sender, RoutedEventArgs e)
         {
+            if (CurrentPreset == null) return;
             var topLevel = GetTopLevel(this);
             if (topLevel == null) return;
             var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
@@ -340,7 +449,78 @@ namespace BSIMM.Avalonia.Views
             if (file != null && CurrentPreset != null)
             {
                 string path = file.Path.LocalPath;
+                CurrentPreset.Name = Path.GetFileNameWithoutExtension(path);
                 CurrentPreset.SaveToFile(path);
+            }
+        }
+
+        private void OnDeletePresetClick(object? sender, RoutedEventArgs e)
+        {
+            if (_cboPreset.SelectedIndex < 0 || _cboPreset.SelectedIndex >= _savedPresets.Count) return;
+            var preset = _savedPresets[_cboPreset.SelectedIndex];
+            var path = Path.Combine(_presetsDir, preset.Name + ".bsf");
+            if (File.Exists(path)) File.Delete(path);
+            _savedPresets.RemoveAt(_cboPreset.SelectedIndex);
+            UpdatePresetCombo();
+        }
+
+        private async void OnImportPresetClick(object? sender, RoutedEventArgs e)
+        {
+            var topLevel = GetTopLevel(this);
+            if (topLevel == null) return;
+            var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "导入筛选预设（支持多选）",
+                AllowMultiple = true,
+                FileTypeFilter = new[]
+                {
+                    new FilePickerFileType("筛选预设文件 (*.bsf)") { Patterns = new[] { "*.bsf" } },
+                    new FilePickerFileType("JSON文件 (*.json)") { Patterns = new[] { "*.json" } },
+                    new FilePickerFileType("所有文件") { Patterns = new[] { "*.*" } }
+                }
+            });
+            if (files == null || files.Count == 0) return;
+
+            if (!Directory.Exists(_presetsDir)) Directory.CreateDirectory(_presetsDir);
+            foreach (var f in files)
+            {
+                string path = f.Path.LocalPath;
+                var preset = FilterPreset.LoadFromFile(path);
+                if (preset == null) continue;
+
+                // De-duplicate name
+                string name = preset.Name;
+                int n = 2;
+                while (_savedPresets.Any(p => p.Name == name))
+                {
+                    name = $"{preset.Name} ({n})";
+                    n++;
+                }
+                preset.Name = name;
+                preset.SaveToFile(Path.Combine(_presetsDir, name + ".bsf"));
+                _savedPresets.Add(preset);
+            }
+            UpdatePresetCombo();
+        }
+
+        private async void OnExportPresetClick(object? sender, RoutedEventArgs e)
+        {
+            if (CurrentPreset == null) return;
+            var topLevel = GetTopLevel(this);
+            if (topLevel == null) return;
+            var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "导出筛选预设",
+                DefaultExtension = "bsf",
+                FileTypeChoices = new[]
+                {
+                    new FilePickerFileType("筛选预设文件 (*.bsf)") { Patterns = new[] { "*.bsf" } },
+                    new FilePickerFileType("JSON文件 (*.json)") { Patterns = new[] { "*.json" } }
+                }
+            });
+            if (file != null)
+            {
+                CurrentPreset.SaveToFile(file.Path.LocalPath);
             }
         }
 
