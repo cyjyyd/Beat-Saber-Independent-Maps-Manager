@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 
@@ -90,30 +91,46 @@ namespace BeatSaberIndependentMapsManager.Services
 
             int processed = 0;
             int total = packSongs.Count;
+            
+            // 核心并发节流阀：最大并发数等于CPU逻辑核心数，既能跑满CPU，又不会让HDD磁头乱跳，同时控制峰值内存
+            int maxConcurrency = Math.Max(2, Environment.ProcessorCount);
+            using var semaphore = new SemaphoreSlim(maxConcurrency);
 
-            foreach (var kvp in packSongs)
+            var tasks = packSongs.Select(async kvp =>
             {
-                bool containsKey;
-                lock (_hashLock)
+                await semaphore.WaitAsync();
+                try
                 {
-                    containsKey = _songsHash.ContainsKey(kvp.Key);
-                }
-
-                if (!containsKey)
-                {
-                    string hash = await ComputeSongHashAsync(kvp.Value);
+                    bool containsKey;
                     lock (_hashLock)
                     {
-                        _songsHash[kvp.Key] = hash;
+                        containsKey = _songsHash.ContainsKey(kvp.Key);
                     }
+
+                    if (!containsKey)
+                    {
+                        string hash = await ComputeSongHashAsync(kvp.Value);
+                        lock (_hashLock)
+                        {
+                            _songsHash[kvp.Key] = hash;
+                        }
+                    }
+                    
+                    var p = System.Threading.Interlocked.Increment(ref processed);
+                    onProgress?.Invoke(p * 100 / total);
                 }
-                processed++;
-                onProgress?.Invoke(processed * 100 / total);
-            }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
         }
 
         /// <summary>
         /// Get hash for a single song (from cache or compute).
+        /// Returns null if hash computation fails (e.g. missing files).
         /// </summary>
         public async Task<string> GetOrComputeHashAsync(string key, SongMap songMap)
         {
@@ -125,43 +142,48 @@ namespace BeatSaberIndependentMapsManager.Services
                     _songsHash = new Dictionary<string, string>();
             }
 
-            string hash = await ComputeSongHashAsync(songMap);
-            
-            lock (_hashLock)
+            try
             {
-                _songsHash[key] = hash;
+                string hash = await ComputeSongHashAsync(songMap);
+                lock (_hashLock)
+                {
+                    _songsHash[key] = hash;
+                }
+                return hash;
             }
-            return hash;
+            catch
+            {
+                // v1.0.0 compatibility: if files are missing, return null (caller skips)
+                return null;
+            }
         }
 
         /// <summary>
         /// Compute SHA1 hash of song files (Info.dat + difficulty files).
+        /// Matches v1.0.0 logic exactly: SHA1 over Info.dat + all difficulty files in order.
+        /// If any file is missing, throws FileNotFoundException (same as v1.0.0).
         /// </summary>
         public static async Task<string> ComputeSongHashAsync(SongMap songMap)
         {
-            using SHA1 sha1 = SHA1.Create();
-            string[] files = new[] { songMap.songFolder + "\\Info.dat" }
-                .Concat(songMap.GetDifficultiesFiles()
-                    .Select(f => songMap.songFolder + "\\" + f))
-                .ToArray();
-
-            foreach (string filePath in files)
+            return await Task.Run(() =>
             {
-                if (!File.Exists(filePath)) continue;
+                using SHA1 sha1 = SHA1.Create();
+                string[] files = new[] { songMap.songFolder + "\\Info.dat" }
+                    .Concat(songMap.GetDifficultiesFiles()
+                        .Select(f => songMap.songFolder + "\\" + f))
+                    .ToArray();
 
-                using FileStream fileStream = new FileStream(
-                    filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, useAsync: true);
-                byte[] buffer = new byte[65536];
-                int bytesRead;
-                while ((bytesRead = await fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                foreach (string filePath in files)
                 {
-                    sha1.TransformBlock(buffer, 0, bytesRead, null, 0);
+                    // v1.0.0 behavior: no File.Exists check, let it throw if missing
+                    byte[] fileBytes = File.ReadAllBytes(filePath);
+                    sha1.TransformBlock(fileBytes, 0, fileBytes.Length, null, 0);
                 }
-            }
 
-            sha1.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-            byte[] hashBytes = sha1.Hash;
-            return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+                sha1.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+                byte[] hashBytes = sha1.Hash;
+                return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+            });
         }
 
         /// <summary>

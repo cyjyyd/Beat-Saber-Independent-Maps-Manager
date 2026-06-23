@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Net.Http;
 using NAudio.Vorbis;
 using NAudio.Wave;
 
@@ -17,6 +18,17 @@ namespace BeatSaberIndependentMapsManager.Services
         private WaveOut _waveOut;
         private WaveStream _currentAudioReader;
         private bool _disposed;
+        private static readonly HttpClient _httpClient = CreateHttpClient();
+
+    private static HttpClient CreateHttpClient()
+    {
+        var handler = new HttpClientHandler
+        {
+            SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13,
+            ServerCertificateCustomValidationCallback = (sender, cert, chain, errors) => true
+        };
+        return new HttpClient(handler);
+    }
 
         public AudioState State => _waveOut == null ? AudioState.Stopped
             : _waveOut.PlaybackState == PlaybackState.Playing ? AudioState.Playing
@@ -146,6 +158,114 @@ namespace BeatSaberIndependentMapsManager.Services
             {
                 _currentAudioReader.Dispose();
                 _currentAudioReader = null;
+            }
+        }
+
+        /// <summary>
+        /// Play a local audio file with automatic format detection.
+        /// Tries MP3 (MediaFoundationReader), then OGG (VorbisWaveReader), then WAV.
+        /// Cleans up the file when playback stops.
+        /// </summary>
+        public void PlayLocalFile(string filePath)
+        {
+            StopAndDispose();
+
+            WaveStream? reader = null;
+
+            // Try MediaFoundationReader first (handles MP3, AAC, etc.)
+            try
+            {
+                reader = new MediaFoundationReader(filePath);
+            }
+            catch { }
+
+            // Try VorbisWaveReader for OGG
+            if (reader == null)
+            {
+                try
+                {
+                    reader = new VorbisWaveReader(filePath);
+                }
+                catch { }
+            }
+
+            // Try WaveFileReader for WAV
+            if (reader == null)
+            {
+                try
+                {
+                    reader = new WaveFileReader(filePath);
+                }
+                catch { }
+            }
+
+            if (reader == null)
+                throw new NotSupportedException("Unsupported audio format");
+
+            _currentAudioReader = reader;
+            _waveOut = new WaveOut();
+            _waveOut.Init(_currentAudioReader);
+            _waveOut.Play();
+
+            // Clean up temp file when playback stops
+            _waveOut.PlaybackStopped += (s, e) =>
+            {
+                try { if (File.Exists(filePath)) File.Delete(filePath); } catch { }
+            };
+        }
+
+        /// <summary>
+        /// Play a pre-loaded WaveStream (used for online preview from downloaded temp file).
+        /// The cleanupFile path will be deleted when playback stops.
+        /// </summary>
+        public void PlayStream(WaveStream reader, string? cleanupFile = null)
+        {
+            StopAndDispose();
+            _currentAudioReader = reader;
+            _waveOut = new WaveOut();
+            _waveOut.Init(_currentAudioReader);
+            _waveOut.Play();
+
+            if (!string.IsNullOrEmpty(cleanupFile))
+            {
+                _waveOut.PlaybackStopped += (s, e) =>
+                {
+                    try { if (File.Exists(cleanupFile)) File.Delete(cleanupFile); } catch { }
+                };
+            }
+        }
+
+        /// <summary>
+        /// Try to load and play a song from a URL (online preview from BeatSaver).
+        /// Downloads to a temp file, then plays with NAudio.
+        /// </summary>
+        public async System.Threading.Tasks.Task<bool> TryPlayFromUrlAsync(string url)
+        {
+            try
+            {
+                StopAndDispose();
+
+                // Download to temp file
+                string tempFile = Path.Combine(Path.GetTempPath(), $"bsim_preview_{Guid.NewGuid():N}.ogg");
+                byte[] data = await _httpClient.GetByteArrayAsync(url);
+                await File.WriteAllBytesAsync(tempFile, data);
+
+                _currentAudioReader = new VorbisWaveReader(tempFile);
+                _waveOut = new WaveOut();
+                _waveOut.Init(_currentAudioReader);
+                _waveOut.Play();
+
+                // Clean up temp file when playback stops
+                _waveOut.PlaybackStopped += (s, e) =>
+                {
+                    try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+                };
+
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
 

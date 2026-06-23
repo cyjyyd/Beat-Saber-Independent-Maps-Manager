@@ -6,10 +6,13 @@ using Avalonia.Threading;
 using BeatSaberIndependentMapsManager;
 using BeatSaberIndependentMapsManager.ViewModels;
 using BeatSaberIndependentMapsManager.Services;
+using BSIMM.Avalonia.Services;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BSIMM.Avalonia.Views;
@@ -125,9 +128,14 @@ public partial class MainWindow : Window
             try
             {
                 // 4. Heavy parsing work on background thread (using the captured 'vm' variable)
+                int lastProgress = -1;
                 var result = await Task.Run(() => vm.SongScanner.ScanFolder(folderPath, progress => 
                 {
-                    Dispatcher.UIThread.Post(() => vm.ProgressValue = progress);
+                    if (progress != lastProgress)
+                    {
+                        lastProgress = progress;
+                        Dispatcher.UIThread.Post(() => vm.ProgressValue = progress);
+                    }
                 }));
 
                 // 5. Update ViewModel with results (guaranteed on UI thread)
@@ -493,6 +501,372 @@ public partial class MainWindow : Window
                     vm.StatusText = $"扫描失败: {ex.Message}";
                     vm.ProgressValue = 100;
                 });
+            }
+        }
+    }
+
+    private FilterPreset? _currentFilterPreset;
+    private List<BeatSaverMap> _currentSearchResults = new();
+    private System.Threading.CancellationTokenSource? _searchCts;
+    private int _currentPage = 0;
+    private int _totalPages = 0;
+    private int _totalResults = 0;
+    private BeatSaverMap? _selectedBsMap;
+    private static readonly CoverImageCacheService _coverCache = new();
+    private CancellationTokenSource? _coverLoadCts;
+    private DispatcherTimer? _bsAudioTimer;
+
+    private async void OnOpenFilterBuilderClick(object? sender, RoutedEventArgs e)
+    {
+        var vm = ViewModel;
+        var window = new FilterBuilderWindow(_currentFilterPreset);
+        window.SearchRequested += async (s, preset) =>
+        {
+            _currentFilterPreset = preset;
+            _currentPage = 0;
+            await ExecuteSearch(vm, preset, 0);
+        };
+        await window.ShowDialog(this);
+    }
+
+    private async Task PrefetchCoversAsync(List<BeatSaverMap> results, CancellationToken ct = default)
+    {
+        foreach (var map in results)
+        {
+            if (ct.IsCancellationRequested) break;
+            var coverUrl = map.GetCoverUrl();
+            if (string.IsNullOrEmpty(coverUrl)) continue;
+            await _coverCache.GetCoverAsync(coverUrl, ct);
+        }
+    }
+
+    private async Task ExecuteSearch(MainViewModel vm, FilterPreset preset, int page)
+    {
+        _searchCts?.Cancel();
+        _searchCts = new System.Threading.CancellationTokenSource();
+
+        // Cancel any ongoing cover pre-fetch from previous search
+        _coverLoadCts?.Cancel();
+        _coverLoadCts = new CancellationTokenSource();
+
+        vm.ActionText = "搜索：";
+        vm.StatusText = page == 0 ? "正在搜索BeatSaver..." : $"正在加载第 {page + 1} 页...";
+        vm.ProgressValue = 0;
+
+        try
+        {
+            var searchResultsList = this.FindControl<ListBox>("SearchResultsList");
+            if (searchResultsList == null) return;
+
+            bool requiresCache = vm.BeatSaverSearch.RequiresLocalCache(preset);
+            if (requiresCache)
+            {
+                // Use local cache filtering
+                vm.StatusText = "正在使用本地缓存筛选...";
+                
+                if (!vm.LocalCache.IsCacheAvailable)
+                {
+                    vm.StatusText = "本地缓存不可用，请先在设置中下载缓存";
+                    vm.ProgressValue = 100;
+                    return;
+                }
+
+                var allResults = await Task.Run(() => vm.LocalCache.ParallelFilterMaps(preset, new Progress<int>(pct =>
+                {
+                    Dispatcher.UIThread.Post(() => vm.ProgressValue = pct);
+                })));
+
+                // Apply client-side pagination (20 per page)
+                int pageSize = 20;
+                _totalResults = allResults.Count;
+                _totalPages = (_totalResults + pageSize - 1) / pageSize;
+                _currentPage = page;
+
+                int startIndex = page * pageSize;
+                int endIndex = Math.Min(startIndex + pageSize, _totalResults);
+                _currentSearchResults = allResults.Skip(startIndex).Take(pageSize).ToList();
+
+                searchResultsList.ItemsSource = _currentSearchResults;
+                UpdatePaginationControls();
+
+                vm.StatusText = $"本地缓存筛选完成：共 {_totalResults} 条，当前第 {_currentPage + 1}/{_totalPages} 页";
+                vm.ProgressValue = 100;
+                
+                // Pre-fetch cover images in background (fire-and-forget, cancelled on next search)
+                _ = PrefetchCoversAsync(_currentSearchResults, _coverLoadCts.Token);
+                return;
+            }
+
+            // Online API search
+            var filter = vm.BeatSaverSearch.BuildSearchFilterFromPreset(preset);
+            var response = await vm.BeatSaverClient.SearchMapsAsync(filter, page);
+            
+            _currentSearchResults = response?.Maps ?? new List<BeatSaverMap>();
+            _currentPage = page;
+            
+            // Get pagination info
+            if (response?.Info != null && response.Info.Pages > 0)
+            {
+                _totalPages = response.Info.Pages;
+                _totalResults = response.Info.Total;
+            }
+            else if (response?.Metadata != null && response.Metadata.PageSize > 0)
+            {
+                _totalResults = response.Metadata.Total;
+                _totalPages = (_totalResults + response.Metadata.PageSize - 1) / response.Metadata.PageSize;
+            }
+            else
+            {
+                _totalPages = 1;
+                _totalResults = _currentSearchResults.Count;
+            }
+
+            searchResultsList.ItemsSource = _currentSearchResults;
+            UpdatePaginationControls();
+
+            vm.StatusText = $"找到 {_totalResults} 个结果，当前第 {_currentPage + 1}/{_totalPages} 页";
+            vm.ProgressValue = 100;
+            
+            // Pre-fetch cover images in background (fire-and-forget, cancelled on next search)
+            _ = PrefetchCoversAsync(_currentSearchResults, _coverLoadCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            vm.StatusText = "搜索已取消";
+            vm.ProgressValue = 100;
+        }
+        catch (Exception ex)
+        {
+            vm.StatusText = $"搜索失败: {ex.Message}";
+            vm.ProgressValue = 100;
+        }
+    }
+
+    private void UpdatePaginationControls()
+    {
+        var btnPrev = this.FindControl<Button>("BtnPrevPage");
+        var btnNext = this.FindControl<Button>("BtnNextPage");
+        var lblPage = this.FindControl<TextBlock>("LblPageInfo");
+        if (btnPrev == null || btnNext == null || lblPage == null) return;
+
+        btnPrev.IsEnabled = _currentPage > 0;
+        btnNext.IsEnabled = _currentPage < _totalPages - 1;
+        lblPage.Text = $"第 {_currentPage + 1}/{_totalPages} 页 (共 {_totalResults} 条)";
+    }
+
+    private async void OnPrevPageClick(object? sender, RoutedEventArgs e)
+    {
+        if (_currentPage > 0)
+        {
+            _currentPage--;
+            await ExecuteSearch(ViewModel, _currentFilterPreset!, _currentPage);
+        }
+    }
+
+    private async void OnNextPageClick(object? sender, RoutedEventArgs e)
+    {
+        if (_currentPage < _totalPages - 1)
+        {
+            _currentPage++;
+            await ExecuteSearch(ViewModel, _currentFilterPreset!, _currentPage);
+        }
+    }
+
+    private void OnSearchResultSelected(object? sender, SelectionChangedEventArgs e)
+    {
+        var listBox = sender as ListBox;
+        if (listBox?.SelectedItem is BeatSaverMap map)
+        {
+            _selectedBsMap = map;
+            UpdateBeatSaverDetailPanel(map);
+        }
+        else
+        {
+            var panel = this.FindControl<Grid>("BeatSaverDetailPanel");
+            if (panel != null) panel.IsVisible = false;
+        }
+    }
+
+    private async void UpdateBeatSaverDetailPanel(BeatSaverMap map)
+    {
+        var panel = this.FindControl<Grid>("BeatSaverDetailPanel");
+        if (panel == null) return;
+        panel.IsVisible = true;
+
+        // Set text fields
+        this.FindControl<TextBlock>("BsSongName")!.Text = map.Name ?? "未知";
+        this.FindControl<TextBlock>("BsSongAuthor")!.Text = map.Metadata?.SongAuthorName ?? "";
+        this.FindControl<TextBlock>("BsBsr")!.Text = map.Id ?? "";
+        this.FindControl<TextBlock>("BsMapper")!.Text = map.Metadata?.LevelAuthorName ?? map.Uploader?.Name ?? "";
+        this.FindControl<TextBlock>("BsBpm")!.Text = (map.Metadata?.Bpm ?? 0).ToString("0.##");
+        this.FindControl<TextBlock>("BsDuration")!.Text = (map.Metadata?.Duration ?? 0).ToString("0") + "s";
+        this.FindControl<TextBlock>("BsPlays")!.Text = (map.Stats?.Plays ?? 0).ToString();
+        this.FindControl<TextBlock>("BsUpvotes")!.Text = (map.Stats?.Upvotes ?? 0).ToString();
+        this.FindControl<TextBlock>("BsDownloads")!.Text = (map.Stats?.Downloads ?? 0).ToString();
+        this.FindControl<TextBlock>("BsUploadedDate")!.Text = map.CreatedAt.ToString("yyyy-MM-dd");
+        this.FindControl<TextBlock>("BsAi")!.Text = map.Automapper ? "是" : "否";
+
+        // Difficulties
+        var diffs = new System.Text.StringBuilder();
+        if (map.Versions != null && map.Versions.Count > 0 && map.Versions[0].Diffs != null)
+        {
+            foreach (var d in map.Versions[0].Diffs)
+            {
+                diffs.Append($"{d.Characteristic}/{d.Difficulty} ");
+            }
+        }
+        this.FindControl<TextBlock>("BsDifficulties")!.Text = diffs.ToString().Trim();
+
+        // Load cover image from cache service (with retry, never throws)
+        var coverImage = this.FindControl<Image>("BsCoverImage");
+        if (coverImage != null)
+        {
+            coverImage.Source = null;
+            var coverUrl = map.GetCoverUrl();
+            if (!string.IsNullOrEmpty(coverUrl))
+            {
+                var bitmap = await _coverCache.GetCoverAsync(coverUrl);
+                if (bitmap != null)
+                {
+                    coverImage.Source = bitmap;
+                }
+            }
+        }
+    }
+
+    private async void OnBsPlayPreviewClick(object? sender, RoutedEventArgs e)
+    {
+        var vm = ViewModel;
+        if (_selectedBsMap == null) return;
+
+        // Use the actual previewURL from BeatSaver API (format: https://cfcdn.beatsaver.com/{hash}.mp3)
+        string? previewUrl = _selectedBsMap.GetPreviewUrl();
+        if (string.IsNullOrEmpty(previewUrl))
+        {
+            vm.ActionText = "试听：";
+            vm.StatusText = "该曲目不提供在线预览音频";
+            vm.ProgressValue = 100;
+            return;
+        }
+        
+        vm.ActionText = "试听：";
+        vm.StatusText = $"正在加载在线预览: {_selectedBsMap.Name}";
+        vm.ProgressValue = 0;
+
+        try
+        {
+            // Download to temp file with retry
+            string? tempFile = await _coverCache.DownloadToTempFileAsync(previewUrl, ".mp3");
+            if (tempFile == null)
+            {
+                vm.StatusText = "在线预览加载失败，网络连接异常";
+                vm.ProgressValue = 100;
+                return;
+            }
+
+            // Play on background thread
+            string fileToPlay = tempFile;
+            bool success = await Task.Run(() =>
+            {
+                try
+                {
+                    vm.AudioPreview.PlayLocalFile(fileToPlay);
+                    return true;
+                }
+                catch
+                {
+                    try { if (File.Exists(fileToPlay)) File.Delete(fileToPlay); } catch { }
+                    return false;
+                }
+            });
+
+            if (success)
+            {
+                vm.StatusText = $"正在播放: {_selectedBsMap.Name}";
+                
+                _bsAudioTimer?.Stop();
+                _bsAudioTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+                _bsAudioTimer.Tick += (s, args) =>
+                {
+                    var progressBar = this.FindControl<ProgressBar>("BsAudioProgressBar");
+                    if (progressBar == null) return;
+                    if (vm.AudioPreview.IsPlaying)
+                    {
+                        var total = vm.AudioPreview.TotalTime.TotalSeconds;
+                        var current = vm.AudioPreview.CurrentTime.TotalSeconds;
+                        if (total > 0)
+                            progressBar.Value = Math.Min(100, (current / total) * 100);
+                    }
+                    else if (vm.AudioPreview.IsStopped)
+                    {
+                        progressBar.Value = 0;
+                        _bsAudioTimer?.Stop();
+                    }
+                };
+                _bsAudioTimer.Start();
+            }
+            else
+            {
+                vm.StatusText = "在线预览播放失败，无法解析音频格式";
+            }
+        }
+        catch (Exception ex)
+        {
+            vm.StatusText = $"在线预览加载失败: {ex.Message}";
+        }
+        vm.ProgressValue = 100;
+    }
+
+    private void OnBsPausePreviewClick(object? sender, RoutedEventArgs e)
+    {
+        var vm = ViewModel;
+        if (vm.AudioPreview.IsPlaying)
+            vm.AudioPreview.Pause();
+        else if (vm.AudioPreview.IsPaused)
+            vm.AudioPreview.Resume();
+    }
+
+    private async void OnExportSearchResultsClick(object? sender, RoutedEventArgs e)
+    {
+        var vm = ViewModel;
+        if (_currentSearchResults.Count == 0)
+        {
+            vm.ActionText = "提示：";
+            vm.StatusText = "没有搜索结果可导出！";
+            vm.ProgressValue = 100;
+            return;
+        }
+
+        var topLevel = GetTopLevel(this);
+        if (topLevel == null) return;
+        var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "保存歌单",
+            DefaultExtension = "bplist",
+            FileTypeChoices = new[] { new FilePickerFileType("Beat Saber Playlist") { Patterns = new[] { "*.bplist" } } }
+        });
+
+        if (file != null)
+        {
+            string path = file.Path.LocalPath;
+            vm.ActionText = "导出：";
+            vm.StatusText = "正在导出搜索结果...";
+            vm.ProgressValue = 0;
+
+            try
+            {
+                await Task.Run(() =>
+                {
+                    vm.PlaylistExporter.ExportMapsToPlaylist(_currentSearchResults, path, "BeatSaver搜索结果");
+                });
+
+                vm.StatusText = $"歌单已保存！共 {_currentSearchResults.Count} 首歌曲";
+                vm.ProgressValue = 100;
+            }
+            catch (Exception ex)
+            {
+                vm.StatusText = $"导出失败: {ex.Message}";
+                vm.ProgressValue = 100;
             }
         }
     }

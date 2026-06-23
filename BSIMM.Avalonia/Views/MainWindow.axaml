@@ -371,6 +371,118 @@
                     </Border>
                 </Grid>
             </TabItem>
+
+            <!-- Tab 3: BeatSaver Search -->
+            <TabItem Header="BeatSaver搜索">
+                <Grid RowDefinitions="Auto,Auto,*" Margin="0,10,0,0">
+                    <!-- Search Toolbar -->
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+                        <Button Content="打开筛选构建器" Click="OnOpenFilterBuilderClick" Classes="bs-blue" />
+                        <Button Content="导出搜索结果为歌单" Click="OnExportSearchResultsClick" Classes="bs-red" />
+                    </StackPanel>
+
+                    <!-- Pagination Controls -->
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10" HorizontalAlignment="Center">
+                        <Button Name="BtnPrevPage" Content="◀ 上一页" Click="OnPrevPageClick" IsEnabled="False" />
+                        <TextBlock Name="LblPageInfo" Text="第 0/0 页 (共 0 条)" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" MinWidth="140" TextAlignment="Center" />
+                        <Button Name="BtnNextPage" Content="下一页 ▶" Click="OnNextPageClick" IsEnabled="False" />
+                    </StackPanel>
+
+                    <!-- Main Content: List + Detail -->
+                    <Grid Grid.Row="2" ColumnDefinitions="*,5,320">
+                        <!-- Left: Search Results List -->
+                        <Border Grid.Column="0" Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="6" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                            <ListBox Name="SearchResultsList" SelectionChanged="OnSearchResultSelected" Background="Transparent" BorderThickness="0">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:BeatSaverMap">
+                                        <Grid ColumnDefinitions="*,80,80,120,200" Margin="5,2">
+                                            <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Id}" Foreground="{DynamicResource HighlightBlueBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" />
+                                            <TextBlock Grid.Column="2" Text="{Binding Metadata.Bpm, StringFormat='{}{0:0.##}'}" Foreground="{DynamicResource HighlightRedBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="3" Text="{Binding Metadata.LevelAuthorName}" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" />
+                                            <TextBlock Grid.Column="4" Text="{Binding CreatedAt, StringFormat='{}{0:yyyy-MM-dd}'}" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Border>
+
+                        <GridSplitter Grid.Column="1" Background="Transparent" />
+
+                        <!-- Right: BeatSaver Map Details & Online Preview -->
+                        <Border Grid.Column="2" Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="6" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20">
+                            <Grid RowDefinitions="Auto,*,Auto" Name="BeatSaverDetailPanel" IsVisible="False">
+                                <!-- Title / Cover -->
+                                <StackPanel Grid.Row="0" Spacing="10" HorizontalAlignment="Center">
+                                    <Border Width="160" Height="160" Background="{DynamicResource AppBackgroundBrush}" CornerRadius="12" ClipToBounds="True" BorderBrush="{DynamicResource HighlightBlueBrush}" BorderThickness="2" BoxShadow="{DynamicResource CoverShadow}">
+                                        <Panel>
+                                            <TextBlock Text="加载中..." HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextMutedBrush}" />
+                                            <Image Name="BsCoverImage" Stretch="UniformToFill" />
+                                        </Panel>
+                                    </Border>
+                                    <TextBlock Name="BsSongName" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                    <TextBlock Name="BsSongAuthor" FontSize="13" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <!-- Metadata (Scrollable) -->
+                                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,15,0,15" Padding="0,0,15,0">
+                                    <StackPanel Spacing="10">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="BSR: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            <TextBlock Name="BsBsr" Grid.Column="1" Foreground="{DynamicResource HighlightBlueBrush}" FontWeight="Bold" HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="谱师: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            <TextBlock Name="BsMapper" Grid.Column="1" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" TextWrapping="Wrap" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="BPM: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            <TextBlock Name="BsBpm" Grid.Column="1" Foreground="{DynamicResource HighlightRedBrush}" FontWeight="Bold" HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="时长: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            <TextBlock Name="BsDuration" Grid.Column="1" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="难度: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            <TextBlock Name="BsDifficulties" Grid.Column="1" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" TextWrapping="Wrap" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="游玩: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            <TextBlock Name="BsPlays" Grid.Column="1" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="点赞: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            <TextBlock Name="BsUpvotes" Grid.Column="1" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="下载: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            <TextBlock Name="BsDownloads" Grid.Column="1" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="上传: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            <TextBlock Name="BsUploadedDate" Grid.Column="1" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Right" FontSize="11" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <TextBlock Text="AI谱: " Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            <TextBlock Name="BsAi" Grid.Column="1" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right" />
+                                        </Grid>
+                                    </StackPanel>
+                                </ScrollViewer>
+
+                                <!-- Online Audio Preview Controls -->
+                                <StackPanel Grid.Row="2" Spacing="15" Margin="0,5,0,0">
+                                    <ProgressBar Name="BsAudioProgressBar" Height="6" Minimum="0" Maximum="100" Value="0" Foreground="{DynamicResource HighlightBlueBrush}" Background="{DynamicResource BorderBrush}" CornerRadius="3" />
+                                    <Grid ColumnDefinitions="*,*">
+                                        <Button Grid.Column="0" Name="BsBtnPlay" Content="在线试听" Click="OnBsPlayPreviewClick" Classes="bs-blue" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="0,0,5,0" />
+                                        <Button Grid.Column="1" Content="暂停" Click="OnBsPausePreviewClick" Classes="bs-red" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="5,0,0,0" />
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
         </TabControl>
 
         <!-- Bottom Status Bar -->

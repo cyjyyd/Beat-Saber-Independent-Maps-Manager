@@ -139,15 +139,21 @@ namespace BeatSaberIndependentMapsManager.Services
                     }
                     else
                     {
-                        var songs = new List<ParsedSongResult>();
                         var subdirs = Directory.GetDirectories(path);
-                        for (int i = 0; i < subdirs.Length; i++)
+                        var parsedResults = new ParsedSongResult[subdirs.Length];
+                        int processed = 0;
+                        
+                        var parallelOptionsSubdirs = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount) };
+
+                        Parallel.For(0, subdirs.Length, parallelOptionsSubdirs, i =>
                         {
-                            var result = ParseSongDirectory(subdirs[i], null);
-                            if (result.song != null)
-                                songs.Add(result);
-                            onProgress?.Invoke((i + 1) * 100 / subdirs.Length);
-                        }
+                            parsedResults[i] = ParseSongDirectory(subdirs[i], null);
+                            var p = System.Threading.Interlocked.Increment(ref processed);
+                            onProgress?.Invoke(p * 100 / subdirs.Length);
+                        });
+
+                        var songs = parsedResults.Where(r => r != null && r.song != null).ToList();
+
                         return new SongScanResult
                         {
                             ResultType = ScanResultType.DelicatedSongs,
@@ -158,8 +164,12 @@ namespace BeatSaberIndependentMapsManager.Services
                 default:
                     string[] folders = Directory.GetDirectories(path);
                     int[] depths = new int[folders.Length];
-                    for (int i = 0; i < folders.Length; i++)
+                    var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount) };
+                    
+                    Parallel.For(0, folders.Length, parallelOptions, i =>
+                    {
                         depths[i] = CalculateFolderDepth(folders[i]);
+                    });
                     var populardepth = depths.GroupBy(x => x)
                         .OrderByDescending(g => g.Count()).FirstOrDefault();
                     if (populardepth?.Key == 0)
@@ -193,14 +203,23 @@ namespace BeatSaberIndependentMapsManager.Services
                 musicPackName = new DirectoryInfo(path).Name;
 
             var songs = new Dictionary<string, SongMap>();
-            var results = new List<ParsedSongResult>();
+            var results = new ParsedSongResult[Directory.GetDirectories(path).Length];
             int mapsCount = 0, duplicateCount = 0, integrityCount = 0, otherCount = 0;
 
             string[] mapsDir = Directory.GetDirectories(path);
-            for (int i = 0; i < mapsDir.Length; i++)
+            int processed = 0;
+            
+            var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount) };
+
+            Parallel.For(0, mapsDir.Length, parallelOptions, i =>
             {
-                var result = ParseSongDirectory(mapsDir[i], musicPackName);
-                results.Add(result);
+                results[i] = ParseSongDirectory(mapsDir[i], musicPackName);
+                var p = System.Threading.Interlocked.Increment(ref processed);
+                onProgress?.Invoke(p * 100 / mapsDir.Length);
+            });
+
+            foreach (var result in results)
+            {
                 switch (result.resultCode)
                 {
                     case 1: integrityCount++; break;
@@ -208,7 +227,6 @@ namespace BeatSaberIndependentMapsManager.Services
                     case 3: duplicateCount++; break;
                     default: otherCount++; break;
                 }
-                onProgress?.Invoke((i + 1) * 100 / mapsDir.Length);
             }
 
             var packSongs = new Dictionary<string, SongMap>();
@@ -242,11 +260,11 @@ namespace BeatSaberIndependentMapsManager.Services
                 MusicPackName = musicPackName,
                 MusicPackPath = path,
                 PackSongs = packSongs,
-                MapsCount = mapsCount + duplicateCount, // MapsCount in the original code included the first one, but let's keep total
+                MapsCount = mapsCount + duplicateCount,
                 DuplicateCount = duplicateCount,
                 IntegrityCount = integrityCount,
                 OtherCount = otherCount,
-                ScanResults = results
+                ScanResults = results.ToList()
             };
         }
 
@@ -274,10 +292,11 @@ namespace BeatSaberIndependentMapsManager.Services
 
             try
             {
-                byte[] mapInfo = File.ReadAllBytes(infoFilePath);
-                var mapStruct = JsonConvert.DeserializeObject<Dictionary<string, object>>(
-                    Encoding.UTF8.GetString(mapInfo));
-                var songMap = ToEntity<SongMap>(mapStruct);
+                string jsonContent = File.ReadAllText(infoFilePath);
+                var songMap = JsonConvert.DeserializeObject<SongMap>(jsonContent);
+                if (songMap == null)
+                    return new ParsedSongResult { resultCode = 0, bsr = bsr };
+
                 songMap.songFolder = mapDir;
 
                 if (!CheckIntegrity(mapDir, songMap))
@@ -416,19 +435,6 @@ namespace BeatSaberIndependentMapsManager.Services
                 }
             }
             return maxDepth;
-        }
-
-        private static T ToEntity<T>(IDictionary<string, object> dictionary) where T : new()
-        {
-            T entity = new T();
-            var type = typeof(T);
-            foreach (var pair in dictionary)
-            {
-                var property = type.GetProperty(pair.Key);
-                if (property != null && property.CanWrite)
-                    property.SetValue(entity, pair.Value, null);
-            }
-            return entity;
         }
     }
 

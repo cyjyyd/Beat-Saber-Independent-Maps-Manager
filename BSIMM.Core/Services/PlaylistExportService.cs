@@ -53,12 +53,19 @@ namespace BeatSaberIndependentMapsManager.Services
             PlayList playList = new PlayList(musicPackName, author, description, imgBytes);
 
             int processed = 0;
-            foreach (var kvp in packSongs)
+            var hashTasks = packSongs.Select(async kvp =>
             {
                 string hash = await _hashCache.GetOrComputeHashAsync(kvp.Key, kvp.Value);
-                playList.AddSongHash(hash);
-                processed++;
-                progress?.Report(processed * 100 / packSongs.Count);
+                var p = System.Threading.Interlocked.Increment(ref processed);
+                progress?.Report(p * 100 / packSongs.Count);
+                return hash;
+            });
+
+            string[] hashes = await Task.WhenAll(hashTasks);
+            foreach (var hash in hashes)
+            {
+                if (!string.IsNullOrEmpty(hash))
+                    playList.AddSongHash(hash);
             }
 
             string filePath = Path.Combine(outputPath, SanitizeFileName(musicPackName) + ".bplist");

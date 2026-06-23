@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Net.Security;
+using System.Security.Authentication;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -30,7 +32,6 @@ namespace BeatSaberIndependentMapsManager
                 var str = reader.Value?.ToString()?.ToLower();
                 if (str == "true") return true;
                 if (str == "false") return false;
-                // "None" 或其他字符串返回 null
                 return null;
             }
 
@@ -50,14 +51,30 @@ namespace BeatSaberIndependentMapsManager
     /// </summary>
     public class BeatSaverClient : IDisposable
     {
-        private static readonly HttpClient client = new HttpClient();
+        private static readonly HttpClient client;
         private const string BaseUrl = "https://api.beatsaver.com";
         private static bool _disposed = false;
 
+        static BeatSaverClient()
+        {
+            var handler = new SocketsHttpHandler
+            {
+                SslOptions = new System.Net.Security.SslClientAuthenticationOptions
+                {
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                    RemoteCertificateValidationCallback = (sender, cert, chain, errors) => true
+                },
+                MaxConnectionsPerServer = 10,
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+                AutomaticDecompression = System.Net.DecompressionMethods.All
+            };
+            client = new HttpClient(handler);
+            client.DefaultRequestHeaders.Add("User-Agent", "BSIMM/1.1");
+            client.Timeout = TimeSpan.FromSeconds(30);
+        }
+
         public BeatSaverClient()
         {
-            client.DefaultRequestHeaders.Add("User-Agent", "BSIMM/1.0");
-            client.Timeout = TimeSpan.FromSeconds(30);
         }
 
         /// <summary>
@@ -468,6 +485,18 @@ namespace BeatSaberIndependentMapsManager
             }
             return null;
         }
+
+        /// <summary>
+        /// 获取最新版本的在线预览音频URL
+        /// </summary>
+        public string GetPreviewUrl()
+        {
+            if (Versions != null && Versions.Count > 0)
+            {
+                return Versions[0].PreviewURL;
+            }
+            return null;
+        }
     }
 
     /// <summary>
@@ -669,6 +698,9 @@ namespace BeatSaberIndependentMapsManager
 
         [JsonProperty("coverURL")]
         public string CoverURL { get; set; }
+
+        [JsonProperty("previewURL")]
+        public string PreviewURL { get; set; }
 
         [JsonProperty("feedback")]
         public string Feedback { get; set; }
