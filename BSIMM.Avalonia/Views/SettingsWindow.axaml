@@ -69,7 +69,7 @@
                     <StackPanel Spacing="10">
                         <TextBlock Text="常规设置" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource HighlightBlueBrush}" />
 
-                        <CheckBox Name="ChkHashCache" Content="启用哈希缓存（加速歌单导出）" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <CheckBox Name="ChkHashCache" Content="启用哈希缓存（加速歌单导出）" Click="OnHashCacheChanged" Foreground="{DynamicResource TextPrimaryBrush}" />
                         <CheckBox Name="ChkSystemProxy" Content="使用系统代理（推荐国内用户开启）" Click="OnSystemProxyChanged" Foreground="{DynamicResource TextPrimaryBrush}" />
                     </StackPanel>
                 </Border>

@@ -962,8 +962,8 @@ public partial class MainWindow : Window
         panel.Children.Add(btnPanel);
         dlg.Content = panel;
 
-        btnYes.Click += (s, e) => dlg.Close(true);
-        btnNo.Click += (s, e) => dlg.Close(false);
+        btnYes.Click += (s, e) => Dispatcher.UIThread.Post(() => dlg.Close(true));
+        btnNo.Click += (s, e) => Dispatcher.UIThread.Post(() => dlg.Close(false));
 
         return await dlg.ShowDialog<bool>(this);
     }

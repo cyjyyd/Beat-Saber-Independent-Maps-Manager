@@ -22,6 +22,7 @@ namespace BSIMM.Avalonia.Views
 
         private Config _config;
         private LocalCacheManager _localCache;
+        private volatile bool _isClosed;
 
         public SettingsWindow(Config config, LocalCacheManager localCache)
         {
@@ -44,7 +45,7 @@ namespace BSIMM.Avalonia.Views
 
             // Subscribe to download progress
             _localCache.DownloadProgress += OnDownloadProgress;
-            this.Closed += (s, e) => _localCache.DownloadProgress -= OnDownloadProgress;
+            this.Closed += (s, e) => { _isClosed = true; _localCache.DownloadProgress -= OnDownloadProgress; };
         }
 
         private IBrush? GetBrush(string key)
@@ -77,8 +78,10 @@ namespace BSIMM.Avalonia.Views
 
         private void OnDownloadProgress(object? sender, CacheDownloadProgress e)
         {
+            if (_isClosed) return;
             global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
+                if (_isClosed) return;
                 _progressCache.IsVisible = true;
                 _progressCache.Value = e.Percentage;
                 if (e.Status != null && e.Status.StartsWith("正在下载"))
@@ -92,6 +95,12 @@ namespace BSIMM.Avalonia.Views
         private void OnLocalCacheChanged(object? sender, RoutedEventArgs e)
         {
             _config.LocalCaChe = _chkLocalCache.IsChecked ?? false;
+            _config.configUpdate();
+        }
+
+        private void OnHashCacheChanged(object? sender, RoutedEventArgs e)
+        {
+            _config.HashCache = _chkHashCache.IsChecked ?? false;
             _config.configUpdate();
         }
 
@@ -113,6 +122,7 @@ namespace BSIMM.Avalonia.Views
             if (_localCache.IsCacheAvailable)
             {
                 bool outdated = await _localCache.IsCacheOutdatedAsync();
+                if (_isClosed) return;
                 if (!outdated)
                 {
                     _lblCacheStatus.Text = "本地缓存已是最新版本，无需更新。";
@@ -130,12 +140,13 @@ namespace BSIMM.Avalonia.Views
                 success = await _localCache.DownloadCacheAsync();
             }
 
+            if (_isClosed) return;
+
             _progressCache.IsVisible = false;
             _btnDownloadCache.IsEnabled = true;
 
             if (success)
             {
-                _progressCache.IsVisible = false;
                 RefreshCacheStatus(justDownloaded: true);
             }
             else
