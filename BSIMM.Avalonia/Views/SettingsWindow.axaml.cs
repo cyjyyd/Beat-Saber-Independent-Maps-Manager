@@ -54,14 +54,16 @@ namespace BSIMM.Avalonia.Views
             return null;
         }
 
-        private void RefreshCacheStatus()
+        private void RefreshCacheStatus(bool justDownloaded = false)
         {
             if (_localCache.IsCacheAvailable)
             {
                 long sizeBytes = _localCache.GetCacheFileSize();
                 double sizeMb = sizeBytes / 1024.0 / 1024.0;
                 DateTime cacheDate = DateTimeOffset.FromUnixTimeSeconds(_localCache.CacheDate).LocalDateTime;
-                _lblCacheStatus.Text = $"已下载({cacheDate:yyyy-MM-dd HH:mm}) | {sizeMb:F1} MB";
+                _lblCacheStatus.Text = justDownloaded
+                    ? $"下载完成！({cacheDate:yyyy-MM-dd HH:mm}) | {sizeMb:F1} MB"
+                    : $"已下载({cacheDate:yyyy-MM-dd HH:mm}) | {sizeMb:F1} MB";
                 _lblCacheStatus.Foreground = GetBrush("HighlightGreenBrush");
                 _btnDownloadCache.Content = "检查并更新本地缓存";
             }
@@ -133,9 +135,8 @@ namespace BSIMM.Avalonia.Views
 
             if (success)
             {
-                _lblCacheStatus.Text = "下载完成";
-                _lblCacheStatus.Foreground = GetBrush("HighlightGreenBrush");
-                RefreshCacheStatus();
+                _progressCache.IsVisible = false;
+                RefreshCacheStatus(justDownloaded: true);
             }
             else
             {

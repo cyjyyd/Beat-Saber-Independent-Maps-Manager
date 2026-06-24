@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="BSIMM.Avalonia.Views.FilterBuilderWindow"
         Title="筛选条件构建器" Width="960" Height="720"
+        Icon="/Assets/aa2yv-q2dg9-001.ico"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource AppBackgroundBrush}"
         Foreground="{DynamicResource TextPrimaryBrush}">
@@ -37,7 +38,8 @@
         <Border Grid.Row="0" Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="12,8">
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock Text="预设：" VerticalAlignment="Center" FontWeight="Bold" />
-                <ComboBox Name="CboPreset" MinWidth="180" VerticalAlignment="Center" />
+                <TextBox Name="TxtPresetName" MinWidth="160" VerticalAlignment="Center" PlaceholderText="预设名称" />
+                <ComboBox Name="CboPreset" MinWidth="140" VerticalAlignment="Center" PlaceholderText="加载已有..." />
                 <Button Content="保存" Click="OnSavePresetClick" MinWidth="60" />
                 <Button Content="另存为" Click="OnSaveAsPresetClick" MinWidth="70" />
                 <Button Content="删除" Click="OnDeletePresetClick" MinWidth="60" />

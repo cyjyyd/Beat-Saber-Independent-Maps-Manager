@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="BSIMM.Avalonia.Views.SettingsWindow"
         Title="设置" Width="520" Height="560"
+        Icon="/Assets/aa2yv-q2dg9-001.ico"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
         Background="{DynamicResource AppBackgroundBrush}"
@@ -44,7 +45,7 @@
                     <StackPanel Spacing="10">
                         <TextBlock Text="本地缓存" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource HighlightBlueBrush}" />
 
-                        <CheckBox Name="ChkLocalCache" Content="启用本地缓存" Click="OnLocalCacheChanged" />
+                        <CheckBox Name="ChkLocalCache" Content="启用本地缓存" Click="OnLocalCacheChanged" Foreground="{DynamicResource TextPrimaryBrush}" />
 
                         <!-- Cache Status -->
                         <StackPanel Orientation="Horizontal" Spacing="8">
@@ -68,8 +69,8 @@
                     <StackPanel Spacing="10">
                         <TextBlock Text="常规设置" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource HighlightBlueBrush}" />
 
-                        <CheckBox Name="ChkHashCache" Content="启用哈希缓存（加速歌单导出）" />
-                        <CheckBox Name="ChkSystemProxy" Content="使用系统代理（推荐国内用户开启）" Click="OnSystemProxyChanged" />
+                        <CheckBox Name="ChkHashCache" Content="启用哈希缓存（加速歌单导出）" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <CheckBox Name="ChkSystemProxy" Content="使用系统代理（推荐国内用户开启）" Click="OnSystemProxyChanged" Foreground="{DynamicResource TextPrimaryBrush}" />
                     </StackPanel>
                 </Border>
 

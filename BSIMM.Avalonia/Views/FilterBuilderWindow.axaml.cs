@@ -18,6 +18,7 @@ namespace BSIMM.Avalonia.Views
         private StackPanel _groupsPanel = null!;
         private Border _emptyPlaceholder = null!;
         private ComboBox _cboPreset = null!;
+        private TextBox _txtPresetName = null!;
         private TextBlock _lblFilterSummary = null!;
 
         private List<FilterPreset> _savedPresets = new();
@@ -34,6 +35,7 @@ namespace BSIMM.Avalonia.Views
             _groupsPanel = this.FindControl<StackPanel>("GroupsPanel")!;
             _emptyPlaceholder = this.FindControl<Border>("EmptyPlaceholder")!;
             _cboPreset = this.FindControl<ComboBox>("CboPreset")!;
+            _txtPresetName = this.FindControl<TextBox>("TxtPresetName")!;
             _lblFilterSummary = this.FindControl<TextBlock>("LblFilterSummary")!;
 
             LoadSavedPresets();
@@ -54,6 +56,7 @@ namespace BSIMM.Avalonia.Views
             if (_cboPreset.SelectedIndex >= 0 && _cboPreset.SelectedIndex < _savedPresets.Count)
             {
                 CurrentPreset = _savedPresets[_cboPreset.SelectedIndex].Clone();
+                _txtPresetName.Text = CurrentPreset.Name;
                 RebuildUI();
             }
         }
@@ -88,6 +91,7 @@ namespace BSIMM.Avalonia.Views
             _cboPreset.ItemsSource = names;
             if (CurrentPreset != null)
             {
+                _txtPresetName.Text = CurrentPreset.Name;
                 var idx = _savedPresets.FindIndex(p => p.Name == CurrentPreset.Name);
                 _cboPreset.SelectedIndex = idx >= 0 ? idx : -1;
             }
@@ -414,12 +418,16 @@ namespace BSIMM.Avalonia.Views
             g.AddCondition(new FilterCondition(FilterConditionType.Query));
             CurrentPreset.AddGroup(g);
             _cboPreset.SelectedIndex = -1;
+            _txtPresetName.Text = "新预设";
+            _txtPresetName.SelectAll();
+            _txtPresetName.Focus();
             RebuildUI();
         }
 
         private void OnSavePresetClick(object? sender, RoutedEventArgs e)
         {
             if (CurrentPreset == null) return;
+            CurrentPreset.Name = string.IsNullOrWhiteSpace(_txtPresetName.Text) ? "未命名预设" : _txtPresetName.Text.Trim();
             if (!Directory.Exists(_presetsDir)) Directory.CreateDirectory(_presetsDir);
 
             // If preset name matches an existing one, overwrite
