@@ -937,7 +937,7 @@ public partial class MainWindow : Window
         vm.StatusText = "正在下载本地缓存...";
         vm.ProgressValue = 0;
 
-        vm.LocalCache.DownloadProgress += (s, p) =>
+        EventHandler<CacheDownloadProgress> handler = (s, p) =>
         {
             Dispatcher.UIThread.Post(() =>
             {
@@ -948,7 +948,15 @@ public partial class MainWindow : Window
             });
         };
 
-        await vm.LocalCache.DownloadCacheAsync();
+        vm.LocalCache.DownloadProgress += handler;
+        try
+        {
+            await vm.LocalCache.DownloadCacheAsync();
+        }
+        finally
+        {
+            vm.LocalCache.DownloadProgress -= handler;
+        }
         vm.ProgressValue = 100;
     }
 
@@ -1084,9 +1092,13 @@ public partial class MainWindow : Window
                         if (ok) successCount++; else failCount++;
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
                     failCount++;
+                    if (ex.Message.Contains("本地缓存"))
+                    {
+                        Dispatcher.UIThread.Post(() => vm.StatusText = $"预设「{preset.Name}」失败: 需要本地缓存但未下载，请在设置中下载");
+                    }
                 }
                 done++;
                 vm.ProgressValue = done * 100 / total;

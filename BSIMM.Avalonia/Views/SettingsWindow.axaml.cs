@@ -44,6 +44,7 @@ namespace BSIMM.Avalonia.Views
 
             // Subscribe to download progress
             _localCache.DownloadProgress += OnDownloadProgress;
+            this.Closed += (s, e) => _localCache.DownloadProgress -= OnDownloadProgress;
         }
 
         private IBrush? GetBrush(string key)
@@ -145,7 +146,6 @@ namespace BSIMM.Avalonia.Views
 
         private void OnCloseClick(object? sender, RoutedEventArgs e)
         {
-            _localCache.DownloadProgress -= OnDownloadProgress;
             Close();
         }
     }

@@ -174,11 +174,28 @@ namespace BeatSaberIndependentMapsManager
         /// </summary>
         public FilterCondition Clone()
         {
+            object clonedValue = this.Value;
+            if (clonedValue != null)
+            {
+                // Deep-copy mutable value objects to avoid shared state between clones
+                var type = clonedValue.GetType();
+                if (type == typeof(RangeValue))
+                    clonedValue = new RangeValue(((RangeValue)clonedValue).Min, ((RangeValue)clonedValue).Max);
+                else if (type == typeof(SearchQueryValue))
+                {
+                    var src = (SearchQueryValue)clonedValue;
+                    clonedValue = new SearchQueryValue { Query = src.Query, FieldTypes = src.FieldTypes };
+                }
+                else if (type == typeof(ResultLimitValue))
+                    clonedValue = new ResultLimitValue(((ResultLimitValue)clonedValue).Count) { SortOption = ((ResultLimitValue)clonedValue).SortOption };
+                else if (type == typeof(ExcludeModValue))
+                    clonedValue = new ExcludeModValue { ModName = ((ExcludeModValue)clonedValue).ModName, Strict = ((ExcludeModValue)clonedValue).Strict };
+            }
             return new FilterCondition
             {
                 Type = this.Type,
                 CustomName = this.CustomName,
-                Value = this.Value,
+                Value = clonedValue,
                 Operator = this.Operator,
                 IsEnabled = this.IsEnabled
             };

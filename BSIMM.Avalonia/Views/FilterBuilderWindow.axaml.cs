@@ -46,6 +46,16 @@ namespace BSIMM.Avalonia.Views
             }
             RebuildUI();
             UpdatePresetCombo();
+            _cboPreset.SelectionChanged += OnPresetComboSelectionChanged;
+        }
+
+        private void OnPresetComboSelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_cboPreset.SelectedIndex >= 0 && _cboPreset.SelectedIndex < _savedPresets.Count)
+            {
+                CurrentPreset = _savedPresets[_cboPreset.SelectedIndex].Clone();
+                RebuildUI();
+            }
         }
 
         private IBrush? GetBrush(string key)
@@ -81,14 +91,6 @@ namespace BSIMM.Avalonia.Views
                 var idx = _savedPresets.FindIndex(p => p.Name == CurrentPreset.Name);
                 _cboPreset.SelectedIndex = idx >= 0 ? idx : -1;
             }
-            _cboPreset.SelectionChanged += (s, e) =>
-            {
-                if (_cboPreset.SelectedIndex >= 0 && _cboPreset.SelectedIndex < _savedPresets.Count)
-                {
-                    CurrentPreset = _savedPresets[_cboPreset.SelectedIndex].Clone();
-                    RebuildUI();
-                }
-            };
         }
 
         private void UpdateFilterSummary()
@@ -174,7 +176,7 @@ namespace BSIMM.Avalonia.Views
             cmbOperator.SelectionChanged += (s, e) => { group.GroupOperator = cmbOperator.SelectedIndex == 0 ? LogicOperator.And : LogicOperator.Or; UpdateFilterSummary(); };
 
             var chkCache = new CheckBox { Content = "本地缓存", IsChecked = group.UseLocalCache, VerticalAlignment = VerticalAlignment.Center, Foreground = GetBrush("HighlightBlueBrush") };
-            chkCache.IsCheckedChanged += (s, e) => group.UseLocalCache = chkCache.IsChecked ?? false;
+            chkCache.IsCheckedChanged += (s, e) => { group.UseLocalCache = chkCache.IsChecked ?? false; RebuildUI(); };
 
             var btnRemoveGroup = new Button { Content = "删除组", VerticalAlignment = VerticalAlignment.Center };
             btnRemoveGroup.Click += (s, e) => { CurrentPreset?.Groups.Remove(group); RebuildUI(); };
