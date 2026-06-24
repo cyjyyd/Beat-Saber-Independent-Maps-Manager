@@ -160,8 +160,8 @@ namespace BeatSaberIndependentMapsManager.Services
 
         /// <summary>
         /// Compute SHA1 hash of song files (Info.dat + difficulty files).
-        /// Matches v1.0.0 logic exactly: SHA1 over Info.dat + all difficulty files in order.
-        /// If any file is missing, throws FileNotFoundException (same as v1.0.0).
+        /// Matches v1.0.0 logic: SHA1 over Info.dat + all difficulty files in order.
+        /// If Info.dat is missing, returns null (song is incomplete).
         /// </summary>
         public static async Task<string> ComputeSongHashAsync(SongMap songMap)
         {
@@ -175,7 +175,7 @@ namespace BeatSaberIndependentMapsManager.Services
 
                 foreach (string filePath in files)
                 {
-                    // v1.0.0 behavior: no File.Exists check, let it throw if missing
+                    if (!File.Exists(filePath)) continue;
                     byte[] fileBytes = File.ReadAllBytes(filePath);
                     sha1.TransformBlock(fileBytes, 0, fileBytes.Length, null, 0);
                 }

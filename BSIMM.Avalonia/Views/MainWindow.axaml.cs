@@ -546,6 +546,7 @@ public partial class MainWindow : Window
     {
         _searchCts?.Cancel();
         _searchCts = new System.Threading.CancellationTokenSource();
+        var searchToken = _searchCts.Token;
 
         // Cancel any ongoing cover pre-fetch from previous search
         _coverLoadCts?.Cancel();
@@ -603,6 +604,9 @@ public partial class MainWindow : Window
                     Dispatcher.UIThread.Post(() => vm.ProgressValue = pct);
                 })));
 
+                // Discard results if a newer search has started
+                if (searchToken.IsCancellationRequested) return;
+
                 // Apply client-side pagination (20 per page)
                 int pageSize = 20;
                 _totalResults = allResults.Count;
@@ -627,6 +631,9 @@ public partial class MainWindow : Window
             // Online API search
             var filter = vm.BeatSaverSearch.BuildSearchFilterFromPreset(preset);
             var response = await vm.BeatSaverClient.SearchMapsAsync(filter, page);
+            
+            // Discard results if a newer search has started
+            if (searchToken.IsCancellationRequested) return;
             
             _currentSearchResults = response?.Maps ?? new List<BeatSaverMap>();
             _currentPage = page;
@@ -753,7 +760,8 @@ public partial class MainWindow : Window
             if (!string.IsNullOrEmpty(coverUrl))
             {
                 var bitmap = await _coverCache.GetCoverAsync(coverUrl);
-                if (bitmap != null)
+                // Only apply cover if the selection hasn't changed
+                if (bitmap != null && _selectedBsMap == map)
                 {
                     coverImage.Source = bitmap;
                 }

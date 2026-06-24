@@ -203,10 +203,10 @@ namespace BeatSaberIndependentMapsManager.Services
                 musicPackName = new DirectoryInfo(path).Name;
 
             var songs = new Dictionary<string, SongMap>();
-            var results = new ParsedSongResult[Directory.GetDirectories(path).Length];
+            string[] mapsDir = Directory.GetDirectories(path);
+            var results = new ParsedSongResult[mapsDir.Length];
             int mapsCount = 0, duplicateCount = 0, integrityCount = 0, otherCount = 0;
 
-            string[] mapsDir = Directory.GetDirectories(path);
             int processed = 0;
             
             var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount) };
