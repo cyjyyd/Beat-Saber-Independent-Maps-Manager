@@ -864,7 +864,7 @@ public partial class MainWindow : Window
     private async void OnExportSearchResultsClick(object? sender, RoutedEventArgs e)
     {
         var vm = ViewModel;
-        if (_currentSearchResults.Count == 0)
+        if (_currentFilterPreset == null || _totalResults == 0)
         {
             vm.ActionText = "提示：";
             vm.StatusText = "没有搜索结果可导出！";
@@ -885,17 +885,46 @@ public partial class MainWindow : Window
         {
             string path = file.Path.LocalPath;
             vm.ActionText = "导出：";
-            vm.StatusText = "正在导出搜索结果...";
+            vm.StatusText = $"正在获取全部搜索结果（共 {_totalResults} 条）...";
             vm.ProgressValue = 0;
 
             try
             {
+                // Fetch ALL results (not just current page) using the current filter preset
+                List<BeatSaverMap> allMaps;
+                if (vm.BeatSaverSearch.RequiresLocalCache(_currentFilterPreset))
+                {
+                    // Local cache path: re-filter to get all results
+                    if (!vm.LocalCache.IsCacheAvailable)
+                    {
+                        vm.StatusText = "本地缓存不可用，请先在设置中下载缓存";
+                        vm.ProgressValue = 100;
+                        return;
+                    }
+                    allMaps = await Task.Run(() => vm.LocalCache.ParallelFilterMaps(_currentFilterPreset, new Progress<int>(pct =>
+                    {
+                        Dispatcher.UIThread.Post(() => { vm.ProgressValue = pct / 2; vm.StatusText = $"正在筛选全部结果... {pct}%"; });
+                    })));
+                }
+                else
+                {
+                    // Online API path: fetch all pages
+                    allMaps = await vm.BeatSaverSearch.FetchAllMapsForPresetAsync(_currentFilterPreset, useSharedCache: false, pct =>
+                    {
+                        Dispatcher.UIThread.Post(() => { vm.ProgressValue = pct / 2; vm.StatusText = $"正在获取全部页面... {pct}%"; });
+                    });
+                }
+
+                vm.StatusText = $"正在导出歌单（共 {allMaps.Count} 首）...";
+                vm.ProgressValue = 60;
+
+                string coverText = PlaylistExportService.ExtractCoverTextFromPresetName(_currentFilterPreset.Name);
                 await Task.Run(() =>
                 {
-                    vm.PlaylistExporter.ExportMapsToPlaylist(_currentSearchResults, path, "BeatSaver搜索结果");
+                    vm.PlaylistExporter.ExportMapsToPlaylist(allMaps, path, _currentFilterPreset.Name, coverText);
                 });
 
-                vm.StatusText = $"歌单已保存！共 {_currentSearchResults.Count} 首歌曲";
+                vm.StatusText = $"歌单已保存！共 {allMaps.Count} 首歌曲";
                 vm.ProgressValue = 100;
             }
             catch (Exception ex)
