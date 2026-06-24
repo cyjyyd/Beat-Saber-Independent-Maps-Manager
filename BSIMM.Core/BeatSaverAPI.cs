@@ -61,7 +61,6 @@ namespace BeatSaberIndependentMapsManager
             {
                 SslOptions = new System.Net.Security.SslClientAuthenticationOptions
                 {
-                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
                     RemoteCertificateValidationCallback = (sender, cert, chain, errors) => true
                 },
                 MaxConnectionsPerServer = 10,

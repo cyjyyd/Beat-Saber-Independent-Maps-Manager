@@ -24,7 +24,6 @@ namespace BeatSaberIndependentMapsManager.Services
     {
         var handler = new HttpClientHandler
         {
-            SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13,
             ServerCertificateCustomValidationCallback = (sender, cert, chain, errors) => true
         };
         return new HttpClient(handler);

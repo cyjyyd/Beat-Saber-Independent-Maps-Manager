@@ -21,7 +21,6 @@ namespace BSIMM.Avalonia.Services
             // Use HttpClientHandler (same pattern as WinForms version) for maximum compatibility
             var handler = new HttpClientHandler
             {
-                SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
                 ServerCertificateCustomValidationCallback = (sender, cert, chain, errors) => true,
                 MaxConnectionsPerServer = 20,
                 AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
