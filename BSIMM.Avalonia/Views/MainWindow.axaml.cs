@@ -961,6 +961,16 @@ public partial class MainWindow : Window
 
     private async Task<bool> ShowConfirmDialogAsync(string title, string message)
     {
+        var bgBrush = this.TryFindResource("AppBackgroundBrush", out var bg) && bg is IBrush ib ? ib : Brush.Parse("#F4F7FC");
+        var textBrush = this.TryFindResource("TextPrimaryBrush", out var fg) && fg is IBrush fb ? fb : Brush.Parse("#1A1E24");
+        
+        var bsBlueBg = this.TryFindResource("BsBlueBgBrush", out var bBg) && bBg is IBrush ibBg ? ibBg : Brush.Parse("#E0F2FE");
+        var bsBlueBorder = this.TryFindResource("BsBlueBorderBrush", out var bBd) && bBd is IBrush ibBd ? ibBd : Brush.Parse("#0078D4");
+        var bsBlueText = this.TryFindResource("BsBlueTextBrush", out var bTx) && bTx is IBrush ibTx ? ibTx : Brush.Parse("#005A9E");
+        
+        var btnBg = this.TryFindResource("ButtonBackgroundBrush", out var nBg) && nBg is IBrush inBg ? inBg : Brushes.White;
+        var borderBrush = this.TryFindResource("BorderBrush", out var nBd) && nBd is IBrush inBd ? inBd : Brush.Parse("#D5DDEB");
+
         var dlg = new Window
         {
             Title = title,
@@ -969,13 +979,36 @@ public partial class MainWindow : Window
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             CanResize = false,
             ShowInTaskbar = false,
-            Background = this.TryFindResource("AppBackgroundBrush", out var bg) && bg is IBrush ib ? ib : Brush.Parse("#1A1E24")
+            Background = bgBrush,
+            Foreground = textBrush
         };
         var panel = new StackPanel { Margin = new Thickness(20), Spacing = 16 };
-        panel.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Foreground = Brush.Parse("#FFFFFF") });
-        var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 10 };
-        var btnNo = new Button { Content = "否", Width = 70 };
-        var btnYes = new Button { Content = "是", Width = 70, Classes = { "bs-blue" } };
+        panel.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Foreground = textBrush });
+        var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 10, Margin = new Thickness(0, 10, 0, 0) };
+        
+        var btnNo = new Button { 
+            Content = "否", 
+            Width = 70, 
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Background = btnBg,
+            Foreground = textBrush,
+            BorderBrush = borderBrush,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(0, 8)
+        };
+        var btnYes = new Button { 
+            Content = "是", 
+            Width = 70, 
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Background = bsBlueBg,
+            Foreground = bsBlueText,
+            BorderBrush = bsBlueBorder,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(0, 8)
+        };
+        
         btnPanel.Children.Add(btnNo);
         btnPanel.Children.Add(btnYes);
         panel.Children.Add(btnPanel);
@@ -989,6 +1022,13 @@ public partial class MainWindow : Window
 
     private async Task ShowAlertDialogAsync(string title, string message)
     {
+        var bgBrush = this.TryFindResource("AppBackgroundBrush", out var bg) && bg is IBrush ib ? ib : Brush.Parse("#F4F7FC");
+        var textBrush = this.TryFindResource("TextPrimaryBrush", out var fg) && fg is IBrush fb ? fb : Brush.Parse("#1A1E24");
+        
+        var bsBlueBg = this.TryFindResource("BsBlueBgBrush", out var bBg) && bBg is IBrush ibBg ? ibBg : Brush.Parse("#E0F2FE");
+        var bsBlueBorder = this.TryFindResource("BsBlueBorderBrush", out var bBd) && bBd is IBrush ibBd ? ibBd : Brush.Parse("#0078D4");
+        var bsBlueText = this.TryFindResource("BsBlueTextBrush", out var bTx) && bTx is IBrush ibTx ? ibTx : Brush.Parse("#005A9E");
+
         var dlg = new Window
         {
             Title = title,
@@ -997,21 +1037,35 @@ public partial class MainWindow : Window
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             CanResize = false,
             ShowInTaskbar = false,
-            Background = this.TryFindResource("AppBackgroundBrush", out var bg) && bg is IBrush ib ? ib : Brush.Parse("#1A1E24")
+            Background = bgBrush,
+            Foreground = textBrush
         };
         var panel = new StackPanel { Margin = new Thickness(20), Spacing = 16 };
         var textBox = new TextBox 
         { 
             Text = message, 
             TextWrapping = TextWrapping.Wrap, 
-            Foreground = Brush.Parse("#FFFFFF"),
+            Foreground = textBrush,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            IsReadOnly = true
+            IsReadOnly = true,
+            Padding = new Thickness(0)
         };
         panel.Children.Add(textBox);
-        var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 10 };
-        var btnOk = new Button { Content = "确定", Width = 70, Classes = { "bs-blue" } };
+        var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 10, Margin = new Thickness(0, 10, 0, 0) };
+        
+        var btnOk = new Button { 
+            Content = "确定", 
+            Width = 70, 
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Background = bsBlueBg,
+            Foreground = bsBlueText,
+            BorderBrush = bsBlueBorder,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(0, 8)
+        };
+        
         btnPanel.Children.Add(btnOk);
         panel.Children.Add(btnPanel);
         dlg.Content = panel;
