@@ -487,6 +487,25 @@ public partial class MainWindow : Window
                 });
             }
         }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Everything"))
+        {
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                vm.ActionText = "全盘扫描：";
+                vm.StatusText = "扫描已取消";
+                vm.ProgressValue = 100;
+            }
+            else
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    vm.ActionText = "全盘扫描：";
+                    vm.StatusText = "扫描已取消";
+                    vm.ProgressValue = 100;
+                });
+            }
+            await ShowAlertDialogAsync("全盘搜索需要 Everything 支持", ex.Message);
+        }
         catch (Exception ex)
         {
             if (Dispatcher.UIThread.CheckAccess())
@@ -966,6 +985,40 @@ public partial class MainWindow : Window
         btnNo.Click += (s, e) => Dispatcher.UIThread.Post(() => dlg.Close(false));
 
         return await dlg.ShowDialog<bool>(this);
+    }
+
+    private async Task ShowAlertDialogAsync(string title, string message)
+    {
+        var dlg = new Window
+        {
+            Title = title,
+            Width = 450,
+            Height = 200,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false,
+            ShowInTaskbar = false,
+            Background = this.TryFindResource("AppBackgroundBrush", out var bg) && bg is IBrush ib ? ib : Brush.Parse("#1A1E24")
+        };
+        var panel = new StackPanel { Margin = new Thickness(20), Spacing = 16 };
+        var textBox = new TextBox 
+        { 
+            Text = message, 
+            TextWrapping = TextWrapping.Wrap, 
+            Foreground = Brush.Parse("#FFFFFF"),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            IsReadOnly = true
+        };
+        panel.Children.Add(textBox);
+        var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 10 };
+        var btnOk = new Button { Content = "确定", Width = 70, Classes = { "bs-blue" } };
+        btnPanel.Children.Add(btnOk);
+        panel.Children.Add(btnPanel);
+        dlg.Content = panel;
+
+        btnOk.Click += (s, e) => Dispatcher.UIThread.Post(() => dlg.Close());
+
+        await dlg.ShowDialog(this);
     }
 
     private async Task DownloadCacheWithProgressAsync(MainViewModel vm)

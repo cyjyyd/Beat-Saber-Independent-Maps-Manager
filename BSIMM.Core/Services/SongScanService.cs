@@ -25,6 +25,8 @@ namespace BeatSaberIndependentMapsManager.Services
         private static extern void Everything_GetResultFullPathName(uint nIndex, StringBuilder lpString, uint nMaxCount);
         [DllImport("Everything64.dll")]
         private static extern void Everything_SetRequestFlags(uint dwRequestFlags);
+        [DllImport("Everything64.dll")]
+        private static extern uint Everything_GetLastError();
         #endregion
 
         private const int EVERYTHING_REQUEST_FILE_NAME = 0x00000001;
@@ -37,12 +39,23 @@ namespace BeatSaberIndependentMapsManager.Services
         {
             var results = new Dictionary<string, SongMap>();
             if (!File.Exists("Everything64.dll"))
-                return results;
+            {
+                throw new InvalidOperationException("未找到 Everything64.dll，全盘搜索需要 Everything 的支持。");
+            }
 
             Everything_SetSearch("info.dat");
             Everything_SetRequestFlags(EVERYTHING_REQUEST_PATH | EVERYTHING_REQUEST_FILE_NAME);
             Everything_SetMatchWholeWord(true);
-            Everything_Query(true);
+            bool queryResult = Everything_Query(true);
+            
+            if (!queryResult)
+            {
+                uint err = Everything_GetLastError();
+                if (err == 2) // EVERYTHING_ERROR_IPC
+                {
+                    throw new InvalidOperationException("无法连接到 Everything 服务。\n\n请确保已安装并在后台运行 Everything 软件。\n(下载地址: https://www.voidtools.com/)");
+                }
+            }
 
             var buf = new StringBuilder(300);
             var paths = new List<string>();
