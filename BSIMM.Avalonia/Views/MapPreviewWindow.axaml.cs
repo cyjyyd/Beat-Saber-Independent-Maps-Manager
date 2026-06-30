@@ -104,8 +104,11 @@ namespace BSIMM.Avalonia.Views
                 return;
             }
 
-            // Load ArcViewer from the same localhost origin (avoids mixed content)
-            InitializeWebView($"http://localhost:{_serverPort}/index.html?url=http://localhost:{_serverPort}/map.zip");
+            // Load ArcViewer from local file:// (relative paths resolve correctly),
+            // with ?url= pointing to localhost HTTP server for the zip file.
+            // file:// → http://localhost is NOT mixed content (only HTTPS→HTTP is blocked).
+            string localHtmlPath = Path.Combine(ArcViewerCacheDir, "index.html");
+            InitializeWebView($"file:///{localHtmlPath.Replace('\\', '/')}" + $"?url=http://localhost:{_serverPort}/map.zip");
         }
 
         public async Task LoadLocalMapAsync(string mapDir, string mapName)
@@ -136,8 +139,10 @@ namespace BSIMM.Avalonia.Views
                 return;
             }
 
-            // Load ArcViewer from the same localhost origin (avoids mixed content)
-            InitializeWebView($"http://localhost:{_serverPort}/index.html?url=http://localhost:{_serverPort}/map.zip");
+            // Load ArcViewer from local file:// (relative paths resolve correctly),
+            // with ?url= pointing to localhost HTTP server for the zip file.
+            string localHtmlPath = Path.Combine(ArcViewerCacheDir, "index.html");
+            InitializeWebView($"file:///{localHtmlPath.Replace('\\', '/')}" + $"?url=http://localhost:{_serverPort}/map.zip");
             await Task.CompletedTask;
         }
 
@@ -149,7 +154,16 @@ namespace BSIMM.Avalonia.Views
 
                 // Ensure ArcViewer build files are cached locally
                 _lblStatus.Text = "正在准备 ArcViewer 预览引擎...";
-                await EnsureArcViewerCachedAsync();
+                try
+                {
+                    await EnsureArcViewerCachedAsync();
+                }
+                catch (Exception ex)
+                {
+                    _lblStatus.Text = ex.Message;
+                    _loadProgress.IsVisible = false;
+                    return false;
+                }
 
                 string prefix = $"http://localhost:{_serverPort}/";
 
@@ -160,6 +174,13 @@ namespace BSIMM.Avalonia.Views
                 _ = Task.Run(() => ServeRequests(zipPath, mapName));
 
                 return true;
+            }
+            catch (HttpListenerException ex)
+            {
+                // Common: URL reservation needed, or port in use
+                _lblStatus.Text = $"无法启动本地服务器: {ex.Message} (错误码: {ex.ErrorCode})";
+                _loadProgress.IsVisible = false;
+                return false;
             }
             catch
             {
@@ -187,6 +208,7 @@ namespace BSIMM.Avalonia.Views
                     if (request.HttpMethod == "OPTIONS")
                     {
                         response.StatusCode = 200;
+                        response.Close();
                         continue;
                     }
 
@@ -198,6 +220,7 @@ namespace BSIMM.Avalonia.Views
                         response.ContentLength64 = zipBytes.Length;
                         response.OutputStream.Write(zipBytes, 0, zipBytes.Length);
                         response.OutputStream.Flush();
+                        response.Close();
                     }
                     else if (path == "/" || path == "/index.html")
                     {
@@ -209,16 +232,19 @@ namespace BSIMM.Avalonia.Views
                             response.ContentType = "text/html; charset=utf-8";
                             response.ContentLength64 = html.Length;
                             response.OutputStream.Write(html, 0, html.Length);
+                            response.Close();
                         }
                         else
                         {
                             response.StatusCode = 404;
+                            response.Close();
                         }
                     }
                     else
                     {
                         // Serve other ArcViewer files (TemplateData/*, Build/*)
-                        string filePath = Path.Combine(ArcViewerCacheDir, path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+                        string relPath = path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+                        string filePath = Path.Combine(ArcViewerCacheDir, relPath);
                         if (File.Exists(filePath))
                         {
                             byte[] fileBytes = File.ReadAllBytes(filePath);
@@ -226,10 +252,13 @@ namespace BSIMM.Avalonia.Views
                             response.ContentType = GetMimeType(path);
                             response.ContentLength64 = fileBytes.Length;
                             response.OutputStream.Write(fileBytes, 0, fileBytes.Length);
+                            response.OutputStream.Flush();
+                            response.Close();
                         }
                         else
                         {
                             response.StatusCode = 404;
+                            response.Close();
                         }
                     }
                 }
@@ -238,7 +267,7 @@ namespace BSIMM.Avalonia.Views
                 }
                 finally
                 {
-                    try { context?.Response.Close(); } catch { }
+                    try { if (context?.Response?.OutputStream != null) context.Response.OutputStream.Close(); } catch { }
                 }
             }
         }
@@ -258,7 +287,7 @@ namespace BSIMM.Avalonia.Views
             foreach (var relPath in ArcViewerFiles)
             {
                 string localPath = Path.Combine(ArcViewerCacheDir, relPath.Replace('/', Path.DirectorySeparatorChar));
-                if (File.Exists(localPath)) continue;
+                if (File.Exists(localPath) && new FileInfo(localPath).Length > 0) continue;
 
                 string dir = Path.GetDirectoryName(localPath)!;
                 if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
@@ -266,13 +295,24 @@ namespace BSIMM.Avalonia.Views
                 try
                 {
                     var url = ArcViewerRemote + relPath;
-                    byte[] data = await _downloadClient.GetByteArrayAsync(url);
+                    using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                    req.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+                    using var resp = await _downloadClient.SendAsync(req);
+                    resp.EnsureSuccessStatusCode();
+                    byte[] data = await resp.Content.ReadAsByteArrayAsync();
                     await File.WriteAllBytesAsync(localPath, data);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Continue even if some files fail — the .data and .wasm are critical
+                    // Log to status — critical files (.wasm, .data) failing will prevent ArcViewer from loading
+                    System.Diagnostics.Debug.WriteLine($"Failed to download {relPath}: {ex.Message}");
                 }
+            }
+
+            // Verify critical files exist
+            if (!File.Exists(indexHtmlPath) || !File.Exists(wasmPath))
+            {
+                throw new Exception("无法下载 ArcViewer 预览引擎文件，请检查网络连接");
             }
         }
 
