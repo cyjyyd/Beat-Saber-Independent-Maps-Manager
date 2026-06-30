@@ -23,7 +23,8 @@ namespace BSIMM.Avalonia.Views
         private NativeWebView? _webView;
         private SimpleFileServer? _server;
         private string? _tempZipPath;
-        private string? _cacheZipPath;
+        private string? _cacheZipFile;
+        private string? _cachePatchHtml;
 
         private const string ArcViewerRemote = "https://allpoland.github.io/ArcViewer/";
         private static readonly string[] ArcViewerFiles = {
@@ -82,19 +83,65 @@ namespace BSIMM.Avalonia.Views
             {
                 await EnsureArcViewerCachedAsync();
                 string zipName = $"map_{Guid.NewGuid():N}.zip";
-                _cacheZipPath = Path.Combine(ArcViewerCacheDir, zipName);
-                File.Copy(zipPath, _cacheZipPath, true);
+                _cacheZipFile = Path.Combine(ArcViewerCacheDir, zipName);
+                File.Copy(zipPath, _cacheZipFile, true);
 
                 _server = new SimpleFileServer(ArcViewerCacheDir);
                 _server.Start();
                 int port = _server.Port;
+                string zipUrl = $"http://127.0.0.1:{port}/{zipName}";
 
-                // Use 127.0.0.1 instead of localhost — some WebView2 versions treat
-                // localhost as a secure context with extra restrictions on fetch().
-                string avUrl = $"http://127.0.0.1:{port}/index.html?url={Uri.EscapeDataString($"http://127.0.0.1:{port}/{zipName}")}";
-                InitWebView(avUrl);
+                _cachePatchHtml = Path.Combine(ArcViewerCacheDir, "_index_patched.html");
+                File.WriteAllText(_cachePatchHtml, GeneratePatchedHtml(port, zipName, zipUrl));
+
+                // Load ArcViewer with ?id=localmap — the XHR patch intercepts
+                // the API call and returns JSON pointing to the local zip.
+                InitWebView($"http://127.0.0.1:{port}/_index_patched.html");
             }
             catch (Exception ex) { OnFail(ex.Message); }
+        }
+
+        private static string GeneratePatchedHtml(int port, string zipName, string zipUrl)
+        {
+            string origHtml = File.ReadAllText(Path.Combine(ArcViewerCacheDir, "index.html"));
+            string patchScript = $@"<script>
+(function(){{
+    var origOpen = XMLHttpRequest.prototype.open;
+    var origSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function(method, url) {{
+        this.__bsimm_url = url;
+        return origOpen.apply(this, arguments);
+    }};
+    XMLHttpRequest.prototype.send = function(body) {{
+        var url = this.__bsimm_url || '';
+        if (url.indexOf('api.beatsaver.com/maps/id/') >= 0 || url.indexOf('api.beatsaver.com/maps/hash/') >= 0) {{
+            var id = url.split('/').pop();
+            console.log('BSIMM: intercepted API call for ' + id + ', returning local zip');
+            var json = JSON.stringify({{
+                id: id,
+                name: 'Local Map',
+                versions: [{{ downloadURL: '{zipUrl}', coverURL: '' }}]
+            }});
+            var blob = new Blob([json], {{type: 'application/json'}});
+            Object.defineProperty(this, 'responseText', {{value: json, writable: false}});
+            Object.defineProperty(this, 'response', {{value: json, writable: false}});
+            Object.defineProperty(this, 'readyState', {{value: 4, writable: false}});
+            Object.defineProperty(this, 'status', {{value: 200, writable: false}});
+            Object.defineProperty(this, 'statusText', {{value: 'OK', writable: false}});
+            setTimeout(() => {{ if (this.onloadend) this.onloadend(); if (this.onload) this.onload(); if (this.onreadystatechange) this.onreadystatechange(); }}, 0);
+            return;
+        }}
+        return origSend.apply(this, arguments);
+    }};
+}})();
+</script>";
+
+            // Insert patch script right after <head> or before first <script>
+            int insertPos = origHtml.IndexOf("<script");
+            if (insertPos < 0) insertPos = origHtml.IndexOf("</head>");
+            if (insertPos < 0) insertPos = origHtml.IndexOf("<body");
+            if (insertPos < 0) insertPos = 0;
+            return origHtml.Insert(insertPos, patchScript);
         }
 
         private async Task<string?> DownloadZipAsync(string url)
@@ -139,25 +186,12 @@ namespace BSIMM.Avalonia.Views
             try
             {
                 _webView = new NativeWebView { Source = new Uri(url) };
-                _webView.NavigationCompleted += async (s, e) =>
+                _webView.NavigationCompleted += (s, e) =>
                 {
                     global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     {
                         if (e != null && e.IsSuccess) { _lblStatus.Text = "ArcViewer 已加载"; _loadProgress.IsVisible = false; }
                     });
-                    // Diagnostic: sync XHR to check if zip is reachable
-                    try
-                    {
-                        var idx = url.LastIndexOf("url=");
-                        if (idx > 0)
-                        {
-                            var zUrl = Uri.UnescapeDataString(url.Substring(idx + 4));
-                            var result = await _webView!.InvokeScript(
-                                $"eval(\"(function(){{var x=new XMLHttpRequest();x.open('GET','{zUrl}',false);try{{x.send();return'OK_'+x.status;}}catch(e){{return'ERR_'+e.message;}}}})()\")");
-                            _lblStatus.Text += $" [诊断:{result}]";
-                        }
-                    }
-                    catch (Exception ex2) { _lblStatus.Text += $" [diag:{ex2.Message}]"; }
                 };
                 _webViewContainer.Children.Add(_webView);
                 _lblStatus.Text = "正在加载 ArcViewer...";
@@ -172,7 +206,8 @@ namespace BSIMM.Avalonia.Views
         {
             try { _server?.Dispose(); } catch { }
             try { if (_tempZipPath != null && File.Exists(_tempZipPath)) File.Delete(_tempZipPath); } catch { }
-            try { if (_cacheZipPath != null && File.Exists(_cacheZipPath)) File.Delete(_cacheZipPath); } catch { }
+            try { if (_cacheZipFile != null && File.Exists(_cacheZipFile)) File.Delete(_cacheZipFile); } catch { }
+            try { if (_cachePatchHtml != null && File.Exists(_cachePatchHtml)) File.Delete(_cachePatchHtml); } catch { }
         }
     }
 
