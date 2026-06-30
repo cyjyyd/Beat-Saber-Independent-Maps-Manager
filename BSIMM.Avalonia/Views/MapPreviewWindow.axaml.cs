@@ -23,6 +23,7 @@ namespace BSIMM.Avalonia.Views
         private NativeWebView? _webView;
         private LocalHttpServer? _localServer;
         private string? _tempZipPath;
+        private string? _cacheZipPath;
 
         private const string ArcViewerRemote = "https://allpoland.github.io/ArcViewer/";
         private static readonly string[] ArcViewerFiles = {
@@ -86,16 +87,23 @@ namespace BSIMM.Avalonia.Views
             {
                 _lblStatus.Text = "正在准备 ArcViewer 引擎...";
                 await EnsureArcViewerCachedAsync();
-                _localServer = new LocalHttpServer(zipPath, ArcViewerCacheDir);
+
+                // Copy zip into ArcViewer cache dir with unique name (avoid concurrent overwrites)
+                string zipName = $"map_{Guid.NewGuid():N}.zip";
+                string destZip = Path.Combine(ArcViewerCacheDir, zipName);
+                File.Copy(zipPath, destZip, true);
+                _cacheZipPath = destZip;  // track for cleanup on close
+
+                _localServer = new LocalHttpServer(ArcViewerCacheDir);
                 _localServer.Start();
+                int port = _localServer.Port;
+
+                // Absolute URL but same-origin as ArcViewer: no CORS, no mixed content
+                string zipUrl = $"http://localhost:{port}/{zipName}";
+                string avUrl = $"http://localhost:{port}/index.html?url={Uri.EscapeDataString(zipUrl)}";
+                InitWebView(avUrl);
             }
             catch (Exception ex) { OnFail(ex.Message); return; }
-
-            int port = _localServer.Port;
-            string zipUrl = $"http://localhost:{port}/map.zip";
-            // ArcViewer reads ?url= from Application.absoluteURL
-            string avUrl = $"http://localhost:{port}/index.html?url={Uri.EscapeDataString(zipUrl)}";
-            InitWebView(avUrl);
         }
 
         private async Task<string?> DownloadZipAsync(string url)
@@ -177,22 +185,22 @@ namespace BSIMM.Avalonia.Views
         {
             try { _localServer?.Dispose(); } catch { }
             try { if (_tempZipPath != null && File.Exists(_tempZipPath)) File.Delete(_tempZipPath); } catch { }
+            try { if (_cacheZipPath != null && File.Exists(_cacheZipPath)) File.Delete(_cacheZipPath); } catch { }
         }
     }
 
-    /// <summary>Serves ArcViewer files and a zip via raw TcpListener with proper HTTP parsing.</summary>
+    /// <summary>Serves ArcViewer files and map.zip from a single directory via raw TcpListener.</summary>
     internal sealed class LocalHttpServer : IDisposable
     {
-        private readonly string _zipPath, _cacheDir;
+        private readonly string _rootDir;
         private TcpListener? _listener;
         private readonly CancellationTokenSource _cts = new();
         private readonly ConcurrentDictionary<string, byte[]> _fileCache = new();
         public int Port { get; }
 
-        public LocalHttpServer(string zipPath, string cacheDir)
+        public LocalHttpServer(string rootDir)
         {
-            _zipPath = zipPath;
-            _cacheDir = cacheDir;
+            _rootDir = rootDir;
             using var probe = new TcpListener(IPAddress.Loopback, 0);
             probe.Start();
             Port = ((IPEndPoint)probe.LocalEndpoint).Port;
@@ -226,7 +234,6 @@ namespace BSIMM.Avalonia.Views
             try
             {
                 stream = client.GetStream();
-                // Use StreamReader for reliable HTTP request parsing (reads until \r\n\r\n)
                 using var reader = new StreamReader(stream, Encoding.ASCII, false, 4096, true);
                 string? requestLine = await reader.ReadLineAsync();
                 if (string.IsNullOrEmpty(requestLine)) return;
@@ -236,19 +243,17 @@ namespace BSIMM.Avalonia.Views
                 var method = parts[0].ToUpperInvariant();
                 var rawPath = parts[1];
 
-                // Strip query string to get the clean path
                 var idx = rawPath.IndexOf('?');
                 var path = idx >= 0 ? rawPath.Substring(0, idx) : rawPath;
 
-                // Read all headers (must consume before writing response)
-                int contentLength = 0;
+                // Read all headers and skip body
                 string? header;
+                int contentLength = 0;
                 while (!string.IsNullOrEmpty(header = await reader.ReadLineAsync()))
                 {
                     if (header.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
                         int.TryParse(header.AsSpan(15).Trim(), out contentLength);
                 }
-                // Skip body
                 if (contentLength > 0)
                 {
                     var bodyBuf = new byte[contentLength];
@@ -263,30 +268,18 @@ namespace BSIMM.Avalonia.Views
                     return;
                 }
 
-                if (path == "/map.zip" || path == "/download")
+                var rel = path == "/" ? "index.html" : path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+                var filePath = Path.Combine(_rootDir, rel);
+                if (File.Exists(filePath))
                 {
-                    if (File.Exists(_zipPath))
+                    if (!_fileCache.TryGetValue(filePath, out var data) || data == null)
                     {
-                        await WriteResponse(stream, 200, "application/zip",
-                            await File.ReadAllBytesAsync(_zipPath), true);
+                        data = File.ReadAllBytes(filePath);
+                        if (data.Length < 5_000_000) _fileCache[filePath] = data;
                     }
-                    else await WriteResponse(stream, 404, "text/plain", "File not found"u8.ToArray(), true);
+                    await WriteResponse(stream, 200, GetMime(filePath), data!, true);
                 }
-                else
-                {
-                    var rel = path == "/" ? "index.html" : path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
-                    var filePath = Path.Combine(_cacheDir, rel);
-                    if (File.Exists(filePath))
-                    {
-                        if (!_fileCache.TryGetValue(filePath, out var data) || data == null)
-                        {
-                            data = File.ReadAllBytes(filePath);
-                            if (data.Length < 5_000_000) _fileCache[filePath] = data;
-                        }
-                        await WriteResponse(stream, 200, GetMime(filePath), data!, true);
-                    }
-                    else await WriteResponse(stream, 404, "text/plain", "Not found"u8.ToArray(), true);
-                }
+                else await WriteResponse(stream, 404, "text/plain", "Not found"u8.ToArray(), true);
             }
             catch { }
             finally
