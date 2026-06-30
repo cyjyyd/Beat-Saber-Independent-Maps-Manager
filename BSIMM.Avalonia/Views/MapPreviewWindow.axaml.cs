@@ -2,7 +2,6 @@ using global::Avalonia;
 using global::Avalonia.Controls;
 using global::Avalonia.Interactivity;
 using global::Avalonia.Markup.Xaml;
-using global::Avalonia.Media;
 using BeatSaberIndependentMapsManager.Services;
 using System;
 using System.IO;
@@ -16,7 +15,7 @@ namespace BSIMM.Avalonia.Views
         private Panel _webViewContainer = null!;
         private TextBlock _lblStatus = null!;
         private ProgressBar _loadProgress = null!;
-        private Control? _webView;
+        private NativeWebView? _webView;
         private HttpListener? _httpServer;
         private string? _tempZipPath;
 
@@ -41,7 +40,7 @@ namespace BSIMM.Avalonia.Views
             {
                 _lblStatus.Text = $"正在加载 ArcViewer (谱面ID: {mapId})...";
                 var url = $"{ArcViewerUrl}?id={Uri.EscapeDataString(mapId)}";
-                await InitializeWebViewAsync(url);
+                InitializeWebView(url);
                 return;
             }
 
@@ -76,22 +75,20 @@ namespace BSIMM.Avalonia.Views
                 return;
             }
 
-            await InitializeWebViewAsync(servedUrl);
+            InitializeWebView(servedUrl);
         }
 
         public async Task LoadLocalMapAsync(string mapDir, string mapName)
         {
             this.Title = $"谱面预览 - {mapName}";
-
             _lblStatus.Text = "正在准备本地谱面...";
 
             // Create a zip from the local map directory and serve it
             _tempZipPath = Path.Combine(Path.GetTempPath(), "bsim_preview", $"local_{Guid.NewGuid():N}.zip");
             try
             {
-                if (!Directory.Exists(Path.GetDirectoryName(_tempZipPath)))
-                    Directory.CreateDirectory(Path.GetDirectoryName(_tempZipPath)!);
-
+                var dir = Path.GetDirectoryName(_tempZipPath);
+                if (dir != null && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 System.IO.Compression.ZipFile.CreateFromDirectory(mapDir, _tempZipPath);
             }
             catch (Exception ex)
@@ -109,7 +106,8 @@ namespace BSIMM.Avalonia.Views
                 return;
             }
 
-            await InitializeWebViewAsync(servedUrl);
+            InitializeWebView(servedUrl);
+            await Task.CompletedTask;
         }
 
         private string? StartLocalZipServer(string zipPath, string mapName)
@@ -123,7 +121,6 @@ namespace BSIMM.Avalonia.Views
                 _httpServer.Prefixes.Add(prefix);
                 _httpServer.Start();
 
-                // Serve the zip file at /map.zip and ArcViewer at /
                 _ = Task.Run(() =>
                 {
                     while (_httpServer.IsListening)
@@ -152,7 +149,6 @@ namespace BSIMM.Avalonia.Views
                         }
                         catch
                         {
-                            // Listener stopped or error
                         }
                     }
                 });
@@ -174,45 +170,32 @@ namespace BSIMM.Avalonia.Views
             return port;
         }
 
-        private async Task InitializeWebViewAsync(string url)
+        private void InitializeWebView(string url)
         {
             try
             {
-                // Try to create Avalonia.Controls.WebView (available in Avalonia 12.0+)
-                var webViewType = Type.GetType("Avalonia.Controls.WebView, Avalonia.Controls.WebView")
-                                ?? Type.GetType("Avalonia.Controls.WebView, Avalonia.WebView");
-                
-                if (webViewType != null)
+                _webView = new NativeWebView
                 {
-                    _webView = Activator.CreateInstance(webViewType) as Control;
-                    if (_webView != null)
+                    Source = new Uri(url)
+                };
+                _webView.NavigationCompleted += (s, e) =>
+                {
+                    if (e.IsSuccess)
                     {
-                        // Set the Source property
-                        var sourceProperty = webViewType.GetProperty("Source");
-                        if (sourceProperty != null && sourceProperty.PropertyType == typeof(Uri))
-                        {
-                            sourceProperty.SetValue(_webView, new Uri(url));
-                        }
-
-                        _webViewContainer.Children.Add(_webView);
                         _lblStatus.Text = "ArcViewer 已加载";
                         _loadProgress.IsVisible = false;
-                        return;
                     }
-                }
+                };
 
-                // Fallback: open in external browser
-                _lblStatus.Text = "WebView 不可用，正在在浏览器中打开...";
-                _loadProgress.IsVisible = false;
-                OpenInExternalBrowser(url);
+                _webViewContainer.Children.Add(_webView);
+                _lblStatus.Text = "正在加载 ArcViewer...";
             }
             catch (Exception ex)
             {
-                _lblStatus.Text = $"加载失败: {ex.Message}";
+                _lblStatus.Text = $"WebView 不可用: {ex.Message}，正在在浏览器中打开...";
                 _loadProgress.IsVisible = false;
+                OpenInExternalBrowser(url);
             }
-
-            await Task.CompletedTask;
         }
 
         private void OpenInExternalBrowser(string url)
