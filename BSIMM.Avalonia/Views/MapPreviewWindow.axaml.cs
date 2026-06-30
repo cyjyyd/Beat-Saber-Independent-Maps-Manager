@@ -52,7 +52,7 @@ namespace BSIMM.Avalonia.Views
             if (!string.IsNullOrEmpty(mapId))
             {
                 _lblStatus.Text = $"正在加载 ArcViewer (ID: {mapId})...";
-                InitWebView($"{ArcViewerRemote}?id={Uri.EscapeDataString(mapId)}", needsLocalServer: false);
+                InitWebView($"{ArcViewerRemote}?id={Uri.EscapeDataString(mapId)}");
                 return;
             }
 
@@ -60,8 +60,7 @@ namespace BSIMM.Avalonia.Views
             _tempZipPath = await DownloadZipAsync(downloadUrl);
             if (_tempZipPath == null) { OnFail("下载失败，请检查网络连接"); return; }
 
-            if (!await StartServerAsync(_tempZipPath, mapName)) { OnFail("无法启动本地预览服务"); return; }
-            InitWebView(null!, needsLocalServer: true);
+            await StartServerAndLoad(_tempZipPath, mapName);
         }
 
         public async Task LoadLocalMapAsync(string mapDir, string mapName)
@@ -77,9 +76,26 @@ namespace BSIMM.Avalonia.Views
             }
             catch (Exception ex) { OnFail($"无法打包: {ex.Message}"); return; }
 
-            if (!await StartServerAsync(_tempZipPath, mapName)) { OnFail("无法启动本地预览服务"); return; }
-            InitWebView(null!, needsLocalServer: true);
+            await StartServerAndLoad(_tempZipPath, mapName);
             await Task.CompletedTask;
+        }
+
+        private async Task StartServerAndLoad(string zipPath, string mapName)
+        {
+            try
+            {
+                _lblStatus.Text = "正在准备 ArcViewer 引擎...";
+                await EnsureArcViewerCachedAsync();
+                _localServer = new LocalHttpServer(zipPath, ArcViewerCacheDir);
+                _localServer.Start();
+            }
+            catch (Exception ex) { OnFail(ex.Message); return; }
+
+            int port = _localServer.Port;
+            string zipUrl = $"http://localhost:{port}/map.zip";
+            // ArcViewer reads ?url= from Application.absoluteURL
+            string avUrl = $"http://localhost:{port}/index.html?url={Uri.EscapeDataString(zipUrl)}";
+            InitWebView(avUrl);
         }
 
         private async Task<string?> DownloadZipAsync(string url)
@@ -94,19 +110,6 @@ namespace BSIMM.Avalonia.Views
                 return path;
             }
             catch { return null; }
-        }
-
-        private async Task<bool> StartServerAsync(string zipPath, string mapName)
-        {
-            try
-            {
-                _lblStatus.Text = "正在准备 ArcViewer 引擎...";
-                await EnsureArcViewerCachedAsync();
-                _localServer = new LocalHttpServer(zipPath, ArcViewerCacheDir);
-                _localServer.Start();
-                return true;
-            }
-            catch (Exception ex) { _lblStatus.Text = ex.Message; return false; }
         }
 
         private async Task EnsureArcViewerCachedAsync()
@@ -127,37 +130,31 @@ namespace BSIMM.Avalonia.Views
                     var data = await _http.GetByteArrayAsync(ArcViewerRemote + f);
                     await File.WriteAllBytesAsync(local, data);
                 }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Download {f}: {ex.Message}"); }
+                catch { }
             }
             if (!File.Exists(idx) || !File.Exists(wasm))
                 throw new Exception("无法下载 ArcViewer 引擎文件，请检查网络");
         }
 
-        private void InitWebView(string url, bool needsLocalServer)
+        private void InitWebView(string url)
         {
             try
             {
                 _webView = new NativeWebView();
 
-                // Subscribe BEFORE setting Source (EnvironmentRequested fires before environment creation)
-                if (needsLocalServer)
+                // Subscribe BEFORE setting Source
+                _webView.EnvironmentRequested += (s, args) =>
                 {
-                    _webView.EnvironmentRequested += (s, args) =>
+                    try
                     {
-                        try
-                        {
-                            var prop = args.GetType().GetProperty("AdditionalBrowserArguments");
-                            if (prop != null)
-                                prop.SetValue(args,
-                                    "--allow-insecure-localhost --allow-running-insecure-content");
-                        }
-                        catch { }
-                    };
-                }
+                        var prop = args.GetType().GetProperty("AdditionalBrowserArguments");
+                        if (prop != null)
+                            prop.SetValue(args, "--allow-insecure-localhost");
+                    }
+                    catch { }
+                };
 
-                _webView.Source = needsLocalServer
-                    ? new Uri($"http://localhost:{_localServer!.Port}/index.html?url=http://localhost:{_localServer.Port}/map.zip")
-                    : new Uri(url);
+                _webView.Source = new Uri(url);
 
                 _webView.NavigationCompleted += (s, e) =>
                 {
@@ -169,10 +166,7 @@ namespace BSIMM.Avalonia.Views
                 _webViewContainer.Children.Add(_webView);
                 _lblStatus.Text = "正在加载 ArcViewer...";
             }
-            catch (Exception ex)
-            {
-                OnFail($"WebView 不可用: {ex.Message}");
-            }
+            catch (Exception ex) { OnFail($"WebView 不可用: {ex.Message}"); }
         }
 
         private void OnFail(string msg) { _lblStatus.Text = msg; _loadProgress.IsVisible = false; }
@@ -186,7 +180,7 @@ namespace BSIMM.Avalonia.Views
         }
     }
 
-    /// <summary>Serves ArcViewer files and a single zip via raw TcpListener. No HttpListener — manual HTTP parsing.</summary>
+    /// <summary>Serves ArcViewer files and a zip via raw TcpListener with proper HTTP parsing.</summary>
     internal sealed class LocalHttpServer : IDisposable
     {
         private readonly string _zipPath, _cacheDir;
@@ -228,95 +222,109 @@ namespace BSIMM.Avalonia.Views
 
         private async Task HandleClient(TcpClient client)
         {
+            NetworkStream? stream = null;
             try
             {
-                using var stream = client.GetStream();
-                var buf = new byte[8192];
-                var bytesRead = await stream.ReadAsync(buf);
-                var raw = Encoding.ASCII.GetString(buf, 0, bytesRead);
-                var lines = raw.Split("\r\n");
-                if (lines.Length == 0) return;
-                var reqParts = lines[0].Split(' ');
-                if (reqParts.Length < 2) return;
-                var method = reqParts[0].ToUpperInvariant();
-                var path = reqParts[1];
+                stream = client.GetStream();
+                // Use StreamReader for reliable HTTP request parsing (reads until \r\n\r\n)
+                using var reader = new StreamReader(stream, Encoding.ASCII, false, 4096, true);
+                string? requestLine = await reader.ReadLineAsync();
+                if (string.IsNullOrEmpty(requestLine)) return;
 
-                // Simple path: strip query string
-                var qIdx = path.IndexOf('?');
-                var cleanPath = qIdx >= 0 ? path.Substring(0, qIdx) : path;
+                var parts = requestLine.Split(' ');
+                if (parts.Length < 2) return;
+                var method = parts[0].ToUpperInvariant();
+                var rawPath = parts[1];
 
-                if (method == "OPTIONS")
+                // Strip query string to get the clean path
+                var idx = rawPath.IndexOf('?');
+                var path = idx >= 0 ? rawPath.Substring(0, idx) : rawPath;
+
+                // Read all headers (must consume before writing response)
+                int contentLength = 0;
+                string? header;
+                while (!string.IsNullOrEmpty(header = await reader.ReadLineAsync()))
                 {
-                    await WriteResponse(stream, 200, "text/plain", Array.Empty<byte>(), true);
+                    if (header.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
+                        int.TryParse(header.AsSpan(15).Trim(), out contentLength);
+                }
+                // Skip body
+                if (contentLength > 0)
+                {
+                    var bodyBuf = new byte[contentLength];
+                    int pos = 0;
+                    while (pos < contentLength)
+                        pos += await stream.ReadAsync(bodyBuf, pos, contentLength - pos);
+                }
+
+                if (method == "OPTIONS" || method == "HEAD")
+                {
+                    await WriteResponse(stream, 200, "", Array.Empty<byte>(), true);
                     return;
                 }
 
-                if (cleanPath == "/map.zip" || cleanPath == "/download")
+                if (path == "/map.zip" || path == "/download")
                 {
                     if (File.Exists(_zipPath))
                     {
-                        var data = await File.ReadAllBytesAsync(_zipPath);
-                        await WriteResponse(stream, 200, "application/zip", data, true);
+                        await WriteResponse(stream, 200, "application/zip",
+                            await File.ReadAllBytesAsync(_zipPath), true);
                     }
                     else await WriteResponse(stream, 404, "text/plain", "File not found"u8.ToArray(), true);
                 }
                 else
                 {
-                    // Serve ArcViewer file from cache
-                    var rel = cleanPath.TrimStart('/');
-                    if (rel == "" || rel == "index.html") rel = "index.html";
-                    rel = rel.Replace('/', Path.DirectorySeparatorChar);
+                    var rel = path == "/" ? "index.html" : path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
                     var filePath = Path.Combine(_cacheDir, rel);
-
                     if (File.Exists(filePath))
                     {
-                        byte[] data;
-                        if (!_fileCache.TryGetValue(filePath, out data!))
+                        if (!_fileCache.TryGetValue(filePath, out var data) || data == null)
                         {
                             data = File.ReadAllBytes(filePath);
-                            if (data.Length < 5_000_000)
-                                _fileCache[filePath] = data;
+                            if (data.Length < 5_000_000) _fileCache[filePath] = data;
                         }
-                        await WriteResponse(stream, 200, GetMime(filePath), data, true);
+                        await WriteResponse(stream, 200, GetMime(filePath), data!, true);
                     }
-                    else
-                        await WriteResponse(stream, 404, "text/plain", "Not found"u8.ToArray(), true);
+                    else await WriteResponse(stream, 404, "text/plain", "Not found"u8.ToArray(), true);
                 }
             }
             catch { }
-            finally { try { client.Close(); } catch { } }
+            finally
+            {
+                try { stream?.Close(); } catch { }
+                try { client.Close(); } catch { }
+            }
         }
 
         private static async Task WriteResponse(NetworkStream stream, int code, string contentType, byte[] body, bool cors)
         {
-            var hdr = new StringBuilder()
-                .Append($"HTTP/1.1 {code} {StatusText(code)}\r\n")
-                .Append($"Content-Type: {contentType}\r\n")
-                .Append($"Content-Length: {body.Length}\r\n")
-                .Append("Connection: close\r\n");
+            var sb = new StringBuilder();
+            sb.Append($"HTTP/1.1 {code} {StatusText(code)}\r\n");
+            if (!string.IsNullOrEmpty(contentType))
+                sb.Append($"Content-Type: {contentType}\r\n");
+            sb.Append($"Content-Length: {body.Length}\r\n");
+            sb.Append("Connection: close\r\n");
             if (cors)
-                hdr.Append("Access-Control-Allow-Origin: *\r\n" +
-                           "Access-Control-Allow-Methods: GET, OPTIONS\r\n" +
-                           "Access-Control-Allow-Headers: *\r\n");
-            hdr.Append("\r\n");
-            await stream.WriteAsync(Encoding.ASCII.GetBytes(hdr.ToString()));
+            {
+                sb.Append("Access-Control-Allow-Origin: *\r\n");
+                sb.Append("Access-Control-Allow-Methods: GET, OPTIONS, HEAD\r\n");
+                sb.Append("Access-Control-Allow-Headers: Content-Type, Range\r\n");
+            }
+            sb.Append("\r\n");
+            await stream.WriteAsync(Encoding.ASCII.GetBytes(sb.ToString()));
             await stream.WriteAsync(body);
             await stream.FlushAsync();
         }
 
-        private static string StatusText(int code) => code switch
+        private static string StatusText(int code) => code == 200 ? "OK" : "Not Found";
+        private static string GetMime(string p)
         {
-            200 => "OK", 404 => "Not Found", _ => "OK"
-        };
-
-        private static string GetMime(string path)
-        {
-            if (path.EndsWith(".js")) return "application/javascript";
-            if (path.EndsWith(".wasm")) return "application/wasm";
-            if (path.EndsWith(".html")) return "text/html; charset=utf-8";
-            if (path.EndsWith(".css")) return "text/css";
-            if (path.EndsWith(".ico")) return "image/x-icon";
-            if (path.EndsWith(".data")) return "application/octet-stream";
+            if (p.EndsWith(".js")) return "application/javascript";
+            if (p.EndsWith(".wasm")) return "application/wasm";
+            if (p.EndsWith(".html")) return "text/html; charset=utf-8";
+            if (p.EndsWith(".css")) return "text/css";
+            if (p.EndsWith(".ico")) return "image/x-icon";
+            if (p.EndsWith(".data")) return "application/octet-stream";
             return "application/octet-stream";
         }
 
