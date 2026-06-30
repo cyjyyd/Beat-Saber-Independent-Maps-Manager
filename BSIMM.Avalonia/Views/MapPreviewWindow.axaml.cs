@@ -6,12 +6,6 @@ using BeatSaberIndependentMapsManager.Services;
 using System;
 using System.IO;
 using System.Net;
-using System.Net.Http;
-using System.Net.Security;
-using System.Net.Sockets;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -23,22 +17,10 @@ namespace BSIMM.Avalonia.Views
         private TextBlock _lblStatus = null!;
         private ProgressBar _loadProgress = null!;
         private NativeWebView? _webView;
-        private HttpsZipServer? _httpsServer;
+        private SimpleHttpServer? _httpServer;
         private string? _tempZipPath;
 
-        // ArcViewer is always loaded from the remote HTTPS source (same as online preview)
         private const string ArcViewerUrl = "https://allpoland.github.io/ArcViewer/";
-
-        private static readonly HttpClient _downloadClient = new(new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = (s, c, ch, e) => true
-        })
-        { Timeout = TimeSpan.FromMinutes(5) };
-
-        static MapPreviewWindow()
-        {
-            _downloadClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-        }
 
         public MapPreviewWindow()
         {
@@ -57,11 +39,11 @@ namespace BSIMM.Avalonia.Views
             if (!string.IsNullOrEmpty(mapId))
             {
                 _lblStatus.Text = $"正在加载 ArcViewer (谱面ID: {mapId})...";
-                InitializeWebView($"{ArcViewerUrl}?id={Uri.EscapeDataString(mapId)}");
+                InitializeWebView($"{ArcViewerUrl}?id={Uri.EscapeDataString(mapId)}", allowMixedContent: false);
                 return;
             }
 
-            // Download zip, serve via local HTTPS
+            // Download zip, serve via local HTTP
             _lblStatus.Text = $"正在下载谱面: {mapName}...";
             var tempDir = Path.Combine(Path.GetTempPath(), "bsim_preview");
             var previewService = new MapPreviewService();
@@ -83,17 +65,17 @@ namespace BSIMM.Avalonia.Views
                 return;
             }
 
-            _lblStatus.Text = "正在启动本地 HTTPS 服务...";
-            string? zipUrl = await StartHttpsServerAsync(_tempZipPath, mapName);
+            string? zipUrl = StartHttpServer(_tempZipPath);
             if (zipUrl == null)
             {
-                _lblStatus.Text = "无法启动本地 HTTPS 服务";
+                _lblStatus.Text = "无法启动本地 HTTP 服务";
                 _loadProgress.IsVisible = false;
                 return;
             }
 
-            // ArcViewer (remote HTTPS) fetches zip from local HTTPS — no mixed content
-            InitializeWebView($"{ArcViewerUrl}?url={Uri.EscapeDataString(zipUrl)}");
+            // ArcViewer (HTTPS) fetches zip from local HTTP (mixed content).
+            // WebView2 is configured to allow insecure content via AdditionalBrowserArguments.
+            InitializeWebView($"{ArcViewerUrl}?url={Uri.EscapeDataString(zipUrl)}", allowMixedContent: true);
         }
 
         public async Task LoadLocalMapAsync(string mapDir, string mapName)
@@ -115,36 +97,34 @@ namespace BSIMM.Avalonia.Views
                 return;
             }
 
-            _lblStatus.Text = "正在启动本地 HTTPS 服务...";
-            string? zipUrl = await StartHttpsServerAsync(_tempZipPath, mapName);
+            string? zipUrl = StartHttpServer(_tempZipPath);
             if (zipUrl == null)
             {
-                _lblStatus.Text = "无法启动本地 HTTPS 服务";
+                _lblStatus.Text = "无法启动本地 HTTP 服务";
                 _loadProgress.IsVisible = false;
                 return;
             }
 
-            // ArcViewer (remote HTTPS) fetches zip from local HTTPS — no mixed content
-            InitializeWebView($"{ArcViewerUrl}?url={Uri.EscapeDataString(zipUrl)}");
+            InitializeWebView($"{ArcViewerUrl}?url={Uri.EscapeDataString(zipUrl)}", allowMixedContent: true);
             await Task.CompletedTask;
         }
 
-        private async Task<string?> StartHttpsServerAsync(string zipPath, string mapName)
+        private string? StartHttpServer(string zipPath)
         {
             try
             {
-                _httpsServer = new HttpsZipServer();
-                await _httpsServer.StartAsync(zipPath, mapName);
-                return _httpsServer.ZipUrl;
+                _httpServer = new SimpleHttpServer(zipPath);
+                _httpServer.Start();
+                return _httpServer.ZipUrl;
             }
             catch (Exception ex)
             {
-                _lblStatus.Text = $"HTTPS 服务启动失败: {ex.Message}";
+                _lblStatus.Text = $"HTTP 服务启动失败: {ex.Message}";
                 return null;
             }
         }
 
-        private void InitializeWebView(string url)
+        private void InitializeWebView(string url, bool allowMixedContent = false)
         {
             try
             {
@@ -152,6 +132,26 @@ namespace BSIMM.Avalonia.Views
                 {
                     Source = new Uri(url)
                 };
+
+                if (allowMixedContent)
+                {
+                    // Configure WebView2 to allow mixed content (HTTPS page loading HTTP resources)
+                    // via Chromium command-line flag passed through AdditionalBrowserArguments
+                    _webView.EnvironmentRequested += (sender, args) =>
+                    {
+                        // The event args type is platform-specific; use dynamic to access properties
+                        dynamic dynArgs = args;
+                        try
+                        {
+                            // --allow-running-insecure-content allows HTTPS pages to fetch HTTP resources
+                            // --disable-web-security disables same-origin policy (needed for CORS)
+                            dynArgs.AdditionalBrowserArguments =
+                                "--allow-running-insecure-content --disable-web-security";
+                        }
+                        catch { }
+                    };
+                }
+
                 _webView.NavigationCompleted += (s, e) =>
                 {
                     global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -195,7 +195,7 @@ namespace BSIMM.Avalonia.Views
 
         private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
         {
-            try { _httpsServer?.Dispose(); } catch { }
+            try { _httpServer?.Dispose(); } catch { }
 
             try
             {
@@ -207,131 +207,64 @@ namespace BSIMM.Avalonia.Views
     }
 
     /// <summary>
-    /// A minimal HTTPS server that serves a single zip file with a self-signed certificate.
-    /// Uses raw TcpListener + SslStream (HttpListener doesn't support HTTPS easily).
+    /// Simple HTTP server using HttpListener — serves a single zip file.
     /// </summary>
-    internal sealed class HttpsZipServer : IDisposable
+    internal sealed class SimpleHttpServer : IDisposable
     {
-        private TcpListener? _listener;
-        private X509Certificate2? _cert;
+        private HttpListener? _listener;
         private CancellationTokenSource _cts = new();
-        private string _zipPath = "";
-        private string _mapName = "";
-        private int _port;
-        private bool _certInstalled;
+        private readonly string _zipPath;
+        private readonly int _port;
 
-        public string ZipUrl => $"https://localhost:{_port}/map.zip";
+        public string ZipUrl => $"http://localhost:{_port}/map.zip";
 
-        public async Task StartAsync(string zipPath, string mapName)
+        public SimpleHttpServer(string zipPath)
         {
             _zipPath = zipPath;
-            _mapName = mapName;
-
-            // Generate and install self-signed certificate to Trusted Root
-            _cert = GenerateSelfSignedCert();
-            _certInstalled = InstallCertToTrustedRootWithFlag(_cert);
-
-            // Find free port
             _port = FindFreePort();
+        }
 
-            _listener = new TcpListener(IPAddress.Loopback, _port);
+        public void Start()
+        {
+            _listener = new HttpListener();
+            _listener.Prefixes.Add($"http://localhost:{_port}/");
             _listener.Start();
-
-            // Run server loop in background
-            _ = Task.Run(() => ServerLoop(_cts.Token));
+            _ = Task.Run(() => ServerLoop());
         }
 
-        private static void InstallCertToTrustedRoot(X509Certificate2 cert)
+        private async Task ServerLoop()
         {
-            try
+            while (!_cts.IsCancellationRequested && _listener?.IsListening == true)
             {
-                using var store = new X509Store(StoreName.Root, StoreLocation.CurrentUser);
-                store.Open(OpenFlags.ReadWrite);
-                // Remove any previous BSIMM certs to avoid duplicates
-                var existing = store.Certificates.Find(X509FindType.FindBySubjectDistinguishedName, cert.SubjectName.Name, false);
-                foreach (var c in existing)
-                {
-                    if (c.Thumbprint != cert.Thumbprint)
-                        store.Remove(c);
-                }
-                store.Add(cert);
-                store.Close();
-            }
-            catch { }
-        }
-
-        private static bool InstallCertToTrustedRootWithFlag(X509Certificate2 cert)
-        {
-            try
-            {
-                using var store = new X509Store(StoreName.Root, StoreLocation.CurrentUser);
-                store.Open(OpenFlags.ReadWrite);
-                var existing = store.Certificates.Find(X509FindType.FindBySubjectDistinguishedName, cert.SubjectName.Name, false);
-                foreach (var c in existing)
-                {
-                    if (c.Thumbprint != cert.Thumbprint)
-                        store.Remove(c);
-                }
-                store.Add(cert);
-                store.Close();
-                return true;
-            }
-            catch { return false; }
-        }
-
-        private static void RemoveCertFromTrustedRoot(X509Certificate2 cert)
-        {
-            try
-            {
-                using var store = new X509Store(StoreName.Root, StoreLocation.CurrentUser);
-                store.Open(OpenFlags.ReadWrite);
-                store.Remove(cert);
-                store.Close();
-            }
-            catch { }
-        }
-
-        private async Task ServerLoop(CancellationToken ct)
-        {
-            while (!ct.IsCancellationRequested)
-            {
-                TcpClient? client = null;
+                HttpListenerContext? ctx = null;
                 try
                 {
-                    client = await _listener!.AcceptTcpClientAsync(ct);
-                    _ = HandleClientAsync(client, ct);
+                    ctx = await _listener.GetContextAsync();
+                    _ = HandleRequest(ctx);
                 }
-                catch (OperationCanceledException) { break; }
                 catch { }
             }
         }
 
-        private async Task HandleClientAsync(TcpClient client, CancellationToken ct)
+        private async Task HandleRequest(HttpListenerContext ctx)
         {
             try
             {
-                using var sslStream = new SslStream(client.GetStream(), false);
-                // Authenticate with self-signed cert — accept any client cert
-                await sslStream.AuthenticateAsServerAsync(_cert!, false, System.Security.Authentication.SslProtocols.None, false);
+                var req = ctx.Request;
+                var resp = ctx.Response;
 
-                // Read the HTTP request line
-                using var reader = new StreamReader(sslStream, Encoding.ASCII);
-                string? requestLine = await reader.ReadLineAsync(ct);
-                if (requestLine == null) return;
+                // CORS headers — critical for ArcViewer (cross-origin) to fetch the zip
+                resp.Headers.Add("Access-Control-Allow-Origin", "*");
+                resp.Headers.Add("Access-Control-Allow-Methods", "GET, OPTIONS, HEAD");
+                resp.Headers.Add("Access-Control-Allow-Headers", "*");
 
-                // Parse: "GET /path HTTP/1.1"
-                var parts = requestLine.Split(' ');
-                if (parts.Length < 3) return;
-                string method = parts[0];
-                string path = parts[1];
+                string path = req.Url?.LocalPath ?? "/";
 
-                // Read and discard headers
-                string? header;
-                while ((header = await reader.ReadLineAsync(ct)) != null && header.Length > 0) { }
-
-                if (method == "OPTIONS")
+                if (req.HttpMethod == "OPTIONS" || req.HttpMethod == "HEAD")
                 {
-                    await SendResponse(sslStream, 200, "", "text/plain", new byte[0]);
+                    resp.StatusCode = 200;
+                    resp.ContentLength64 = 0;
+                    resp.Close();
                     return;
                 }
 
@@ -339,97 +272,39 @@ namespace BSIMM.Avalonia.Views
                 {
                     if (File.Exists(_zipPath))
                     {
-                        byte[] zipBytes = await File.ReadAllBytesAsync(_zipPath, ct);
-                        var headers = new StringBuilder()
-                            .Append("Access-Control-Allow-Origin: *\r\n")
-                            .Append("Access-Control-Allow-Methods: GET, OPTIONS\r\n")
-                            .Append("Access-Control-Allow-Headers: *\r\n")
-                            .Append($"Content-Disposition: attachment; filename=\"{Uri.EscapeDataString(_mapName)}.zip\"\r\n");
-                        await SendRawResponse(sslStream, 200, "application/zip", zipBytes, headers.ToString());
+                        using var fs = File.OpenRead(_zipPath);
+                        resp.StatusCode = 200;
+                        resp.ContentType = "application/zip";
+                        resp.ContentLength64 = fs.Length;
+                        await fs.CopyToAsync(resp.OutputStream);
+                        resp.OutputStream.Flush();
                     }
                     else
                     {
-                        await SendResponse(sslStream, 404, "Not Found", "text/plain", Encoding.UTF8.GetBytes("File not found"));
+                        resp.StatusCode = 404;
+                        var msg = System.Text.Encoding.UTF8.GetBytes("File not found");
+                        resp.ContentLength64 = msg.Length;
+                        resp.OutputStream.Write(msg, 0, msg.Length);
                     }
                 }
                 else
                 {
-                    await SendResponse(sslStream, 404, "Not Found", "text/plain", Encoding.UTF8.GetBytes("Not found"));
+                    resp.StatusCode = 404;
+                    var msg = System.Text.Encoding.UTF8.GetBytes("Not found");
+                    resp.ContentLength64 = msg.Length;
+                    resp.OutputStream.Write(msg, 0, msg.Length);
                 }
             }
             catch { }
             finally
             {
-                try { client.Close(); } catch { }
+                try { ctx.Response.Close(); } catch { }
             }
-        }
-
-        private static async Task SendResponse(SslStream stream, int statusCode, string statusText, string contentType, byte[] body)
-        {
-            var headerLines = new StringBuilder()
-                .Append($"HTTP/1.1 {statusCode} {statusText}\r\n")
-                .Append($"Content-Type: {contentType}\r\n")
-                .Append($"Content-Length: {body.Length}\r\n")
-                .Append("Access-Control-Allow-Origin: *\r\n")
-                .Append("Access-Control-Allow-Methods: GET, OPTIONS\r\n")
-                .Append("Access-Control-Allow-Headers: *\r\n")
-                .Append("Connection: close\r\n")
-                .Append("\r\n");
-
-            byte[] headerBytes = Encoding.ASCII.GetBytes(headerLines.ToString());
-            await stream.WriteAsync(headerBytes);
-            await stream.WriteAsync(body);
-            await stream.FlushAsync();
-        }
-
-        private static async Task SendRawResponse(SslStream stream, int statusCode, string contentType, byte[] body, string extraHeaders)
-        {
-            var headerLines = new StringBuilder()
-                .Append($"HTTP/1.1 {statusCode} OK\r\n")
-                .Append($"Content-Type: {contentType}\r\n")
-                .Append($"Content-Length: {body.Length}\r\n")
-                .Append(extraHeaders)
-                .Append("Connection: close\r\n")
-                .Append("\r\n");
-
-            byte[] headerBytes = Encoding.ASCII.GetBytes(headerLines.ToString());
-            await stream.WriteAsync(headerBytes);
-            await stream.WriteAsync(body);
-            await stream.FlushAsync();
-        }
-
-        private static X509Certificate2 GenerateSelfSignedCert()
-        {
-            using var rsa = RSA.Create(2048);
-            var req = new CertificateRequest("CN=localhost", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-
-            // Add SAN for localhost and 127.0.0.1
-            var sanBuilder = new SubjectAlternativeNameBuilder();
-            sanBuilder.AddDnsName("localhost");
-            sanBuilder.AddIpAddress(IPAddress.Loopback);
-            req.CertificateExtensions.Add(sanBuilder.Build());
-
-            // Basic constraints
-            req.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
-
-            // Key usage: digital signature, key encipherment
-            req.CertificateExtensions.Add(new X509KeyUsageExtension(
-                X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true));
-
-            // Enhanced key usage: server auth
-            req.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
-                new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, true));
-
-            // Valid for 1 day
-            using var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(1));
-
-            // Export and re-import to get a proper X509Certificate2 with private key
-            return new X509Certificate2(cert.Export(X509ContentType.Pfx, "bsimmpassword"), "bsimmpassword");
         }
 
         private static int FindFreePort()
         {
-            using var listener = new TcpListener(IPAddress.Loopback, 0);
+            using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
             listener.Start();
             int port = ((IPEndPoint)listener.LocalEndpoint).Port;
             listener.Stop();
@@ -440,13 +315,7 @@ namespace BSIMM.Avalonia.Views
         {
             try { _cts.Cancel(); } catch { }
             try { _listener?.Stop(); } catch { }
-            try
-            {
-                if (_cert != null && _certInstalled)
-                    RemoveCertFromTrustedRoot(_cert);
-            }
-            catch { }
-            try { _cert?.Dispose(); } catch { }
+            try { _listener?.Close(); } catch { }
             try { _cts.Dispose(); } catch { }
         }
     }
