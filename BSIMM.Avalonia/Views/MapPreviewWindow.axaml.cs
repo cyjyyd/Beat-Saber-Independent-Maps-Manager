@@ -91,12 +91,14 @@ namespace BSIMM.Avalonia.Views
                 int port = _server.Port;
                 string zipUrl = $"http://127.0.0.1:{port}/{zipName}";
 
+                // Write mock API JSON for ArcViewer
+                string mockApiFile = Path.Combine(ArcViewerCacheDir, "_api_mock.json");
+                File.WriteAllText(mockApiFile, $@"{{""id"":""localmap"",""name"":""{mapName.Replace("\"","'")}"",""versions"":[{{""downloadURL"":""{zipUrl}"",""coverURL"":""""}}]}}");
+
                 _cachePatchHtml = Path.Combine(ArcViewerCacheDir, "_index_patched.html");
                 File.WriteAllText(_cachePatchHtml, GeneratePatchedHtml(port, zipName, zipUrl));
 
-                // Load ArcViewer with ?id=localmap — the XHR patch intercepts
-                // the API call and returns JSON pointing to the local zip.
-                InitWebView($"http://127.0.0.1:{port}/_index_patched.html");
+                InitWebView($"http://127.0.0.1:{port}/_index_patched.html?id=localmap");
             }
             catch (Exception ex) { OnFail(ex.Message); }
         }
@@ -106,37 +108,23 @@ namespace BSIMM.Avalonia.Views
             string origHtml = File.ReadAllText(Path.Combine(ArcViewerCacheDir, "index.html"));
             string patchScript = $@"<script>
 (function(){{
-    var origOpen = XMLHttpRequest.prototype.open;
-    var origSend = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.open = function(method, url) {{
-        this.__bsimm_url = url;
-        return origOpen.apply(this, arguments);
+    var OrigXHR = window.XMLHttpRequest;
+    window.XMLHttpRequest = function() {{
+        var xhr = new OrigXHR();
+        var origOpen = xhr.open;
+        xhr.open = function(method, url, async, user, password) {{
+            if (typeof url === 'string' && url.indexOf('api.beatsaver.com/maps/') >= 0) {{
+                console.log('BSIMM: redirecting API call from ' + url + ' to local mock');
+                url = 'http://127.0.0.1:{port}/_api_mock.json';
+            }}
+            return origOpen.call(xhr, method, url, async, user, password);
+        }};
+        return xhr;
     }};
-    XMLHttpRequest.prototype.send = function(body) {{
-        var url = this.__bsimm_url || '';
-        if (url.indexOf('api.beatsaver.com/maps/id/') >= 0 || url.indexOf('api.beatsaver.com/maps/hash/') >= 0) {{
-            var id = url.split('/').pop();
-            console.log('BSIMM: intercepted API call for ' + id + ', returning local zip');
-            var json = JSON.stringify({{
-                id: id,
-                name: 'Local Map',
-                versions: [{{ downloadURL: '{zipUrl}', coverURL: '' }}]
-            }});
-            var blob = new Blob([json], {{type: 'application/json'}});
-            Object.defineProperty(this, 'responseText', {{value: json, writable: false}});
-            Object.defineProperty(this, 'response', {{value: json, writable: false}});
-            Object.defineProperty(this, 'readyState', {{value: 4, writable: false}});
-            Object.defineProperty(this, 'status', {{value: 200, writable: false}});
-            Object.defineProperty(this, 'statusText', {{value: 'OK', writable: false}});
-            setTimeout(() => {{ if (this.onloadend) this.onloadend(); if (this.onload) this.onload(); if (this.onreadystatechange) this.onreadystatechange(); }}, 0);
-            return;
-        }}
-        return origSend.apply(this, arguments);
-    }};
+    window.XMLHttpRequest.prototype = OrigXHR.prototype;
 }})();
 </script>";
 
-            // Insert patch script right after <head> or before first <script>
             int insertPos = origHtml.IndexOf("<script");
             if (insertPos < 0) insertPos = origHtml.IndexOf("</head>");
             if (insertPos < 0) insertPos = origHtml.IndexOf("<body");
@@ -314,6 +302,7 @@ namespace BSIMM.Avalonia.Views
             if (p.EndsWith(".css")) return "text/css";
             if (p.EndsWith(".ico")) return "image/x-icon";
             if (p.EndsWith(".zip")) return "application/zip";
+            if (p.EndsWith(".json")) return "application/json";
             return "application/octet-stream";
         }
 
