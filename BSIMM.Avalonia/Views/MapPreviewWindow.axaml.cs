@@ -4,8 +4,12 @@ using global::Avalonia.Interactivity;
 using global::Avalonia.Markup.Xaml;
 using BeatSaberIndependentMapsManager.Services;
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -17,10 +21,21 @@ namespace BSIMM.Avalonia.Views
         private TextBlock _lblStatus = null!;
         private ProgressBar _loadProgress = null!;
         private NativeWebView? _webView;
-        private SimpleHttpServer? _httpServer;
+        private LocalHttpServer? _localServer;
         private string? _tempZipPath;
 
-        private const string ArcViewerUrl = "https://allpoland.github.io/ArcViewer/";
+        private const string ArcViewerRemote = "https://allpoland.github.io/ArcViewer/";
+        private static readonly string[] ArcViewerFiles = {
+            "index.html", "TemplateData/favicon.ico", "TemplateData/style.css",
+            "TemplateData/Scripts/oggdecode.js", "Build/ArcViewer.loader.js",
+            "Build/ArcViewer.framework.js", "Build/ArcViewer.wasm", "Build/ArcViewer.data",
+        };
+        private static readonly string ArcViewerCacheDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BSIMM", "ArcViewer");
+        private static readonly HttpClient _http = new(new HttpClientHandler
+        { ServerCertificateCustomValidationCallback = (s, c, ch, e) => true })
+        { Timeout = TimeSpan.FromMinutes(5) };
+        static MapPreviewWindow() => _http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
 
         public MapPreviewWindow()
         {
@@ -33,289 +48,282 @@ namespace BSIMM.Avalonia.Views
 
         public async Task LoadMapAsync(string downloadUrl, string mapName, string? mapId = null)
         {
-            this.Title = $"谱面预览 - {mapName}";
-
-            // Online map with BeatSaver ID — ArcViewer fetches directly (HTTPS→HTTPS)
+            Title = $"谱面预览 - {mapName}";
             if (!string.IsNullOrEmpty(mapId))
             {
-                _lblStatus.Text = $"正在加载 ArcViewer (谱面ID: {mapId})...";
-                InitializeWebView($"{ArcViewerUrl}?id={Uri.EscapeDataString(mapId)}", allowMixedContent: false);
+                _lblStatus.Text = $"正在加载 ArcViewer (ID: {mapId})...";
+                InitWebView($"{ArcViewerRemote}?id={Uri.EscapeDataString(mapId)}", needsLocalServer: false);
                 return;
             }
 
-            // Download zip, serve via local HTTP
             _lblStatus.Text = $"正在下载谱面: {mapName}...";
-            var tempDir = Path.Combine(Path.GetTempPath(), "bsim_preview");
-            var previewService = new MapPreviewService();
-            try
-            {
-                _tempZipPath = await previewService.DownloadMapZipAsync(downloadUrl, tempDir);
-            }
-            catch (Exception ex)
-            {
-                _lblStatus.Text = $"下载失败: {ex.Message}";
-                _loadProgress.IsVisible = false;
-                return;
-            }
+            _tempZipPath = await DownloadZipAsync(downloadUrl);
+            if (_tempZipPath == null) { OnFail("下载失败，请检查网络连接"); return; }
 
-            if (_tempZipPath == null)
-            {
-                _lblStatus.Text = "下载失败，请检查网络连接";
-                _loadProgress.IsVisible = false;
-                return;
-            }
-
-            string? zipUrl = StartHttpServer(_tempZipPath);
-            if (zipUrl == null)
-            {
-                _lblStatus.Text = "无法启动本地 HTTP 服务";
-                _loadProgress.IsVisible = false;
-                return;
-            }
-
-            // ArcViewer (HTTPS) fetches zip from local HTTP (mixed content).
-            // WebView2 is configured to allow insecure content via AdditionalBrowserArguments.
-            InitializeWebView($"{ArcViewerUrl}?url={Uri.EscapeDataString(zipUrl)}", allowMixedContent: true);
+            if (!await StartServerAsync(_tempZipPath, mapName)) { OnFail("无法启动本地预览服务"); return; }
+            InitWebView(null!, needsLocalServer: true);
         }
 
         public async Task LoadLocalMapAsync(string mapDir, string mapName)
         {
-            this.Title = $"谱面预览 - {mapName}";
+            Title = $"谱面预览 - {mapName}";
             _lblStatus.Text = "正在准备本地谱面...";
-
             _tempZipPath = Path.Combine(Path.GetTempPath(), "bsim_preview", $"local_{Guid.NewGuid():N}.zip");
             try
             {
-                var dir = Path.GetDirectoryName(_tempZipPath);
-                if (dir != null && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                var d = Path.GetDirectoryName(_tempZipPath)!;
+                if (!Directory.Exists(d)) Directory.CreateDirectory(d);
                 System.IO.Compression.ZipFile.CreateFromDirectory(mapDir, _tempZipPath);
             }
-            catch (Exception ex)
-            {
-                _lblStatus.Text = $"无法打包本地谱面: {ex.Message}";
-                _loadProgress.IsVisible = false;
-                return;
-            }
+            catch (Exception ex) { OnFail($"无法打包: {ex.Message}"); return; }
 
-            string? zipUrl = StartHttpServer(_tempZipPath);
-            if (zipUrl == null)
-            {
-                _lblStatus.Text = "无法启动本地 HTTP 服务";
-                _loadProgress.IsVisible = false;
-                return;
-            }
-
-            InitializeWebView($"{ArcViewerUrl}?url={Uri.EscapeDataString(zipUrl)}", allowMixedContent: true);
+            if (!await StartServerAsync(_tempZipPath, mapName)) { OnFail("无法启动本地预览服务"); return; }
+            InitWebView(null!, needsLocalServer: true);
             await Task.CompletedTask;
         }
 
-        private string? StartHttpServer(string zipPath)
+        private async Task<string?> DownloadZipAsync(string url)
         {
             try
             {
-                _httpServer = new SimpleHttpServer(zipPath);
-                _httpServer.Start();
-                return _httpServer.ZipUrl;
+                var dir = Path.Combine(Path.GetTempPath(), "bsim_preview");
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                var path = Path.Combine(dir, $"map_{Guid.NewGuid():N}.zip");
+                var bytes = await _http.GetByteArrayAsync(url);
+                await File.WriteAllBytesAsync(path, bytes);
+                return path;
             }
-            catch (Exception ex)
-            {
-                _lblStatus.Text = $"HTTP 服务启动失败: {ex.Message}";
-                return null;
-            }
+            catch { return null; }
         }
 
-        private void InitializeWebView(string url, bool allowMixedContent = false)
+        private async Task<bool> StartServerAsync(string zipPath, string mapName)
         {
             try
             {
-                _webView = new NativeWebView
-                {
-                    Source = new Uri(url)
-                };
+                _lblStatus.Text = "正在准备 ArcViewer 引擎...";
+                await EnsureArcViewerCachedAsync();
+                _localServer = new LocalHttpServer(zipPath, ArcViewerCacheDir);
+                _localServer.Start();
+                return true;
+            }
+            catch (Exception ex) { _lblStatus.Text = ex.Message; return false; }
+        }
 
-                if (allowMixedContent)
+        private async Task EnsureArcViewerCachedAsync()
+        {
+            if (!Directory.Exists(ArcViewerCacheDir)) Directory.CreateDirectory(ArcViewerCacheDir);
+            var idx = Path.Combine(ArcViewerCacheDir, "index.html");
+            var wasm = Path.Combine(ArcViewerCacheDir, "Build", "ArcViewer.wasm");
+            if (File.Exists(idx) && File.Exists(wasm) && new FileInfo(wasm).Length > 0) return;
+
+            foreach (var f in ArcViewerFiles)
+            {
+                var local = Path.Combine(ArcViewerCacheDir, f.Replace('/', Path.DirectorySeparatorChar));
+                if (File.Exists(local) && new FileInfo(local).Length > 0) continue;
+                try
                 {
-                    // Configure WebView2 to allow mixed content (HTTPS page loading HTTP resources)
-                    // via Chromium command-line flag passed through AdditionalBrowserArguments
-                    _webView.EnvironmentRequested += (sender, args) =>
+                    var d = Path.GetDirectoryName(local)!;
+                    if (!Directory.Exists(d)) Directory.CreateDirectory(d);
+                    var data = await _http.GetByteArrayAsync(ArcViewerRemote + f);
+                    await File.WriteAllBytesAsync(local, data);
+                }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Download {f}: {ex.Message}"); }
+            }
+            if (!File.Exists(idx) || !File.Exists(wasm))
+                throw new Exception("无法下载 ArcViewer 引擎文件，请检查网络");
+        }
+
+        private void InitWebView(string url, bool needsLocalServer)
+        {
+            try
+            {
+                _webView = new NativeWebView();
+
+                // Subscribe BEFORE setting Source (EnvironmentRequested fires before environment creation)
+                if (needsLocalServer)
+                {
+                    _webView.EnvironmentRequested += (s, args) =>
                     {
-                        // The event args type is platform-specific; use dynamic to access properties
-                        dynamic dynArgs = args;
                         try
                         {
-                            // --allow-running-insecure-content allows HTTPS pages to fetch HTTP resources
-                            // --disable-web-security disables same-origin policy (needed for CORS)
-                            dynArgs.AdditionalBrowserArguments =
-                                "--allow-running-insecure-content --disable-web-security";
+                            var prop = args.GetType().GetProperty("AdditionalBrowserArguments");
+                            if (prop != null)
+                                prop.SetValue(args,
+                                    "--allow-insecure-localhost --allow-running-insecure-content");
                         }
                         catch { }
                     };
                 }
 
+                _webView.Source = needsLocalServer
+                    ? new Uri($"http://localhost:{_localServer!.Port}/index.html?url=http://localhost:{_localServer.Port}/map.zip")
+                    : new Uri(url);
+
                 _webView.NavigationCompleted += (s, e) =>
                 {
                     global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     {
-                        if (e != null && e.IsSuccess)
-                        {
-                            _lblStatus.Text = "ArcViewer 已加载";
-                            _loadProgress.IsVisible = false;
-                        }
+                        if (e != null && e.IsSuccess) { _lblStatus.Text = "ArcViewer 已加载"; _loadProgress.IsVisible = false; }
                     });
                 };
-
                 _webViewContainer.Children.Add(_webView);
                 _lblStatus.Text = "正在加载 ArcViewer...";
             }
             catch (Exception ex)
             {
-                _lblStatus.Text = $"WebView 不可用: {ex.Message}，正在在浏览器中打开...";
-                _loadProgress.IsVisible = false;
-                OpenInExternalBrowser(url);
+                OnFail($"WebView 不可用: {ex.Message}");
             }
         }
 
-        private void OpenInExternalBrowser(string url)
-        {
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = url,
-                    UseShellExecute = true
-                });
-            }
-            catch
-            {
-                _lblStatus.Text = $"请在浏览器中打开: {url}";
-            }
-        }
+        private void OnFail(string msg) { _lblStatus.Text = msg; _loadProgress.IsVisible = false; }
 
         private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
 
         private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
         {
-            try { _httpServer?.Dispose(); } catch { }
-
-            try
-            {
-                if (_tempZipPath != null && File.Exists(_tempZipPath))
-                    File.Delete(_tempZipPath);
-            }
-            catch { }
+            try { _localServer?.Dispose(); } catch { }
+            try { if (_tempZipPath != null && File.Exists(_tempZipPath)) File.Delete(_tempZipPath); } catch { }
         }
     }
 
-    /// <summary>
-    /// Simple HTTP server using HttpListener — serves a single zip file.
-    /// </summary>
-    internal sealed class SimpleHttpServer : IDisposable
+    /// <summary>Serves ArcViewer files and a single zip via raw TcpListener. No HttpListener — manual HTTP parsing.</summary>
+    internal sealed class LocalHttpServer : IDisposable
     {
-        private HttpListener? _listener;
-        private CancellationTokenSource _cts = new();
-        private readonly string _zipPath;
-        private readonly int _port;
+        private readonly string _zipPath, _cacheDir;
+        private TcpListener? _listener;
+        private readonly CancellationTokenSource _cts = new();
+        private readonly ConcurrentDictionary<string, byte[]> _fileCache = new();
+        public int Port { get; }
 
-        public string ZipUrl => $"http://localhost:{_port}/map.zip";
-
-        public SimpleHttpServer(string zipPath)
+        public LocalHttpServer(string zipPath, string cacheDir)
         {
             _zipPath = zipPath;
-            _port = FindFreePort();
+            _cacheDir = cacheDir;
+            using var probe = new TcpListener(IPAddress.Loopback, 0);
+            probe.Start();
+            Port = ((IPEndPoint)probe.LocalEndpoint).Port;
+            probe.Stop();
         }
 
         public void Start()
         {
-            _listener = new HttpListener();
-            _listener.Prefixes.Add($"http://localhost:{_port}/");
+            _listener = new TcpListener(IPAddress.Loopback, Port);
             _listener.Start();
-            _ = Task.Run(() => ServerLoop());
+            _ = Task.Run(RunLoop);
         }
 
-        private async Task ServerLoop()
+        private async Task RunLoop()
         {
-            while (!_cts.IsCancellationRequested && _listener?.IsListening == true)
+            while (!_cts.IsCancellationRequested)
             {
-                HttpListenerContext? ctx = null;
                 try
                 {
-                    ctx = await _listener.GetContextAsync();
-                    _ = HandleRequest(ctx);
+                    var client = await _listener!.AcceptTcpClientAsync(_cts.Token);
+                    _ = HandleClient(client);
                 }
+                catch (OperationCanceledException) { break; }
                 catch { }
             }
         }
 
-        private async Task HandleRequest(HttpListenerContext ctx)
+        private async Task HandleClient(TcpClient client)
         {
             try
             {
-                var req = ctx.Request;
-                var resp = ctx.Response;
+                using var stream = client.GetStream();
+                var buf = new byte[8192];
+                var bytesRead = await stream.ReadAsync(buf);
+                var raw = Encoding.ASCII.GetString(buf, 0, bytesRead);
+                var lines = raw.Split("\r\n");
+                if (lines.Length == 0) return;
+                var reqParts = lines[0].Split(' ');
+                if (reqParts.Length < 2) return;
+                var method = reqParts[0].ToUpperInvariant();
+                var path = reqParts[1];
 
-                // CORS headers — critical for ArcViewer (cross-origin) to fetch the zip
-                resp.Headers.Add("Access-Control-Allow-Origin", "*");
-                resp.Headers.Add("Access-Control-Allow-Methods", "GET, OPTIONS, HEAD");
-                resp.Headers.Add("Access-Control-Allow-Headers", "*");
+                // Simple path: strip query string
+                var qIdx = path.IndexOf('?');
+                var cleanPath = qIdx >= 0 ? path.Substring(0, qIdx) : path;
 
-                string path = req.Url?.LocalPath ?? "/";
-
-                if (req.HttpMethod == "OPTIONS" || req.HttpMethod == "HEAD")
+                if (method == "OPTIONS")
                 {
-                    resp.StatusCode = 200;
-                    resp.ContentLength64 = 0;
-                    resp.Close();
+                    await WriteResponse(stream, 200, "text/plain", Array.Empty<byte>(), true);
                     return;
                 }
 
-                if (path == "/map.zip" || path == "/download")
+                if (cleanPath == "/map.zip" || cleanPath == "/download")
                 {
                     if (File.Exists(_zipPath))
                     {
-                        using var fs = File.OpenRead(_zipPath);
-                        resp.StatusCode = 200;
-                        resp.ContentType = "application/zip";
-                        resp.ContentLength64 = fs.Length;
-                        await fs.CopyToAsync(resp.OutputStream);
-                        resp.OutputStream.Flush();
+                        var data = await File.ReadAllBytesAsync(_zipPath);
+                        await WriteResponse(stream, 200, "application/zip", data, true);
                     }
-                    else
-                    {
-                        resp.StatusCode = 404;
-                        var msg = System.Text.Encoding.UTF8.GetBytes("File not found");
-                        resp.ContentLength64 = msg.Length;
-                        resp.OutputStream.Write(msg, 0, msg.Length);
-                    }
+                    else await WriteResponse(stream, 404, "text/plain", "File not found"u8.ToArray(), true);
                 }
                 else
                 {
-                    resp.StatusCode = 404;
-                    var msg = System.Text.Encoding.UTF8.GetBytes("Not found");
-                    resp.ContentLength64 = msg.Length;
-                    resp.OutputStream.Write(msg, 0, msg.Length);
+                    // Serve ArcViewer file from cache
+                    var rel = cleanPath.TrimStart('/');
+                    if (rel == "" || rel == "index.html") rel = "index.html";
+                    rel = rel.Replace('/', Path.DirectorySeparatorChar);
+                    var filePath = Path.Combine(_cacheDir, rel);
+
+                    if (File.Exists(filePath))
+                    {
+                        byte[] data;
+                        if (!_fileCache.TryGetValue(filePath, out data!))
+                        {
+                            data = File.ReadAllBytes(filePath);
+                            if (data.Length < 5_000_000)
+                                _fileCache[filePath] = data;
+                        }
+                        await WriteResponse(stream, 200, GetMime(filePath), data, true);
+                    }
+                    else
+                        await WriteResponse(stream, 404, "text/plain", "Not found"u8.ToArray(), true);
                 }
             }
             catch { }
-            finally
-            {
-                try { ctx.Response.Close(); } catch { }
-            }
+            finally { try { client.Close(); } catch { } }
         }
 
-        private static int FindFreePort()
+        private static async Task WriteResponse(NetworkStream stream, int code, string contentType, byte[] body, bool cors)
         {
-            using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-            listener.Start();
-            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-            listener.Stop();
-            return port;
+            var hdr = new StringBuilder()
+                .Append($"HTTP/1.1 {code} {StatusText(code)}\r\n")
+                .Append($"Content-Type: {contentType}\r\n")
+                .Append($"Content-Length: {body.Length}\r\n")
+                .Append("Connection: close\r\n");
+            if (cors)
+                hdr.Append("Access-Control-Allow-Origin: *\r\n" +
+                           "Access-Control-Allow-Methods: GET, OPTIONS\r\n" +
+                           "Access-Control-Allow-Headers: *\r\n");
+            hdr.Append("\r\n");
+            await stream.WriteAsync(Encoding.ASCII.GetBytes(hdr.ToString()));
+            await stream.WriteAsync(body);
+            await stream.FlushAsync();
+        }
+
+        private static string StatusText(int code) => code switch
+        {
+            200 => "OK", 404 => "Not Found", _ => "OK"
+        };
+
+        private static string GetMime(string path)
+        {
+            if (path.EndsWith(".js")) return "application/javascript";
+            if (path.EndsWith(".wasm")) return "application/wasm";
+            if (path.EndsWith(".html")) return "text/html; charset=utf-8";
+            if (path.EndsWith(".css")) return "text/css";
+            if (path.EndsWith(".ico")) return "image/x-icon";
+            if (path.EndsWith(".data")) return "application/octet-stream";
+            return "application/octet-stream";
         }
 
         public void Dispose()
         {
             try { _cts.Cancel(); } catch { }
             try { _listener?.Stop(); } catch { }
-            try { _listener?.Close(); } catch { }
             try { _cts.Dispose(); } catch { }
         }
     }
