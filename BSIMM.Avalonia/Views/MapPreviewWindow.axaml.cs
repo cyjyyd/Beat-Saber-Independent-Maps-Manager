@@ -150,14 +150,19 @@ namespace BSIMM.Avalonia.Views
             {
                 _webView = new NativeWebView();
 
-                // Subscribe BEFORE setting Source
+                // Subscribe BEFORE setting Source.
+                // The flag is set per port — ArcViewer loads on same port, and downloads
+                // the zip from same port, so the security exception covers both.
                 _webView.EnvironmentRequested += (s, args) =>
                 {
                     try
                     {
-                        var prop = args.GetType().GetProperty("AdditionalBrowserArguments");
-                        if (prop != null)
-                            prop.SetValue(args, "--allow-insecure-localhost");
+                        var match = System.Text.RegularExpressions.Regex.Match(url, @"localhost:(\d+)");
+                        if (match.Success)
+                        {
+                            var flag = $"--unsafely-treat-insecure-origin-as-secure=http://localhost:{match.Groups[1].Value}";
+                            args.GetType().GetProperty("AdditionalBrowserArguments")?.SetValue(args, flag);
+                        }
                     }
                     catch { }
                 };
