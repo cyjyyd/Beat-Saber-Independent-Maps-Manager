@@ -1,197 +1,254 @@
 using global::Avalonia;
 using global::Avalonia.Controls;
-using global::Avalonia.Input;
 using global::Avalonia.Interactivity;
 using global::Avalonia.Markup.Xaml;
 using global::Avalonia.Media;
-using global::Avalonia.Threading;
 using BeatSaberIndependentMapsManager.Services;
 using System;
 using System.IO;
-using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
 
 namespace BSIMM.Avalonia.Views
 {
     public partial class MapPreviewWindow : Window
     {
-        private MapPreviewControl _previewCanvas = null!;
-        private ComboBox _cboDifficulty = null!;
-        private TextBlock _lblNoteCount = null!;
-        private TextBlock _lblCurrentTime = null!;
-        private TextBlock _lblTotalTime = null!;
-        private Slider _progressSlider = null!;
-        private Button _btnPlayPause = null!;
+        private Panel _webViewContainer = null!;
+        private TextBlock _lblStatus = null!;
+        private ProgressBar _loadProgress = null!;
+        private Control? _webView;
+        private HttpListener? _httpServer;
+        private string? _tempZipPath;
 
-        private readonly MapPreviewService _previewService = new();
-        private MapPreviewData? _previewData;
-        private string? _zipPath;
-        private string? _localMapDir;
-        private bool _isLoadingData = false;
+        // ArcViewer hosted on GitHub Pages — the same tool beatsaver.com embeds
+        private const string ArcViewerUrl = "https://allpoland.github.io/ArcViewer/";
 
         public MapPreviewWindow()
         {
             AvaloniaXamlLoader.Load(this);
-            _previewCanvas = this.FindControl<MapPreviewControl>("PreviewCanvas")!;
-            _cboDifficulty = this.FindControl<ComboBox>("CboDifficulty")!;
-            _lblNoteCount = this.FindControl<TextBlock>("LblNoteCount")!;
-            _lblCurrentTime = this.FindControl<TextBlock>("LblCurrentTime")!;
-            _lblTotalTime = this.FindControl<TextBlock>("LblTotalTime")!;
-            _progressSlider = this.FindControl<Slider>("ProgressSlider")!;
-            _btnPlayPause = this.FindControl<Button>("BtnPlayPause")!;
-
-            _previewCanvas.ProgressChanged += OnProgressChanged;
-            _cboDifficulty.SelectionChanged += (s, e) => OnDifficultyChanged();
+            _webViewContainer = this.FindControl<Panel>("WebViewContainer")!;
+            _lblStatus = this.FindControl<TextBlock>("LblStatus")!;
+            _loadProgress = this.FindControl<ProgressBar>("LoadProgress")!;
+            this.Closing += OnWindowClosing;
         }
 
-        public async Task LoadMapAsync(string downloadUrl, string mapName)
+        public async Task LoadMapAsync(string downloadUrl, string mapName, string? mapId = null)
         {
             this.Title = $"谱面预览 - {mapName}";
 
+            // For online maps with a BeatSaver ID, ArcViewer can fetch the map directly
+            if (!string.IsNullOrEmpty(mapId))
+            {
+                _lblStatus.Text = $"正在加载 ArcViewer (谱面ID: {mapId})...";
+                var url = $"{ArcViewerUrl}?id={Uri.EscapeDataString(mapId)}";
+                await InitializeWebViewAsync(url);
+                return;
+            }
+
+            // Fallback: download the zip and serve it via local HTTP
+            _lblStatus.Text = $"正在下载谱面: {mapName}...";
             var tempDir = Path.Combine(Path.GetTempPath(), "bsim_preview");
+            var previewService = new MapPreviewService();
             try
             {
-                _zipPath = await _previewService.DownloadMapZipAsync(downloadUrl, tempDir);
+                _tempZipPath = await previewService.DownloadMapZipAsync(downloadUrl, tempDir);
             }
             catch (Exception ex)
             {
-                _lblNoteCount.Text = $"下载失败: {ex.Message}";
-                _btnPlayPause.IsEnabled = false;
+                _lblStatus.Text = $"下载失败: {ex.Message}";
+                _loadProgress.IsVisible = false;
                 return;
             }
 
-            if (_zipPath == null)
+            if (_tempZipPath == null)
             {
-                _lblNoteCount.Text = "下载失败，请检查网络连接或稍后重试";
-                _btnPlayPause.IsEnabled = false;
+                _lblStatus.Text = "下载失败，请检查网络连接";
+                _loadProgress.IsVisible = false;
                 return;
             }
 
-            _previewData = _previewService.ParseMapFromZip(_zipPath);
-            PopulateUI();
+            _lblStatus.Text = "正在启动本地预览服务...";
+            string? servedUrl = StartLocalZipServer(_tempZipPath, mapName);
+            if (servedUrl == null)
+            {
+                _lblStatus.Text = "无法启动本地预览服务";
+                _loadProgress.IsVisible = false;
+                return;
+            }
+
+            await InitializeWebViewAsync(servedUrl);
         }
 
-        public void LoadLocalMap(string mapDir, string mapName)
+        public async Task LoadLocalMapAsync(string mapDir, string mapName)
         {
             this.Title = $"谱面预览 - {mapName}";
-            _localMapDir = mapDir;
 
-            _previewData = _previewService.ParseMapFromDirectory(mapDir);
-            PopulateUI();
-        }
+            _lblStatus.Text = "正在准备本地谱面...";
 
-        private void PopulateUI()
-        {
-            if (_previewData == null)
+            // Create a zip from the local map directory and serve it
+            _tempZipPath = Path.Combine(Path.GetTempPath(), "bsim_preview", $"local_{Guid.NewGuid():N}.zip");
+            try
             {
-                _lblNoteCount.Text = "解析失败";
-                _btnPlayPause.IsEnabled = false;
+                if (!Directory.Exists(Path.GetDirectoryName(_tempZipPath)))
+                    Directory.CreateDirectory(Path.GetDirectoryName(_tempZipPath)!);
+
+                System.IO.Compression.ZipFile.CreateFromDirectory(mapDir, _tempZipPath);
+            }
+            catch (Exception ex)
+            {
+                _lblStatus.Text = $"无法打包本地谱面: {ex.Message}";
+                _loadProgress.IsVisible = false;
                 return;
             }
 
-            if (_previewData.Difficulties.Count > 0)
+            string? servedUrl = StartLocalZipServer(_tempZipPath, mapName);
+            if (servedUrl == null)
             {
-                var diffNames = _previewData.Difficulties
-                    .Select(d => $"{d.Characteristic}/{d.Difficulty}")
-                    .ToList();
-                _cboDifficulty.ItemsSource = diffNames;
-
-                int selectedIdx = diffNames.FindIndex(n =>
-                    n.Contains(_previewData.SelectedCharacteristic) &&
-                    n.Contains(_previewData.SelectedDifficulty));
-                _cboDifficulty.SelectedIndex = selectedIdx >= 0 ? selectedIdx : 0;
-
-                LoadPreviewData();
+                _lblStatus.Text = "无法启动本地预览服务";
+                _loadProgress.IsVisible = false;
+                return;
             }
-            else
-            {
-                _lblNoteCount.Text = "未找到难度数据";
-                _btnPlayPause.IsEnabled = false;
-            }
+
+            await InitializeWebViewAsync(servedUrl);
         }
 
-        private void OnDifficultyChanged()
+        private string? StartLocalZipServer(string zipPath, string mapName)
         {
-            if (_previewData == null || _cboDifficulty.SelectedIndex < 0) return;
-
-            var selected = _previewData.Difficulties[_cboDifficulty.SelectedIndex];
-
-            if (_localMapDir != null)
+            try
             {
-                _previewData = _previewService.ParseDifficultyFromDirectory(_localMapDir, _previewData, selected.Characteristic, selected.Difficulty);
+                int port = FindFreePort();
+                string prefix = $"http://localhost:{port}/";
+
+                _httpServer = new HttpListener();
+                _httpServer.Prefixes.Add(prefix);
+                _httpServer.Start();
+
+                // Serve the zip file at /map.zip and ArcViewer at /
+                _ = Task.Run(() =>
+                {
+                    while (_httpServer.IsListening)
+                    {
+                        try
+                        {
+                            var context = _httpServer.GetContext();
+                            var request = context.Request;
+                            var response = context.Response;
+
+                            if (request.Url?.LocalPath == "/map.zip" || request.Url?.LocalPath == "/download")
+                            {
+                                byte[] zipBytes = File.ReadAllBytes(zipPath);
+                                response.ContentType = "application/zip";
+                                response.ContentLength64 = zipBytes.Length;
+                                response.Headers.Add("Content-Disposition", $"attachment; filename=\"{Uri.EscapeDataString(mapName)}.zip\"");
+                                response.OutputStream.Write(zipBytes, 0, zipBytes.Length);
+                            }
+                            else
+                            {
+                                // Redirect to ArcViewer with local zip URL
+                                string redirectUrl = $"{ArcViewerUrl}?url=http://localhost:{port}/map.zip";
+                                response.Redirect(redirectUrl);
+                            }
+                            response.Close();
+                        }
+                        catch
+                        {
+                            // Listener stopped or error
+                        }
+                    }
+                });
+
+                return $"http://localhost:{port}/";
             }
-            else if (_zipPath != null)
+            catch
             {
-                _previewData = _previewService.ParseDifficultyFromZip(_zipPath, _previewData, selected.Characteristic, selected.Difficulty);
-            }
-
-            LoadPreviewData();
-        }
-
-        private void LoadPreviewData()
-        {
-            if (_previewData == null) return;
-            _previewCanvas.LoadData(_previewData);
-            _lblTotalTime.Text = FormatTime(_previewCanvas.Duration);
-            _lblNoteCount.Text = $"音符数: {_previewData.Notes.Count}";
-        }
-
-        private void OnProgressChanged(object? sender, double progress)
-        {
-            if (_isLoadingData) return;
-            _isLoadingData = true;
-            Dispatcher.UIThread.Post(() =>
-            {
-                _progressSlider.Value = progress;
-                _lblCurrentTime.Text = FormatTime(_previewCanvas.CurrentTime);
-                _isLoadingData = false;
-            });
-        }
-
-        private void OnPlayPauseClick(object? sender, RoutedEventArgs e)
-        {
-            if (_previewCanvas.IsPlaying)
-            {
-                _previewCanvas.Pause();
-                _btnPlayPause.Content = "▶ 播放";
-            }
-            else
-            {
-                if (_previewCanvas.CurrentTime >= _previewCanvas.Duration && _previewCanvas.Duration > 0)
-                    _previewCanvas.Stop();
-                _previewCanvas.Play();
-                _btnPlayPause.Content = "⏸ 暂停";
+                return null;
             }
         }
 
-        private void OnStopClick(object? sender, RoutedEventArgs e)
+        private static int FindFreePort()
         {
-            _previewCanvas.Stop();
-            _btnPlayPause.Content = "▶ 播放";
-            _lblCurrentTime.Text = "0:00";
-            _progressSlider.Value = 0;
+            using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            return port;
         }
 
-        private void OnProgressSliderReleased(object? sender, PointerReleasedEventArgs e)
+        private async Task InitializeWebViewAsync(string url)
         {
-            double pct = _progressSlider.Value;
-            double time = _previewCanvas.Duration * pct / 100.0;
-            _previewCanvas.Seek(time);
-            _lblCurrentTime.Text = FormatTime(time);
+            try
+            {
+                // Try to create Avalonia.Controls.WebView (available in Avalonia 12.0+)
+                var webViewType = Type.GetType("Avalonia.Controls.WebView, Avalonia.Controls.WebView")
+                                ?? Type.GetType("Avalonia.Controls.WebView, Avalonia.WebView");
+                
+                if (webViewType != null)
+                {
+                    _webView = Activator.CreateInstance(webViewType) as Control;
+                    if (_webView != null)
+                    {
+                        // Set the Source property
+                        var sourceProperty = webViewType.GetProperty("Source");
+                        if (sourceProperty != null && sourceProperty.PropertyType == typeof(Uri))
+                        {
+                            sourceProperty.SetValue(_webView, new Uri(url));
+                        }
+
+                        _webViewContainer.Children.Add(_webView);
+                        _lblStatus.Text = "ArcViewer 已加载";
+                        _loadProgress.IsVisible = false;
+                        return;
+                    }
+                }
+
+                // Fallback: open in external browser
+                _lblStatus.Text = "WebView 不可用，正在在浏览器中打开...";
+                _loadProgress.IsVisible = false;
+                OpenInExternalBrowser(url);
+            }
+            catch (Exception ex)
+            {
+                _lblStatus.Text = $"加载失败: {ex.Message}";
+                _loadProgress.IsVisible = false;
+            }
+
+            await Task.CompletedTask;
         }
 
-        private void OnCloseClick(object? sender, RoutedEventArgs e)
+        private void OpenInExternalBrowser(string url)
         {
-            _previewCanvas.Stop();
-            try { if (_zipPath != null && File.Exists(_zipPath)) File.Delete(_zipPath); } catch { }
-            Close();
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+                _lblStatus.Text = $"请在浏览器中打开: {url}";
+            }
         }
 
-        private static string FormatTime(double seconds)
+        private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
+
+        private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
         {
-            int m = (int)(seconds / 60);
-            int s = (int)(seconds % 60);
-            return $"{m}:{s:D2}";
+            try
+            {
+                _httpServer?.Stop();
+                _httpServer?.Close();
+                _httpServer = null;
+            }
+            catch { }
+
+            try
+            {
+                if (_tempZipPath != null && File.Exists(_tempZipPath))
+                    File.Delete(_tempZipPath);
+            }
+            catch { }
         }
     }
 }

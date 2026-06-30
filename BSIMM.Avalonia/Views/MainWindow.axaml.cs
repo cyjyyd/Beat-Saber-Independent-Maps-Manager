@@ -886,7 +886,8 @@ public partial class MainWindow : Window
         if (_selectedBsMap == null) return;
 
         string? downloadUrl = _selectedBsMap.GetDownloadUrl();
-        if (string.IsNullOrEmpty(downloadUrl))
+        string? mapId = _selectedBsMap.Id;
+        if (string.IsNullOrEmpty(downloadUrl) && string.IsNullOrEmpty(mapId))
         {
             vm.ActionText = "提示：";
             vm.StatusText = "该曲目不提供下载，无法预览谱面";
@@ -894,11 +895,11 @@ public partial class MainWindow : Window
         }
 
         vm.ActionText = "预览：";
-        vm.StatusText = $"正在下载谱面: {_selectedBsMap.Name}";
+        vm.StatusText = $"正在加载谱面预览: {_selectedBsMap.Name}";
         vm.ProgressValue = 0;
 
         var previewWindow = new MapPreviewWindow();
-        await previewWindow.LoadMapAsync(downloadUrl, _selectedBsMap.Name);
+        await previewWindow.LoadMapAsync(downloadUrl ?? "", _selectedBsMap.Name, mapId);
         await previewWindow.ShowDialog(this);
 
         vm.StatusText = $"谱面预览已关闭: {_selectedBsMap.Name}";
@@ -923,7 +924,7 @@ public partial class MainWindow : Window
         }
 
         var previewWindow = new MapPreviewWindow();
-        previewWindow.LoadLocalMap(vm.SelectedSong.songFolder, vm.SelectedSong._songName);
+        await previewWindow.LoadLocalMapAsync(vm.SelectedSong.songFolder, vm.SelectedSong._songName);
         await previewWindow.ShowDialog(this);
     }
 
@@ -952,7 +953,7 @@ public partial class MainWindow : Window
         }
 
         var previewWindow = new MapPreviewWindow();
-        previewWindow.LoadLocalMap(song.songFolder, song._songName);
+        await previewWindow.LoadLocalMapAsync(song.songFolder, song._songName);
         await previewWindow.ShowDialog(this);
     }
 
