@@ -139,12 +139,25 @@ namespace BSIMM.Avalonia.Views
             try
             {
                 _webView = new NativeWebView { Source = new Uri(url) };
-                _webView.NavigationCompleted += (s, e) =>
+                _webView.NavigationCompleted += async (s, e) =>
                 {
                     global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     {
                         if (e != null && e.IsSuccess) { _lblStatus.Text = "ArcViewer 已加载"; _loadProgress.IsVisible = false; }
                     });
+                    // Diagnostic: sync XHR to check if zip is reachable
+                    try
+                    {
+                        var idx = url.LastIndexOf("url=");
+                        if (idx > 0)
+                        {
+                            var zUrl = Uri.UnescapeDataString(url.Substring(idx + 4));
+                            var result = await _webView!.InvokeScript(
+                                $"eval(\"(function(){{var x=new XMLHttpRequest();x.open('GET','{zUrl}',false);try{{x.send();return'OK_'+x.status;}}catch(e){{return'ERR_'+e.message;}}}})()\")");
+                            _lblStatus.Text += $" [诊断:{result}]";
+                        }
+                    }
+                    catch (Exception ex2) { _lblStatus.Text += $" [diag:{ex2.Message}]"; }
                 };
                 _webViewContainer.Children.Add(_webView);
                 _lblStatus.Text = "正在加载 ArcViewer...";
@@ -235,7 +248,8 @@ namespace BSIMM.Avalonia.Views
                 {
                     if (!_fileCache.TryGetValue(fp, out var data) || data == null)
                         { data = File.ReadAllBytes(fp); if (data.Length < 5_000_000) _fileCache[fp] = data; }
-                    await Write(stream, 200, Mime(fp), data!);
+                    var extra = fp.EndsWith(".zip") ? "Content-Disposition: attachment; filename=\"map.zip\"\r\n" : "";
+                    await Write(stream, 200, Mime(fp), data!, extra);
                 }
                 else await Write(stream, 404, "text/plain", "Not found"u8.ToArray());
             }
@@ -243,11 +257,12 @@ namespace BSIMM.Avalonia.Views
             finally { try { stream?.Close(); } catch { } try { client.Close(); } catch { } }
         }
 
-        private static async Task Write(NetworkStream s, int code, string ct, byte[] body)
+        private static async Task Write(NetworkStream s, int code, string ct, byte[] body, string extra = "")
         {
             var h = $"HTTP/1.1 {code} {(code == 200 ? "OK" : "Not Found")}\r\n" +
                     $"Content-Length: {body.Length}\r\n" +
                     (ct.Length > 0 ? $"Content-Type: {ct}\r\n" : "") +
+                    extra +
                     "Access-Control-Allow-Origin: *\r\n" +
                     "Access-Control-Allow-Methods: GET, OPTIONS, HEAD\r\n" +
                     "Connection: close\r\n\r\n";
