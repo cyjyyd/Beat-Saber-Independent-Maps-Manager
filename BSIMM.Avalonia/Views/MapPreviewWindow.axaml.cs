@@ -91,38 +91,32 @@ namespace BSIMM.Avalonia.Views
                 int port = _server.Port;
                 string zipUrl = $"http://127.0.0.1:{port}/{zipName}";
 
-                // Write mock API JSON for ArcViewer
+                // Write mock API JSON and service worker
                 string mockApiFile = Path.Combine(ArcViewerCacheDir, "_api_mock.json");
                 File.WriteAllText(mockApiFile, $@"{{""id"":""localmap"",""name"":""{mapName.Replace("\"","'")}"",""versions"":[{{""downloadURL"":""{zipUrl}"",""coverURL"":""""}}]}}");
 
+                string swFile = Path.Combine(ArcViewerCacheDir, "sw.js");
+                File.WriteAllText(swFile, $@"self.addEventListener('fetch',e=>{{if(e.request.url.includes('api.beatsaver.com/maps/')){{e.respondWith((async()=>new Response(await fetch('{zipUrl}'),{{headers:{{'content-type':'application/json'}}}}))());}}}});");
+
                 _cachePatchHtml = Path.Combine(ArcViewerCacheDir, "_index_patched.html");
-                File.WriteAllText(_cachePatchHtml, GeneratePatchedHtml(port, zipName, zipUrl));
+                File.WriteAllText(_cachePatchHtml, GeneratePatchedHtml(port, zipName, zipUrl, mapName));
 
                 InitWebView($"http://127.0.0.1:{port}/_index_patched.html?id=localmap");
             }
             catch (Exception ex) { OnFail(ex.Message); }
         }
 
-        private static string GeneratePatchedHtml(int port, string zipName, string zipUrl)
+        private static string GeneratePatchedHtml(int port, string zipName, string zipUrl, string mapName)
         {
             string origHtml = File.ReadAllText(Path.Combine(ArcViewerCacheDir, "index.html"));
             string patchScript = $@"<script>
-(function(){{
-    var OrigXHR = window.XMLHttpRequest;
-    window.XMLHttpRequest = function() {{
-        var xhr = new OrigXHR();
-        var origOpen = xhr.open;
-        xhr.open = function(method, url, async, user, password) {{
-            if (typeof url === 'string' && url.indexOf('api.beatsaver.com/maps/') >= 0) {{
-                console.log('BSIMM: redirecting API call from ' + url + ' to local mock');
-                url = 'http://127.0.0.1:{port}/_api_mock.json';
-            }}
-            return origOpen.call(xhr, method, url, async, user, password);
-        }};
-        return xhr;
-    }};
-    window.XMLHttpRequest.prototype = OrigXHR.prototype;
-}})();
+var __bsimm_origOpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(method, url, async, user, pwd) {{
+    if (typeof url === 'string' && url.indexOf('api.beatsaver.com/maps/') >= 0) {{
+        url = 'http://127.0.0.1:{port}/_api_mock.json';
+    }}
+    return __bsimm_origOpen.call(this, method, url, async===undefined?true:async, user, pwd);
+}};
 </script>";
 
             int insertPos = origHtml.IndexOf("<script");
