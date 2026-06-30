@@ -81,6 +81,110 @@ namespace BeatSaberIndependentMapsManager.Services
             }
         }
 
+        public MapPreviewData ParseMapFromDirectory(string mapDir, string preferredDifficulty = "Expert", string preferredCharacteristic = "Standard")
+        {
+            var data = new MapPreviewData();
+
+            try
+            {
+                string infoPath = Path.Combine(mapDir, "info.dat");
+                if (!File.Exists(infoPath)) return data;
+
+                string infoJson = File.ReadAllText(infoPath);
+                var info = JObject.Parse(infoJson);
+
+                double bpm = info["_beatsPerMinute"]?.Value<double>() ?? 120;
+                data.Bpm = bpm;
+
+                var beatmapSets = info["_difficultyBeatmapSets"] as JArray;
+                if (beatmapSets == null) return data;
+
+                var difficulties = new List<PreviewDifficultyInfo>();
+                string? bestFilename = null;
+                string? bestCharacteristic = null;
+
+                foreach (JObject set in beatmapSets)
+                {
+                    string charName = set["_beatmapCharacteristicName"]?.Value<string>() ?? "Standard";
+                    var beatmaps = set["_difficultyBeatmaps"] as JArray;
+                    if (beatmaps == null) continue;
+
+                    foreach (JObject beatmap in beatmaps)
+                    {
+                        var diffInfo = new PreviewDifficultyInfo
+                        {
+                            Characteristic = charName,
+                            Difficulty = beatmap["_difficulty"]?.Value<string>() ?? "",
+                            Filename = beatmap["_beatmapFilename"]?.Value<string>() ?? "",
+                            Rank = beatmap["_difficultyRank"]?.Value<int>() ?? 0,
+                            Njs = beatmap["_noteJumpMovementSpeed"]?.Value<double>() ?? 16,
+                            NoteJumpStartBeatOffset = beatmap["_noteJumpStartBeatOffset"]?.Value<double>() ?? 0
+                        };
+                        difficulties.Add(diffInfo);
+
+                        if (charName == preferredCharacteristic && diffInfo.Difficulty == preferredDifficulty)
+                        {
+                            bestFilename = diffInfo.Filename;
+                            bestCharacteristic = charName;
+                        }
+                    }
+                }
+
+                data.Difficulties = difficulties;
+
+                if (bestFilename == null && difficulties.Count > 0)
+                {
+                    var fallback = difficulties.Find(d => d.Characteristic == preferredCharacteristic && d.Difficulty == "Hard")
+                                ?? difficulties.Find(d => d.Characteristic == preferredCharacteristic)
+                                ?? difficulties[0];
+                    bestFilename = fallback.Filename;
+                    bestCharacteristic = fallback.Characteristic;
+                }
+
+                if (bestFilename != null)
+                {
+                    data.SelectedDifficulty = difficulties.Find(d => d.Filename == bestFilename)!.Difficulty;
+                    data.SelectedCharacteristic = bestCharacteristic!;
+                    string diffPath = Path.Combine(mapDir, bestFilename);
+                    if (File.Exists(diffPath))
+                    {
+                        ParseDifficultyFileInto(data, diffPath);
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return data;
+        }
+
+        public MapPreviewData ParseDifficultyFromDirectory(string mapDir, MapPreviewData baseData, string characteristic, string difficulty)
+        {
+            var diffInfo = baseData.Difficulties.Find(d => d.Characteristic == characteristic && d.Difficulty == difficulty);
+            if (diffInfo == null) return baseData;
+
+            var data = new MapPreviewData
+            {
+                Bpm = baseData.Bpm,
+                Difficulties = baseData.Difficulties,
+                SelectedDifficulty = difficulty,
+                SelectedCharacteristic = characteristic
+            };
+
+            try
+            {
+                string diffPath = Path.Combine(mapDir, diffInfo.Filename);
+                if (File.Exists(diffPath))
+                {
+                    ParseDifficultyFileInto(data, diffPath);
+                }
+            }
+            catch { }
+
+            return data;
+        }
+
         public MapPreviewData ParseMapFromZip(string zipPath, string preferredDifficulty = "Expert", string preferredCharacteristic = "Standard")
         {
             var data = new MapPreviewData();

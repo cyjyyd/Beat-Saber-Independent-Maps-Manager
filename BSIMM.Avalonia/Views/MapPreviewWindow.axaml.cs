@@ -26,6 +26,7 @@ namespace BSIMM.Avalonia.Views
         private readonly MapPreviewService _previewService = new();
         private MapPreviewData? _previewData;
         private string? _zipPath;
+        private string? _localMapDir;
         private bool _isLoadingData = false;
 
         public MapPreviewWindow()
@@ -48,18 +49,47 @@ namespace BSIMM.Avalonia.Views
             this.Title = $"谱面预览 - {mapName}";
 
             var tempDir = Path.Combine(Path.GetTempPath(), "bsim_preview");
-            _zipPath = await _previewService.DownloadMapZipAsync(downloadUrl, tempDir);
+            try
+            {
+                _zipPath = await _previewService.DownloadMapZipAsync(downloadUrl, tempDir);
+            }
+            catch (Exception ex)
+            {
+                _lblNoteCount.Text = $"下载失败: {ex.Message}";
+                _btnPlayPause.IsEnabled = false;
+                return;
+            }
 
             if (_zipPath == null)
             {
-                _lblNoteCount.Text = "下载失败，请检查网络连接";
+                _lblNoteCount.Text = "下载失败，请检查网络连接或稍后重试";
                 _btnPlayPause.IsEnabled = false;
                 return;
             }
 
             _previewData = _previewService.ParseMapFromZip(_zipPath);
+            PopulateUI();
+        }
 
-            if (_previewData?.Difficulties.Count > 0)
+        public void LoadLocalMap(string mapDir, string mapName)
+        {
+            this.Title = $"谱面预览 - {mapName}";
+            _localMapDir = mapDir;
+
+            _previewData = _previewService.ParseMapFromDirectory(mapDir);
+            PopulateUI();
+        }
+
+        private void PopulateUI()
+        {
+            if (_previewData == null)
+            {
+                _lblNoteCount.Text = "解析失败";
+                _btnPlayPause.IsEnabled = false;
+                return;
+            }
+
+            if (_previewData.Difficulties.Count > 0)
             {
                 var diffNames = _previewData.Difficulties
                     .Select(d => $"{d.Characteristic}/{d.Difficulty}")
@@ -72,9 +102,6 @@ namespace BSIMM.Avalonia.Views
                 _cboDifficulty.SelectedIndex = selectedIdx >= 0 ? selectedIdx : 0;
 
                 LoadPreviewData();
-
-                _lblTotalTime.Text = FormatTime(_previewCanvas.Duration);
-                _lblNoteCount.Text = $"音符数: {_previewData.Notes.Count}";
             }
             else
             {
@@ -85,10 +112,19 @@ namespace BSIMM.Avalonia.Views
 
         private void OnDifficultyChanged()
         {
-            if (_previewData == null || _cboDifficulty.SelectedIndex < 0 || _zipPath == null) return;
+            if (_previewData == null || _cboDifficulty.SelectedIndex < 0) return;
 
             var selected = _previewData.Difficulties[_cboDifficulty.SelectedIndex];
-            _previewData = _previewService.ParseDifficultyFromZip(_zipPath, _previewData, selected.Characteristic, selected.Difficulty);
+
+            if (_localMapDir != null)
+            {
+                _previewData = _previewService.ParseDifficultyFromDirectory(_localMapDir, _previewData, selected.Characteristic, selected.Difficulty);
+            }
+            else if (_zipPath != null)
+            {
+                _previewData = _previewService.ParseDifficultyFromZip(_zipPath, _previewData, selected.Characteristic, selected.Difficulty);
+            }
+
             LoadPreviewData();
         }
 

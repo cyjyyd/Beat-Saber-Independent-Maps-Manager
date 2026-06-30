@@ -898,11 +898,62 @@ public partial class MainWindow : Window
         vm.ProgressValue = 0;
 
         var previewWindow = new MapPreviewWindow();
-        await previewWindow.ShowDialog(this);
         await previewWindow.LoadMapAsync(downloadUrl, _selectedBsMap.Name);
+        await previewWindow.ShowDialog(this);
 
-        vm.StatusText = $"谱面预览已打开: {_selectedBsMap.Name}";
+        vm.StatusText = $"谱面预览已关闭: {_selectedBsMap.Name}";
         vm.ProgressValue = 100;
+    }
+
+    private async void OnLocalMapPreviewClick(object? sender, RoutedEventArgs e)
+    {
+        var vm = ViewModel;
+        if (vm.SelectedSong == null || string.IsNullOrEmpty(vm.SelectedSong.songFolder))
+        {
+            vm.ActionText = "提示：";
+            vm.StatusText = "请先选择一首歌曲";
+            return;
+        }
+
+        if (!Directory.Exists(vm.SelectedSong.songFolder))
+        {
+            vm.ActionText = "提示：";
+            vm.StatusText = "歌曲文件夹不存在";
+            return;
+        }
+
+        var previewWindow = new MapPreviewWindow();
+        previewWindow.LoadLocalMap(vm.SelectedSong.songFolder, vm.SelectedSong._songName);
+        await previewWindow.ShowDialog(this);
+    }
+
+    private async void OnDelicatedMapPreviewClick(object? sender, RoutedEventArgs e)
+    {
+        var vm = ViewModel;
+        if (string.IsNullOrEmpty(vm.SelectedDelicatedSong))
+        {
+            vm.ActionText = "提示：";
+            vm.StatusText = "请先选择一首歌曲";
+            return;
+        }
+
+        if (!vm.DelicatedSongList.TryGetValue(vm.SelectedDelicatedSong, out var song) || song == null)
+        {
+            vm.ActionText = "提示：";
+            vm.StatusText = "未找到歌曲信息";
+            return;
+        }
+
+        if (!Directory.Exists(song.songFolder))
+        {
+            vm.ActionText = "提示：";
+            vm.StatusText = "歌曲文件夹不存在";
+            return;
+        }
+
+        var previewWindow = new MapPreviewWindow();
+        previewWindow.LoadLocalMap(song.songFolder, song._songName);
+        await previewWindow.ShowDialog(this);
     }
 
     private async void OnExportSearchResultsClick(object? sender, RoutedEventArgs e)
