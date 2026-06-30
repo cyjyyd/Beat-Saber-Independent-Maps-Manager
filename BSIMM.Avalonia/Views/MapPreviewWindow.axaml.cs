@@ -2,15 +2,12 @@ using global::Avalonia;
 using global::Avalonia.Controls;
 using global::Avalonia.Interactivity;
 using global::Avalonia.Markup.Xaml;
+using global::Avalonia.Platform;
 using BeatSaberIndependentMapsManager.Services;
 using System;
-using System.Collections.Concurrent;
 using System.IO;
-using System.Net;
 using System.Net.Http;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 namespace BSIMM.Avalonia.Views
@@ -25,6 +22,7 @@ namespace BSIMM.Avalonia.Views
         private string? _tempZipPath;
         private string? _cacheZipFile;
         private string? _cachePatchHtml;
+        private string _zipUrl = "";
 
         private const string ArcViewerRemote = "https://allpoland.github.io/ArcViewer/";
         private static readonly string[] ArcViewerFiles = {
@@ -85,45 +83,41 @@ namespace BSIMM.Avalonia.Views
                 string zipName = $"map_{Guid.NewGuid():N}.zip";
                 _cacheZipFile = Path.Combine(ArcViewerCacheDir, zipName);
                 File.Copy(zipPath, _cacheZipFile, true);
+                _zipUrl = $"http://127.0.0.1:{0}/{zipName}";
 
                 _server = new SimpleFileServer(ArcViewerCacheDir);
                 _server.Start();
                 int port = _server.Port;
-                string zipUrl = $"http://127.0.0.1:{port}/{zipName}";
+                _zipUrl = $"http://127.0.0.1:{port}/{zipName}";
 
-                // Write mock API JSON and service worker
+                string jsonBody = $@"{{""id"":""localmap"",""name"":""{mapName.Replace("\"","'")}"",""versions"":[{{""downloadURL"":""{_zipUrl}"",""coverURL"":""""}}]}}";
                 string mockApiFile = Path.Combine(ArcViewerCacheDir, "_api_mock.json");
-                File.WriteAllText(mockApiFile, $@"{{""id"":""localmap"",""name"":""{mapName.Replace("\"","'")}"",""versions"":[{{""downloadURL"":""{zipUrl}"",""coverURL"":""""}}]}}");
+                File.WriteAllText(mockApiFile, jsonBody);
 
-                string swFile = Path.Combine(ArcViewerCacheDir, "sw.js");
-                File.WriteAllText(swFile, $@"self.addEventListener('fetch',e=>{{if(e.request.url.includes('api.beatsaver.com/maps/')){{e.respondWith((async()=>new Response(await fetch('{zipUrl}'),{{headers:{{'content-type':'application/json'}}}}))());}}}});");
-
+                // Use prototype-level XHR open patch for redirecting the API call + fetch patch for added safety
                 _cachePatchHtml = Path.Combine(ArcViewerCacheDir, "_index_patched.html");
-                File.WriteAllText(_cachePatchHtml, GeneratePatchedHtml(port, zipName, zipUrl, mapName));
+                File.WriteAllText(_cachePatchHtml, GeneratePatchedHtml(port, mapName));
 
+                // Load with ?id= so ArcViewer triggers its map load flow
                 InitWebView($"http://127.0.0.1:{port}/_index_patched.html?id=localmap");
             }
             catch (Exception ex) { OnFail(ex.Message); }
         }
 
-        private static string GeneratePatchedHtml(int port, string zipName, string zipUrl, string mapName)
+        private static string GeneratePatchedHtml(int port, string mapName)
         {
             string origHtml = File.ReadAllText(Path.Combine(ArcViewerCacheDir, "index.html"));
-            string patchScript = $@"<script>
-var __bsimm_origOpen = XMLHttpRequest.prototype.open;
-XMLHttpRequest.prototype.open = function(method, url, async, user, pwd) {{
-    if (typeof url === 'string' && url.indexOf('api.beatsaver.com/maps/') >= 0) {{
-        url = 'http://127.0.0.1:{port}/_api_mock.json';
-    }}
-    return __bsimm_origOpen.call(this, method, url, async===undefined?true:async, user, pwd);
-}};
+            string patch = $@"<script>
+var __open = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(m,d,a,u,p){{if(typeof d==='string'&&d.indexOf('api.beatsaver.com/maps/')>=0)d='http://127.0.0.1:{port}/_api_mock.json';return __open.call(this,m,d,a===undefined?true:a,u,p);}};
+var __fetch = window.fetch;
+window.fetch = function(url,opts){{if(typeof url==='string'&&url.indexOf('api.beatsaver.com/maps/')>=0)url='http://127.0.0.1:{port}/_api_mock.json';return __fetch(url,opts);}};
 </script>";
-
-            int insertPos = origHtml.IndexOf("<script");
-            if (insertPos < 0) insertPos = origHtml.IndexOf("</head>");
-            if (insertPos < 0) insertPos = origHtml.IndexOf("<body");
-            if (insertPos < 0) insertPos = 0;
-            return origHtml.Insert(insertPos, patchScript);
+            int pos = origHtml.IndexOf("<script");
+            if (pos < 0) pos = origHtml.IndexOf("</head>");
+            if (pos < 0) pos = origHtml.IndexOf("<body");
+            if (pos < 0) pos = 0;
+            return origHtml.Insert(pos, patch);
         }
 
         private async Task<string?> DownloadZipAsync(string url)
@@ -174,12 +168,62 @@ XMLHttpRequest.prototype.open = function(method, url, async, user, pwd) {{
                     {
                         if (e != null && e.IsSuccess) { _lblStatus.Text = "ArcViewer 已加载"; _loadProgress.IsVisible = false; }
                     });
+                    // Also try to set up CoreWebView2-level resource filter
+                    TrySetupWebView2Filter();
                 };
                 _webViewContainer.Children.Add(_webView);
                 _lblStatus.Text = "正在加载 ArcViewer...";
             }
             catch (Exception ex) { OnFail($"WebView 不可用: {ex.Message}"); }
         }
+
+        private void TrySetupWebView2Filter()
+        {
+            try
+            {
+                var handle = _webView?.TryGetPlatformHandle();
+                if (handle == null) return;
+                var prop = handle.GetType().GetProperty("CoreWebView2");
+                if (prop == null) return;
+                var ptr = (IntPtr)prop.GetValue(handle)!;
+                if (ptr == IntPtr.Zero) return;
+
+                // Get the CoreWebView2 via known COM interface
+                var obj = Marshal.GetObjectForIUnknown(ptr);
+                if (obj == null) return;
+
+                // Use reflection to call AddWebResourceRequestedFilter
+                var addFilter = obj.GetType().GetMethod("AddWebResourceRequestedFilter");
+                if (addFilter != null)
+                {
+                    addFilter.Invoke(obj, new object[] { "https://api.beatsaver.com/maps/*", 0 });
+                }
+
+                // Subscribe to WebResourceRequested event
+                var evt = obj.GetType().GetEvent("WebResourceRequested");
+                if (evt == null) return;
+
+                // The event handler needs to create a custom response
+                // with the mock JSON pointing to local zip
+                var handlerType = evt.EventHandlerType;
+                Delegate handler = null!;
+                if (handlerType != null)
+                {
+                    // Create event handler dynamically using reflection
+                    var responseJson = $@"{{""id"":""localmap"",""name"":""Local"",""versions"":[{{""downloadURL"":""{_zipUrl}"",""coverURL"":""""}}]}}";
+                    var jsonBytes = System.Text.Encoding.UTF8.GetBytes(responseJson);
+                    var stream = new MemoryStream(jsonBytes);
+
+                    handler = Delegate.CreateDelegate(handlerType, this, nameof(OnWebResourceRequested));
+                    evt.AddEventHandler(obj, handler);
+                }
+            }
+            catch { }
+        }
+
+        // Placeholder for WebResourceRequested event — actual implementation needs
+        // ICoreWebView2WebResourceRequestedEventArgs COM interface
+        private void OnWebResourceRequested(object sender, object args) { }
 
         private void OnFail(string msg) { _lblStatus.Text = msg; _loadProgress.IsVisible = false; }
         private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
@@ -193,118 +237,56 @@ XMLHttpRequest.prototype.open = function(method, url, async, user, pwd) {{
         }
     }
 
-    /// <summary>Simple HTTP/1.1 file server using TcpListener, binding to 127.0.0.1.</summary>
     internal sealed class SimpleFileServer : IDisposable
     {
         private readonly string _rootDir;
-        private TcpListener? _listener;
-        private readonly CancellationTokenSource _cts = new();
-        private readonly ConcurrentDictionary<string, byte[]> _fileCache = new();
+        private System.Net.Sockets.TcpListener? _listener;
+        private readonly System.Threading.CancellationTokenSource _cts = new();
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> _fc = new();
         public int Port { get; }
 
         public SimpleFileServer(string rootDir)
         {
             _rootDir = rootDir;
-            using var probe = new TcpListener(IPAddress.Loopback, 0);
-            probe.Start();
-            Port = ((IPEndPoint)probe.LocalEndpoint).Port;
-            probe.Stop();
+            using var p = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+            p.Start(); Port = ((System.Net.IPEndPoint)p.LocalEndpoint).Port; p.Stop();
         }
-
-        public void Start()
+        public void Start() { _listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, Port); _listener.Start(); _ = System.Threading.Tasks.Task.Run(Loop); }
+        private async System.Threading.Tasks.Task Loop() { while (!_cts.IsCancellationRequested) { try { var c = await _listener!.AcceptTcpClientAsync(_cts.Token); _ = Handle(c); } catch { } } }
+        private async System.Threading.Tasks.Task Handle(System.Net.Sockets.TcpClient c)
         {
-            _listener = new TcpListener(IPAddress.Loopback, Port);
-            _listener.Start();
-            _ = Task.Run(RunLoop);
-        }
-
-        private async Task RunLoop()
-        {
-            while (!_cts.IsCancellationRequested)
-            {
-                try { var client = await _listener!.AcceptTcpClientAsync(_cts.Token); _ = Handle(client); }
-                catch (OperationCanceledException) { break; }
-                catch { }
-            }
-        }
-
-        private async Task Handle(TcpClient client)
-        {
-            NetworkStream? stream = null;
+            System.Net.Sockets.NetworkStream? s = null;
             try
             {
-                stream = client.GetStream();
-                using var reader = new StreamReader(stream, Encoding.ASCII, false, 4096, true);
-                var line = await reader.ReadLineAsync();
-                if (string.IsNullOrEmpty(line)) return;
-                var parts = line.Split(' ');
-                if (parts.Length < 2) return;
-                var method = parts[0].ToUpperInvariant();
-                var rawPath = parts[1];
-
-                var q = rawPath.IndexOf('?');
-                var path = q >= 0 ? rawPath.Substring(0, q) : rawPath;
-
-                // Read and discard headers + body
-                int cl = 0;
-                string? hdr;
-                while (!string.IsNullOrEmpty(hdr = await reader.ReadLineAsync()))
+                s = c.GetStream();
+                using var r = new System.IO.StreamReader(s, System.Text.Encoding.ASCII, false, 4096, true);
+                var ln = await r.ReadLineAsync(); if (string.IsNullOrEmpty(ln)) return;
+                var ps = ln.Split(' '); if (ps.Length < 2) return;
+                var m = ps[0].ToUpperInvariant(); var rp = ps[1];
+                var q = rp.IndexOf('?'); var path = q >= 0 ? rp[..q] : rp;
+                int cl = 0; string? hdr;
+                while (!string.IsNullOrEmpty(hdr = await r.ReadLineAsync()))
                     if (hdr.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
                         int.TryParse(hdr.AsSpan(15).Trim(), out cl);
-                if (cl > 0) { var b = new byte[cl]; int p = 0; while (p < cl) p += await stream.ReadAsync(b, p, cl - p); }
-
-                if (method == "OPTIONS" || method == "HEAD")
+                if (cl > 0) { var b = new byte[cl]; int i = 0; while (i < cl) i += await s.ReadAsync(b, i, cl - i); }
+                if (m == "OPTIONS" || m == "HEAD") { await Wr(s, 200, "", Array.Empty<byte>()); return; }
+                var rel = path == "/" ? "index.html" : path.TrimStart('/').Replace('/', System.IO.Path.DirectorySeparatorChar);
+                var fp = System.IO.Path.Combine(_rootDir, rel);
+                if (System.IO.File.Exists(fp))
                 {
-                    await Write(stream, 200, "", Array.Empty<byte>());
-                    return;
+                    if (!_fc.TryGetValue(fp, out var d) || d == null) { d = System.IO.File.ReadAllBytes(fp); if (d.Length < 5_000_000) _fc[fp] = d; }
+                    await Wr(s, 200, Mt(fp), d!);
                 }
-
-                var rel = path == "/" ? "index.html" : path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
-                var fp = Path.Combine(_rootDir, rel);
-                if (File.Exists(fp))
-                {
-                    if (!_fileCache.TryGetValue(fp, out var data) || data == null)
-                        { data = File.ReadAllBytes(fp); if (data.Length < 5_000_000) _fileCache[fp] = data; }
-                    var extra = fp.EndsWith(".zip") ? "Content-Disposition: attachment; filename=\"map.zip\"\r\n" : "";
-                    await Write(stream, 200, Mime(fp), data!, extra);
-                }
-                else await Write(stream, 404, "text/plain", "Not found"u8.ToArray());
+                else await Wr(s, 404, "text/plain", "Not found"u8.ToArray());
             }
-            catch { }
-            finally { try { stream?.Close(); } catch { } try { client.Close(); } catch { } }
+            catch { } finally { try { s?.Close(); } catch { } try { c.Close(); } catch { } }
         }
-
-        private static async Task Write(NetworkStream s, int code, string ct, byte[] body, string extra = "")
+        private static async System.Threading.Tasks.Task Wr(System.Net.Sockets.NetworkStream s, int cd, string ct, byte[] b)
         {
-            var h = $"HTTP/1.1 {code} {(code == 200 ? "OK" : "Not Found")}\r\n" +
-                    $"Content-Length: {body.Length}\r\n" +
-                    (ct.Length > 0 ? $"Content-Type: {ct}\r\n" : "") +
-                    extra +
-                    "Access-Control-Allow-Origin: *\r\n" +
-                    "Access-Control-Allow-Methods: GET, OPTIONS, HEAD\r\n" +
-                    "Connection: close\r\n\r\n";
-            await s.WriteAsync(Encoding.ASCII.GetBytes(h));
-            await s.WriteAsync(body);
-            await s.FlushAsync();
+            var h = $"HTTP/1.1 {cd} {(cd == 200 ? "OK" : "Not Found")}\r\nContent-Length: {b.Length}\r\n{(ct.Length > 0 ? $"Content-Type: {ct}\r\n" : "")}Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET,OPTIONS,HEAD\r\nConnection: close\r\n\r\n";
+            await s.WriteAsync(System.Text.Encoding.ASCII.GetBytes(h)); await s.WriteAsync(b); await s.FlushAsync();
         }
-
-        private static string Mime(string p)
-        {
-            if (p.EndsWith(".js")) return "application/javascript";
-            if (p.EndsWith(".wasm")) return "application/wasm";
-            if (p.EndsWith(".html")) return "text/html; charset=utf-8";
-            if (p.EndsWith(".css")) return "text/css";
-            if (p.EndsWith(".ico")) return "image/x-icon";
-            if (p.EndsWith(".zip")) return "application/zip";
-            if (p.EndsWith(".json")) return "application/json";
-            return "application/octet-stream";
-        }
-
-        public void Dispose()
-        {
-            try { _cts.Cancel(); } catch { }
-            try { _listener?.Stop(); } catch { }
-            try { _cts.Dispose(); } catch { }
-        }
+        private static string Mt(string p) => p.EndsWith(".js") ? "application/javascript" : p.EndsWith(".wasm") ? "application/wasm" : p.EndsWith(".html") ? "text/html; charset=utf-8" : p.EndsWith(".css") ? "text/css" : p.EndsWith(".ico") ? "image/x-icon" : p.EndsWith(".zip") ? "application/zip" : p.EndsWith(".json") ? "application/json" : "application/octet-stream";
+        public void Dispose() { try { _cts.Cancel(); } catch { } try { _listener?.Stop(); } catch { } _cts.Dispose(); }
     }
 }
