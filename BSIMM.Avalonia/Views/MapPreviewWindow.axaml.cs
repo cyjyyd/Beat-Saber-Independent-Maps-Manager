@@ -75,7 +75,8 @@ namespace BSIMM.Avalonia.Views
                 return;
             }
 
-            InitializeWebView(servedUrl);
+            // Load ArcViewer directly with ?url= pointing to local zip server
+            InitializeWebView($"{ArcViewerUrl}?url={servedUrl}map.zip");
         }
 
         public async Task LoadLocalMapAsync(string mapDir, string mapName)
@@ -106,7 +107,9 @@ namespace BSIMM.Avalonia.Views
                 return;
             }
 
-            InitializeWebView(servedUrl);
+            // Load ArcViewer directly with ?url= pointing to local zip server
+            // Note: WebView2 on localhost may allow mixed content (HTTPS→HTTP localhost)
+            InitializeWebView($"{ArcViewerUrl}?url={servedUrl}map.zip");
             await Task.CompletedTask;
         }
 
@@ -125,19 +128,36 @@ namespace BSIMM.Avalonia.Views
                 {
                     while (_httpServer.IsListening)
                     {
+                        HttpListenerContext? context = null;
                         try
                         {
-                            var context = _httpServer.GetContext();
+                            context = _httpServer.GetContext();
                             var request = context.Request;
                             var response = context.Response;
 
-                            if (request.Url?.LocalPath == "/map.zip" || request.Url?.LocalPath == "/download")
+                            string path = request.Url?.LocalPath ?? "/";
+
+                            if (path == "/map.zip" || path == "/download")
                             {
                                 byte[] zipBytes = File.ReadAllBytes(zipPath);
+                                response.StatusCode = 200;
                                 response.ContentType = "application/zip";
                                 response.ContentLength64 = zipBytes.Length;
+                                // Allow cross-origin access so ArcViewer (HTTPS) can fetch from this HTTP server
+                                response.Headers.Add("Access-Control-Allow-Origin", "*");
+                                response.Headers.Add("Access-Control-Allow-Methods", "GET, OPTIONS");
+                                response.Headers.Add("Access-Control-Allow-Headers", "*");
                                 response.Headers.Add("Content-Disposition", $"attachment; filename=\"{Uri.EscapeDataString(mapName)}.zip\"");
                                 response.OutputStream.Write(zipBytes, 0, zipBytes.Length);
+                                response.OutputStream.Flush();
+                            }
+                            else if (request.HttpMethod == "OPTIONS")
+                            {
+                                // Handle CORS preflight
+                                response.StatusCode = 200;
+                                response.Headers.Add("Access-Control-Allow-Origin", "*");
+                                response.Headers.Add("Access-Control-Allow-Methods", "GET, OPTIONS");
+                                response.Headers.Add("Access-Control-Allow-Headers", "*");
                             }
                             else
                             {
@@ -145,10 +165,13 @@ namespace BSIMM.Avalonia.Views
                                 string redirectUrl = $"{ArcViewerUrl}?url=http://localhost:{port}/map.zip";
                                 response.Redirect(redirectUrl);
                             }
-                            response.Close();
                         }
                         catch
                         {
+                        }
+                        finally
+                        {
+                            try { context?.Response.Close(); } catch { }
                         }
                     }
                 });
@@ -180,11 +203,18 @@ namespace BSIMM.Avalonia.Views
                 };
                 _webView.NavigationCompleted += (s, e) =>
                 {
-                    if (e.IsSuccess)
+                    global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     {
-                        _lblStatus.Text = "ArcViewer 已加载";
-                        _loadProgress.IsVisible = false;
-                    }
+                        if (e != null && e.IsSuccess)
+                        {
+                            _lblStatus.Text = "ArcViewer 已加载";
+                            _loadProgress.IsVisible = false;
+                        }
+                        else if (e != null)
+                        {
+                            _lblStatus.Text = $"加载失败，正在重试...";
+                        }
+                    });
                 };
 
                 _webViewContainer.Children.Add(_webView);
