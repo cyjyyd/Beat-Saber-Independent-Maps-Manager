@@ -479,6 +479,7 @@
                                         <Button Grid.Column="0" Name="BsBtnPlay" Content="在线试听" Click="OnBsPlayPreviewClick" Classes="bs-blue" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="0,0,5,0" />
                                         <Button Grid.Column="1" Content="暂停" Click="OnBsPausePreviewClick" Classes="bs-red" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="5,0,0,0" />
                                     </Grid>
+                                    <Button Content="谱面预览" Click="OnBsMapPreviewClick" Classes="bs-blue" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
                                 </StackPanel>
                             </Grid>
                         </Border>

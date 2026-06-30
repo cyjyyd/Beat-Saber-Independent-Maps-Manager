@@ -1,0 +1,64 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:v="using:BSIMM.Avalonia.Views"
+        x:Class="BSIMM.Avalonia.Views.MapPreviewWindow"
+        Title="谱面预览" Width="720" Height="600"
+        Icon="/Assets/aa2yv-q2dg9-001.ico"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppBackgroundBrush}"
+        Foreground="{DynamicResource TextPrimaryBrush}">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="AppBackgroundBrush">#F4F7FC</SolidColorBrush>
+                    <SolidColorBrush x:Key="PanelBackgroundBrush">#FFFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="BorderBrush">#D5DDEB</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextPrimaryBrush">#1A1E24</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextSecondaryBrush">#5A6A85</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsBlueBgBrush">#E0F2FE</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsBlueBorderBrush">#0078D4</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsBlueTextBrush">#005A9E</SolidColorBrush>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="AppBackgroundBrush">#0B0E14</SolidColorBrush>
+                    <SolidColorBrush x:Key="PanelBackgroundBrush">#12161E</SolidColorBrush>
+                    <SolidColorBrush x:Key="BorderBrush">#1C2433</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextPrimaryBrush">#FFFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextSecondaryBrush">#8E9EBC</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsBlueBgBrush">#005A88</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsBlueBorderBrush">#00C3FF</SolidColorBrush>
+                    <SolidColorBrush x:Key="BsBlueTextBrush">#FFFFFF</SolidColorBrush>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="16">
+        <!-- Toolbar -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+            <TextBlock Text="难度：" VerticalAlignment="Center" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" />
+            <ComboBox Name="CboDifficulty" MinWidth="180" VerticalAlignment="Center" />
+            <TextBlock Name="LblNoteCount" Text="" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" Margin="10,0,0,0" />
+        </StackPanel>
+
+        <!-- Preview Canvas -->
+        <Border Grid.Row="1" Background="#0a0a12" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" ClipToBounds="True">
+            <v:MapPreviewControl Name="PreviewCanvas" />
+        </Border>
+
+        <!-- Progress Bar -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" Margin="0,10,0,0">
+            <TextBlock Name="LblCurrentTime" Text="0:00" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" MinWidth="40" />
+            <Slider Name="ProgressSlider" Minimum="0" Maximum="100" Value="0" HorizontalAlignment="Stretch" VerticalAlignment="Center" PointerReleased="OnProgressSliderReleased" />
+            <TextBlock Name="LblTotalTime" Text="0:00" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" MinWidth="40" />
+        </StackPanel>
+
+        <!-- Playback Controls -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10" Margin="0,12,0,0">
+            <Button Name="BtnPlayPause" Content="▶ 播放" Click="OnPlayPauseClick" Classes="bs-blue" MinWidth="100" />
+            <Button Content="⏹ 停止" Click="OnStopClick" MinWidth="80" />
+            <Button Content="关闭" Click="OnCloseClick" MinWidth="80" />
+        </StackPanel>
+    </Grid>
+</Window>

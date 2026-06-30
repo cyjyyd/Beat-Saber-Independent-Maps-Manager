@@ -880,6 +880,31 @@ public partial class MainWindow : Window
             vm.AudioPreview.Resume();
     }
 
+    private async void OnBsMapPreviewClick(object? sender, RoutedEventArgs e)
+    {
+        var vm = ViewModel;
+        if (_selectedBsMap == null) return;
+
+        string? downloadUrl = _selectedBsMap.GetDownloadUrl();
+        if (string.IsNullOrEmpty(downloadUrl))
+        {
+            vm.ActionText = "提示：";
+            vm.StatusText = "该曲目不提供下载，无法预览谱面";
+            return;
+        }
+
+        vm.ActionText = "预览：";
+        vm.StatusText = $"正在下载谱面: {_selectedBsMap.Name}";
+        vm.ProgressValue = 0;
+
+        var previewWindow = new MapPreviewWindow();
+        await previewWindow.ShowDialog(this);
+        await previewWindow.LoadMapAsync(downloadUrl, _selectedBsMap.Name);
+
+        vm.StatusText = $"谱面预览已打开: {_selectedBsMap.Name}";
+        vm.ProgressValue = 100;
+    }
+
     private async void OnExportSearchResultsClick(object? sender, RoutedEventArgs e)
     {
         var vm = ViewModel;
