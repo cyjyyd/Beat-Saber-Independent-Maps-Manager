@@ -7,6 +7,7 @@ using global::Avalonia.Platform.Storage;
 using global::Avalonia.Media;
 using BeatSaberIndependentMapsManager;
 using BeatSaberIndependentMapsManager.BeatSpiderSharp;
+using BeatSpiderSharp.Legacy;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -465,7 +466,7 @@ namespace BSIMM.Avalonia.Views
                 AllowMultiple = true,
                 FileTypeFilter = new[]
                 {
-                    new FilePickerFileType("筛选预设文件 (*.bsf)") { Patterns = new[] { "*.bsf" } },
+                    new FilePickerFileType("筛选预设文件 (*.bsf;*.brset)") { Patterns = new[] { "*.bsf", "*.brset" } },
                     new FilePickerFileType("JSON文件 (*.json)") { Patterns = new[] { "*.json" } },
                     new FilePickerFileType("所有文件") { Patterns = new[] { "*.*" } }
                 }
@@ -476,15 +477,35 @@ namespace BSIMM.Avalonia.Views
             foreach (var f in files)
             {
                 string path = f.Path.LocalPath;
-                var preset = FilterPreset.LoadFromFile(path);
-                if (preset == null) continue;
+                var ext = Path.GetExtension(path).ToLowerInvariant();
 
-                string name = preset.Name;
-                int n = 2;
-                while (_savedPresets.Any(p => p.Name == name)) { name = $"{preset.Name} ({n++})"; }
-                preset.Name = name;
-                preset.SaveToFile(Path.Combine(_presetsDir, name + ".bsf"));
-                _savedPresets.Add(preset);
+                try
+                {
+                    if (ext == ".brset")
+                    {
+                        var bssPreset = LegacyPresetLoader.LoadAndConvertLegacyPreset(path, Environment.UserName);
+                        if (bssPreset == null) continue;
+                        var conv = BsfToPresetConverter.ConvertBack(bssPreset);
+                        string name = conv.Name ?? "旧预设";
+                        int n = 2;
+                        while (_savedPresets.Any(p => p.Name == name)) name = $"{conv.Name} ({n++})";
+                        conv.Name = name;
+                        conv.SaveToFile(Path.Combine(_presetsDir, name + ".bsf"));
+                        _savedPresets.Add(conv);
+                    }
+                    else
+                    {
+                        var preset = FilterPreset.LoadFromFile(path);
+                        if (preset == null) continue;
+                        string name = preset.Name;
+                        int n = 2;
+                        while (_savedPresets.Any(p => p.Name == name)) name = $"{preset.Name} ({n++})";
+                        preset.Name = name;
+                        preset.SaveToFile(Path.Combine(_presetsDir, name + ".bsf"));
+                        _savedPresets.Add(preset);
+                    }
+                }
+                catch { }
             }
             UpdatePresetCombo();
         }

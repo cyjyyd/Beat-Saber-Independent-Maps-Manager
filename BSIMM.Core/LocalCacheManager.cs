@@ -10,6 +10,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Newtonsoft.Json;
+using BeatSpiderSharp.Extensions;
+using BeatSpiderSharp.Models;
+using BeatSpiderSharp.Models.BeatSaver;
+using BeatSaberIndependentMapsManager.BeatSpiderSharp;
 
 namespace BeatSaberIndependentMapsManager
 {
@@ -605,6 +609,50 @@ namespace BeatSaberIndependentMapsManager
 
             // 转换为完整对象
             return limitedResults.Select(m => m.ToFullMap()).ToList();
+        }
+
+        /// <summary>
+        /// Filter using BeatSpiderSharp engine — reads cache directly as BSS Song stream
+        /// </summary>
+        public async Task<List<BeatSaverMap>> FilterWithBeatSpiderSharpAsync(
+            FilterPreset preset, IProgress<int> progress, CancellationToken cToken = default)
+        {
+            if (!IsCacheAvailable) return new List<BeatSaverMap>();
+
+            var bssPreset = BsfToPresetConverter.Convert(preset);
+            if (bssPreset.FilterOptions.Count == 0) return new List<BeatSaverMap>();
+
+            var spider = new BsimSpider();
+            var serializer = JsonSerializer.Create(new JsonSerializerSettings());
+            var results = new List<BeatSaverMap>();
+            int total = 0;
+
+            using var fs = new FileStream(cachePath, FileMode.Open, FileAccess.Read);
+            using var sr = new StreamReader(fs);
+            using var jr = new JsonTextReader(sr);
+
+            var songs = serializer
+                .DeserializeArrayAsync<Song>(jr, new[] { "docs" }, cToken)
+                .Where(s => BeatSpiderSong.ValidateBeatSaverSong(s))
+                .Select(s =>
+                {
+                    total++;
+                    if (progress != null && total % 500 == 0) progress.Report(total);
+                    return BeatSpiderSong.FromBeatSaverSong(s!);
+                });
+
+            var filtered = spider.Filter(songs, bssPreset);
+            await foreach (var song in filtered.WithCancellation(cToken))
+            {
+                var map = song.ToBeatSaverMap();
+                if (map != null) results.Add(map);
+            }
+
+            if (bssPreset.Output.LimitSongs && bssPreset.Output.MaxSongs.HasValue)
+                results = results.Take(bssPreset.Output.MaxSongs.Value).ToList();
+
+            progress?.Report(total);
+            return results;
         }
 
         /// <summary>
