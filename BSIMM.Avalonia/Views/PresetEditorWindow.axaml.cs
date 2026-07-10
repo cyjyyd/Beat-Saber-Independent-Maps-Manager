@@ -369,38 +369,50 @@ namespace BSIMM.Avalonia.Views
             chkEnabled.IsCheckedChanged += (s, e) => { condition.IsEnabled = chkEnabled.IsChecked ?? true; UpdateFilterSummary(); };
             row.Children.Add(chkEnabled);
 
-            // Type label (fixed, shows current type name)
-            var displayName = condition.Type == FilterConditionType.Custom
-                ? (string.IsNullOrWhiteSpace(condition.CustomName) ? "自定义" : condition.CustomName)
-                : FilterConditionMetadata.GetDisplayName(condition.Type);
-            var lblType = new TextBlock
+            // Type dropdown
+            var typeItems = new List<ConditionComboItem>();
+            var useLocalCache = _chkLocalCache.IsChecked ?? false;
+            var grouped = FilterConditionMetadata.GetGroupedConditions();
+            foreach (var cat in grouped)
             {
-                Text = displayName,
-                MinWidth = 140,
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = GetBrush("TextPrimaryBrush"),
-                FontWeight = FontWeight.SemiBold
-            };
-            row.Children.Add(lblType);
+                if (!useLocalCache && cat.Key == "本地缓存专属") continue;
+                typeItems.Add(new ConditionComboItem { Type = FilterConditionType.None, Display = $"-- {cat.Key} --", IsSeparator = true });
+                foreach (var t in cat.Value)
+                {
+                    if (!useLocalCache && FilterConditionMetadata.RequiresLocalCache(t)) continue;
+                    typeItems.Add(new ConditionComboItem { Type = t, Display = "  " + FilterConditionMetadata.GetDisplayName(t) });
+                }
+            }
+            var cmbType = new ComboBox { MinWidth = 180, VerticalAlignment = VerticalAlignment.Center, ItemsSource = typeItems };
+            var matchIdx = typeItems.FindIndex(t => t.Type == condition.Type);
+            cmbType.SelectedIndex = matchIdx >= 0 ? matchIdx : 0;
+            row.Children.Add(cmbType);
 
-            // Value control
-            var valuePanel = new StackPanel
+            // Value control wrapper
+            var valueWrapper = new StackPanel
             {
-                Orientation = Orientation.Horizontal,
-                Spacing = 5,
-                VerticalAlignment = VerticalAlignment.Center,
-                Tag = condition
+                Orientation = Orientation.Horizontal, Spacing = 5, VerticalAlignment = VerticalAlignment.Center
             };
-            BuildValueControl(valuePanel, condition);
-            row.Children.Add(valuePanel);
+            BuildValueControl(valueWrapper, condition);
+            row.Children.Add(valueWrapper);
+
+            // Handle type change: update condition type + rebuild value controls
+            cmbType.SelectionChanged += (s, e) =>
+            {
+                if (cmbType.SelectedIndex < 0) return;
+                var item = cmbType.SelectedItem as ConditionComboItem;
+                if (item == null || item.Type == FilterConditionType.None || item.IsSeparator) return;
+                condition.Type = item.Type;
+                condition.SetDefaultValue();
+                BuildValueControl(valueWrapper, condition);
+                UpdateFilterSummary();
+            };
 
             // Remove button
             var btnRemove = new Button
             {
-                Content = "✕",
-                VerticalAlignment = VerticalAlignment.Center,
-                Padding = new Thickness(10, 4),
-                FontSize = 12
+                Content = "✕", VerticalAlignment = VerticalAlignment.Center,
+                Padding = new Thickness(10, 4), FontSize = 12
             };
             btnRemove.Click += (s, e) => { _conditions.Remove(condition); RebuildUI(); };
             row.Children.Add(btnRemove);
