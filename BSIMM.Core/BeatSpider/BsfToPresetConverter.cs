@@ -54,7 +54,12 @@ public static class BsfToPresetConverter
         }
 
         foreach (var config in filterConfigs)
+        {
+            // Disable BSS defaults that BSIMM doesn't support
+            config.SongDetailFilter.FullSpread.Enable = false;
+            config.SongDetailFilter.AutoMapper.Enable = false;
             preset.FilterOptions.Add(config);
+        }
         return preset;
     }
 

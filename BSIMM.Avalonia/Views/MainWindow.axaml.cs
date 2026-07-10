@@ -618,30 +618,34 @@ public partial class MainWindow : Window
                 return;
             }
 
-            // Online: fetch all pages, then filter via BSS
-            vm.StatusText = "正在获取 BeatSaver 搜索结果...";
-            var rawMaps = await vm.BeatSaverSearch.FetchAllMapsForPresetAsync(preset, useSharedCache: false, pct =>
-            {
-                Dispatcher.UIThread.Post(() => { vm.ProgressValue = pct / 2; vm.StatusText = $"正在获取搜索结果... {pct}%"; });
-            });
-
+            // Online API search (original code path)
+            var filter = vm.BeatSaverSearch.BuildSearchFilterFromPreset(preset);
+            var response = await vm.BeatSaverClient.SearchMapsAsync(filter, page);
+            
             if (searchToken.IsCancellationRequested) return;
-
-            // Apply BSS filter on top of API results
-            vm.StatusText = "正在应用筛选条件 (BeatSpiderSharp)...";
-            var spider = new BsimSpider();
-            var bssPreset = BsfToPresetConverter.Convert(preset);
-            var songs = ToAsyncEnumerable(rawMaps).Select(m => m.ToBeatSpiderSong());
-            var filtered = spider.Filter(songs, bssPreset);
-            var filteredList = new List<BeatSaverMap>();
-            await foreach (var song in filtered.WithCancellation(searchToken))
+            
+            _currentSearchResults = response?.Maps ?? new List<BeatSaverMap>();
+            _currentPage = page;
+            
+            if (response?.Info != null && response.Info.Pages > 0)
             {
-                var map = song.ToBeatSaverMap();
-                if (map != null) filteredList.Add(map);
+                _totalPages = response.Info.Pages;
+                _totalResults = response.Info.Total;
+            }
+            else if (response?.Metadata != null && response.Metadata.PageSize > 0)
+            {
+                _totalResults = response.Metadata.Total;
+                _totalPages = (_totalResults + response.Metadata.PageSize - 1) / response.Metadata.PageSize;
+            }
+            else
+            {
+                _totalPages = 1;
+                _totalResults = _currentSearchResults.Count;
             }
 
-            if (searchToken.IsCancellationRequested) return;
-            DisplaySearchPage(filteredList, page);
+            searchResultsList.ItemsSource = _currentSearchResults;
+            UpdatePaginationControls();
+
             vm.StatusText = $"找到 {_totalResults} 个结果，当前第 {_currentPage + 1}/{_totalPages} 页";
             vm.ProgressValue = 100;
             _ = PrefetchCoversAsync(_currentSearchResults, _coverLoadCts.Token);
@@ -965,40 +969,40 @@ public partial class MainWindow : Window
 
             try
             {
-                List<BeatSaverMap> allMaps;
-                if (vm.BeatSaverSearch.RequiresLocalCache(_currentFilterPreset))
+                bool requiresCache = vm.BeatSaverSearch.RequiresLocalCache(_currentFilterPreset);
+                if (requiresCache)
                 {
                     if (!vm.LocalCache.IsCacheAvailable)
                     { vm.StatusText = "本地缓存不可用"; vm.ProgressValue = 100; return; }
-                    allMaps = await vm.LocalCache.FilterWithBeatSpiderSharpAsync(_currentFilterPreset,
+                    vm.StatusText = "正在使用本地缓存筛选 (BeatSpiderSharp)...";
+                    var allMaps = await vm.LocalCache.FilterWithBeatSpiderSharpAsync(_currentFilterPreset,
                         new Progress<int>(pct => Dispatcher.UIThread.Post(() => { vm.ProgressValue = pct / 2; vm.StatusText = $"筛选... {pct}%"; })));
+
+                    vm.StatusText = $"正在导出歌单（共 {allMaps.Count} 首）...";
+                    vm.ProgressValue = 60;
+
+                    var playlistSvc = new BeatSaberIndependentMapsManager.Services.BeatSpiderPlaylistService();
+                    string coverText = PlaylistExportService.ExtractCoverTextFromPresetName(_currentFilterPreset.Name);
+                    using var coverMs = new MemoryStream();
+                    using (var coverImg = PlaylistExportService.GeneratePlaylistCover(coverText ?? _currentFilterPreset.Name))
+                        coverImg.Save(coverMs, System.Drawing.Imaging.ImageFormat.Jpeg);
+                    coverMs.Position = 0;
+                    await playlistSvc.ExportPlaylistAsync(allMaps, _currentFilterPreset.Name, "BSIMM", path, coverMs);
                 }
                 else
                 {
                     vm.StatusText = "正在获取全部页面...";
-                    allMaps = await vm.BeatSaverSearch.FetchAllMapsForPresetAsync(_currentFilterPreset, useSharedCache: false, pct =>
+                    var allMaps = await vm.BeatSaverSearch.FetchAllMapsForPresetAsync(_currentFilterPreset, useSharedCache: false, pct =>
                     { Dispatcher.UIThread.Post(() => { vm.ProgressValue = pct / 2; vm.StatusText = $"获取... {pct}%"; }); });
-                    // Apply BSS filter
-                    var spider = new BsimSpider();
-                    var bssPreset = BsfToPresetConverter.Convert(_currentFilterPreset);
-                    var songs = ToAsyncEnumerable(allMaps).Select(m => m.ToBeatSpiderSong());
-                    var filtered = spider.Filter(songs, bssPreset);
-                    allMaps = new List<BeatSaverMap>();
-                    await foreach (var song in filtered) { var m = song.ToBeatSaverMap(); if (m != null) allMaps.Add(m); }
+
+                    vm.StatusText = $"正在导出歌单（共 {allMaps.Count} 首）...";
+                    vm.ProgressValue = 60;
+
+                    string coverText = PlaylistExportService.ExtractCoverTextFromPresetName(_currentFilterPreset.Name);
+                    await Task.Run(() => vm.PlaylistExporter.ExportMapsToPlaylist(allMaps, path, _currentFilterPreset.Name, coverText));
                 }
 
-                vm.StatusText = $"正在导出歌单（共 {allMaps.Count} 首）...";
-                vm.ProgressValue = 60;
-
-                var playlistSvc = new BeatSaberIndependentMapsManager.Services.BeatSpiderPlaylistService();
-                string coverText = PlaylistExportService.ExtractCoverTextFromPresetName(_currentFilterPreset.Name);
-                using var coverMs = new MemoryStream();
-                using (var coverImg = PlaylistExportService.GeneratePlaylistCover(coverText ?? _currentFilterPreset.Name))
-                    coverImg.Save(coverMs, System.Drawing.Imaging.ImageFormat.Jpeg);
-                coverMs.Position = 0;
-                await playlistSvc.ExportPlaylistAsync(allMaps, _currentFilterPreset.Name, "BSIMM", path, coverMs);
-
-                vm.StatusText = $"歌单已保存！共 {allMaps.Count} 首歌曲";
+                vm.StatusText = "歌单已保存！";
                 vm.ProgressValue = 100;
             }
             catch (Exception ex)
@@ -1186,16 +1190,12 @@ public partial class MainWindow : Window
         {
             vm.EnsureLocalCacheInitialized();
             if (!vm.LocalCache.IsCacheAvailable)
-            {
-                vm.StatusText = "需要本地缓存但未下载，请先在设置中下载本地缓存。";
-                vm.ProgressValue = 100;
-                return;
-            }
+            { vm.StatusText = "需要本地缓存但未下载"; vm.ProgressValue = 100; return; }
 
             bool outdated = await vm.LocalCache.IsCacheOutdatedAsync();
             if (outdated)
             {
-                bool update = await ShowConfirmDialogAsync("缓存已过期", "本地缓存已过期（超过7天），建议更新以获取最新谱面数据。\n\n是否立即更新缓存？\n选择「否」将继续使用旧缓存进行批处理。");
+                bool update = await ShowConfirmDialogAsync("缓存已过期", "本地缓存已过期（超过7天），是否更新？");
                 if (update) await DownloadCacheWithProgressAsync(vm);
             }
 
@@ -1205,13 +1205,13 @@ public partial class MainWindow : Window
                 var preset = presets[i];
                 try
                 {
+                    vm.StatusText = $"正在BSS筛选: {preset.Name}...";
                     var maps = await vm.LocalCache.FilterWithBeatSpiderSharpAsync(preset, null);
                     if (maps.Count == 0) { zeroResultCount++; }
-                    else { await ExportSinglePresetAsync(maps, preset, outputDir); successCount++; }
+                    else { await ExportSingleBssPresetAsync(maps, preset, outputDir); successCount++; }
                 }
                 catch { failCount++; }
                 vm.ProgressValue = (i + 1) * 100 / total;
-                vm.StatusText = $"批处理中... {i + 1}/{total}";
             }
         }
         else
@@ -1223,20 +1223,19 @@ public partial class MainWindow : Window
                 var preset = presets[i];
                 try
                 {
-                    var rawMaps = await vm.BeatSaverSearch.FetchAllMapsForPresetAsync(preset, useSharedCache: false, null);
-                    // Apply BSS filter
-                    var spider = new BsimSpider();
-                    var bssPreset = BsfToPresetConverter.Convert(preset);
-                    var songs = ToAsyncEnumerable(rawMaps).Select(m => m.ToBeatSpiderSong());
-                    var filtered = spider.Filter(songs, bssPreset);
-                    var maps = new List<BeatSaverMap>();
-                    await foreach (var song in filtered) { var m = song.ToBeatSaverMap(); if (m != null) maps.Add(m); }
-                    if (maps.Count == 0) { zeroResultCount++; }
-                    else { await ExportSinglePresetAsync(maps, preset, outputDir); successCount++; }
+                    vm.StatusText = $"正在获取: {preset.Name}...";
+                    var maps = await vm.BeatSaverSearch.FetchAllMapsForPresetAsync(preset, useSharedCache: false, null);
+                    if (maps == null || maps.Count == 0) { zeroResultCount++; }
+                    else
+                    {
+                        string coverText = PlaylistExportService.ExtractCoverTextFromPresetName(preset.Name);
+                        string filePath = Path.Combine(outputDir, PlaylistExportService.SanitizeFileName(preset.Name) + ".bplist");
+                        vm.PlaylistExporter.ExportMapsToPlaylist(maps, filePath, preset.Name, coverText);
+                        successCount++;
+                    }
                 }
                 catch { failCount++; }
                 vm.ProgressValue = (i + 1) * 100 / total;
-                vm.StatusText = $"批处理中... {i + 1}/{total}";
             }
         }
 
@@ -1244,7 +1243,7 @@ public partial class MainWindow : Window
         vm.ProgressValue = 100;
     }
 
-    private async Task ExportSinglePresetAsync(List<BeatSaverMap> maps, FilterPreset preset, string outputDir)
+    private async Task ExportSingleBssPresetAsync(List<BeatSaverMap> maps, FilterPreset preset, string outputDir)
     {
         string coverText = PlaylistExportService.ExtractCoverTextFromPresetName(preset.Name);
         string filePath = Path.Combine(outputDir, PlaylistExportService.SanitizeFileName(preset.Name) + ".bplist");

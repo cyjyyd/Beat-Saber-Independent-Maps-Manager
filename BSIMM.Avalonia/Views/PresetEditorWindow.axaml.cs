@@ -337,9 +337,9 @@ namespace BSIMM.Avalonia.Views
                     break;
 
                 case FilterValueType.Number:
-                    var num = new NumericUpDown { Value = (decimal)Convert.ToDouble(condition.Value ?? 0), MinWidth = 100 };
-                    num.ValueChanged += (s, e) => condition.Value = (double)(num.Value ?? 0);
-                    panel.Children.Add(num);
+                    var numTxt = new TextBox { Text = (condition.Value != null ? Convert.ToDouble(condition.Value).ToString() : "0"), MinWidth = 100 };
+                    numTxt.TextChanged += (s, e) => { if (double.TryParse(numTxt.Text, out var d)) condition.Value = d; };
+                    panel.Children.Add(numTxt);
                     break;
 
                 case FilterValueType.Boolean:
@@ -360,13 +360,13 @@ namespace BSIMM.Avalonia.Views
 
                 case FilterValueType.Range:
                     var rangeVal = condition.Value as RangeValue ?? new RangeValue();
-                    var minNum = new NumericUpDown { Value = (decimal)(double.IsNaN(rangeVal.MinRaw) ? 0 : rangeVal.MinRaw), MinWidth = 80 };
-                    var maxNum = new NumericUpDown { Value = (decimal)(double.IsNaN(rangeVal.MaxRaw) ? 0 : rangeVal.MaxRaw), MinWidth = 80 };
-                    minNum.ValueChanged += (s, e) => { var r = condition.Value as RangeValue ?? new RangeValue(); r.MinRaw = (double)(minNum.Value ?? 0); condition.Value = r; };
-                    maxNum.ValueChanged += (s, e) => { var r = condition.Value as RangeValue ?? new RangeValue(); r.MaxRaw = (double)(maxNum.Value ?? 0); condition.Value = r; };
-                    panel.Children.Add(minNum);
+                    var minTxt = new TextBox { Text = double.IsNaN(rangeVal.MinRaw) ? "" : rangeVal.MinRaw.ToString(), MinWidth = 80 };
+                    var maxTxt = new TextBox { Text = double.IsNaN(rangeVal.MaxRaw) ? "" : rangeVal.MaxRaw.ToString(), MinWidth = 80 };
+                    minTxt.TextChanged += (s, e) => { var r = condition.Value as RangeValue ?? new RangeValue(); r.MinRaw = double.TryParse(minTxt.Text, out var v) ? v : double.NaN; condition.Value = r; };
+                    maxTxt.TextChanged += (s, e) => { var r = condition.Value as RangeValue ?? new RangeValue(); r.MaxRaw = double.TryParse(maxTxt.Text, out var v) ? v : double.NaN; condition.Value = r; };
+                    panel.Children.Add(minTxt);
                     panel.Children.Add(new TextBlock { Text = "~", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0) });
-                    panel.Children.Add(maxNum);
+                    panel.Children.Add(maxTxt);
                     break;
 
                 case FilterValueType.SearchQuery:
@@ -398,11 +398,11 @@ namespace BSIMM.Avalonia.Views
 
                 case FilterValueType.NumberWithSort:
                     var limitVal = condition.Value as ResultLimitValue ?? new ResultLimitValue(100);
-                    var limitNum = new NumericUpDown { Value = limitVal.Count, MinWidth = 80 };
+                    var limitTxt = new TextBox { Text = limitVal.Count.ToString(), MinWidth = 80 };
                     var sortCmb = new ComboBox { ItemsSource = new[] { "最新上传", "最早上传", "随机" }, SelectedIndex = (int)limitVal.SortOption, MinWidth = 90 };
-                    limitNum.ValueChanged += (s, e) => { var r = condition.Value as ResultLimitValue ?? new ResultLimitValue(); r.Count = (int)(limitNum.Value ?? 100); condition.Value = r; };
+                    limitTxt.TextChanged += (s, e) => { var r = condition.Value as ResultLimitValue ?? new ResultLimitValue(); r.Count = int.TryParse(limitTxt.Text, out var n) ? n : 100; condition.Value = r; };
                     sortCmb.SelectionChanged += (s, e) => { var r = condition.Value as ResultLimitValue ?? new ResultLimitValue(); r.SortOption = (ResultSortOption)sortCmb.SelectedIndex; condition.Value = r; };
-                    panel.Children.Add(limitNum);
+                    panel.Children.Add(limitTxt);
                     panel.Children.Add(sortCmb);
                     break;
 
