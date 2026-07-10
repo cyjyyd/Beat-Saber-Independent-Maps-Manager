@@ -83,7 +83,7 @@
                         <TextBlock Text="输出配置" FontWeight="Bold" Foreground="{DynamicResource HighlightBlueBrush}" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <CheckBox Name="ChkLimit" Content="限制数量:" VerticalAlignment="Center" />
-                            <NumericUpDown Name="NumLimit" Value="100" Minimum="1" VerticalAlignment="Center" MinWidth="80" />
+                            <TextBox Name="NumLimit" Text="100" VerticalAlignment="Center" MinWidth="80" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <CheckBox Name="ChkPlaylist" Content="导出歌单:" VerticalAlignment="Center" />

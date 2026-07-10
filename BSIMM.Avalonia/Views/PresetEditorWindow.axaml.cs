@@ -28,7 +28,7 @@ namespace BSIMM.Avalonia.Views
         private TextBlock _lblMatchCount = null!;
         private CheckBox _chkLocalCache = null!;
         private CheckBox _chkLimit = null!;
-        private NumericUpDown _numLimit = null!;
+        private TextBox _numLimit = null!;
         private CheckBox _chkPlaylist = null!;
         private TextBox _txtPlaylistDir = null!;
         private CheckBox _chkDownload = null!;
@@ -37,6 +37,7 @@ namespace BSIMM.Avalonia.Views
         private string _presetsDir;
         private List<PresetInfo> _savedPresets = new();
         private List<FilterCondition> _conditions = new();
+        private bool _suppressComboEvent;
 
         private string PlaylistDir { get; set; } = "";
         private string DownloadDir { get; set; } = "";
@@ -62,7 +63,7 @@ namespace BSIMM.Avalonia.Views
             _lblMatchCount = this.FindControl<TextBlock>("LblMatchCount")!;
             _chkLocalCache = this.FindControl<CheckBox>("ChkLocalCache")!;
             _chkLimit = this.FindControl<CheckBox>("ChkLimit")!;
-            _numLimit = this.FindControl<NumericUpDown>("NumLimit")!;
+            _numLimit = this.FindControl<TextBox>("NumLimit")!;
             _chkPlaylist = this.FindControl<CheckBox>("ChkPlaylist")!;
             _txtPlaylistDir = this.FindControl<TextBox>("TxtPlaylistDir")!;
             _chkDownload = this.FindControl<CheckBox>("ChkDownload")!;
@@ -109,8 +110,10 @@ namespace BSIMM.Avalonia.Views
 
         private void UpdatePresetCombo()
         {
+            _suppressComboEvent = true;
             _cboPreset.ItemsSource = _savedPresets.Select(p => p.Preset.Name ?? "(未命名)").ToList();
             _cboPreset.SelectedIndex = -1;
+            _suppressComboEvent = false;
         }
 
         private void CreateNewPreset()
@@ -123,7 +126,7 @@ namespace BSIMM.Avalonia.Views
             _chkLimit.IsChecked = false;
             _chkPlaylist.IsChecked = false;
             _chkDownload.IsChecked = false;
-            _numLimit.Value = 100;
+            _numLimit.Text = "100";
             _txtPlaylistDir.Text = "";
             _txtDownloadDir.Text = "";
             RebuildUI();
@@ -146,7 +149,7 @@ namespace BSIMM.Avalonia.Views
             _chkPlaylist.IsChecked = bssPreset.Output.Playlist.SavePlaylist;
             _chkDownload.IsChecked = bssPreset.Output.SongDownload.DownloadSongs;
             _chkLimit.IsChecked = bssPreset.Output.LimitSongs;
-            _numLimit.Value = bssPreset.Output.MaxSongs ?? 100;
+            _numLimit.Text = (bssPreset.Output.MaxSongs ?? 100).ToString();
             _numLimit.IsEnabled = bssPreset.Output.LimitSongs;
 
             // Extract conditions from all FilterConfigs (merge into flat list)
@@ -163,22 +166,14 @@ namespace BSIMM.Avalonia.Views
             var l = fc.LevelDetailOptions;
             var q = fc.SearchOptions;
 
-            if (s.Bpm.Enable && (s.Bpm.Min.HasValue || s.Bpm.Max.HasValue))
-                AddRangeCondition(FilterConditionType.BpmRange, s.Bpm.Min, s.Bpm.Max);
-            if (s.Duration.Enable && (s.Duration.Min.HasValue || s.Duration.Max.HasValue))
-                AddRangeCondition(FilterConditionType.DurationRange, s.Duration.Min, s.Duration.Max);
-            if (s.Rating.Enable && (s.Rating.Min.HasValue || s.Rating.Max.HasValue))
-                AddRangeCondition(FilterConditionType.ScoreRange, s.Rating.Min, s.Rating.Max);
-            if (s.UpVotes.Enable && (s.UpVotes.Min.HasValue || s.UpVotes.Max.HasValue))
-                AddRangeCondition(FilterConditionType.UpvotesRange, s.UpVotes.Min, s.UpVotes.Max);
-            if (s.DownVotes.Enable && (s.DownVotes.Min.HasValue || s.DownVotes.Max.HasValue))
-                AddRangeCondition(FilterConditionType.DownvotesRange, s.DownVotes.Min, s.DownVotes.Max);
-            if (s.UpVotePercentage.Enable && (s.UpVotePercentage.Min.HasValue || s.UpVotePercentage.Max.HasValue))
-                AddRangeCondition(FilterConditionType.UpvoteRatioRange, s.UpVotePercentage.Min, s.UpVotePercentage.Max);
-            if (s.DownVotePercentage.Enable && (s.DownVotePercentage.Min.HasValue || s.DownVotePercentage.Max.HasValue))
-                AddRangeCondition(FilterConditionType.DownvoteRatioRange, s.DownVotePercentage.Min, s.DownVotePercentage.Max);
-            if (s.SageScore.Enable && (s.SageScore.Min.HasValue || s.SageScore.Max.HasValue))
-                AddRangeCondition(FilterConditionType.SageScoreRange, s.SageScore.Min, s.SageScore.Max);
+            ExtractRange(s.Bpm, FilterConditionType.BpmRange);
+            ExtractRangeInt(s.Duration, FilterConditionType.DurationRange);
+            ExtractRangeFloat(s.Rating, FilterConditionType.ScoreRange);
+            ExtractRangeInt(s.UpVotes, FilterConditionType.UpvotesRange);
+            ExtractRangeInt(s.DownVotes, FilterConditionType.DownvotesRange);
+            ExtractRangeFloat(s.UpVotePercentage, FilterConditionType.UpvoteRatioRange);
+            ExtractRangeFloat(s.DownVotePercentage, FilterConditionType.DownvoteRatioRange);
+            ExtractRangeInt(s.SageScore, FilterConditionType.SageScoreRange);
             if (s.AutoMapper.Enable)
                 _conditions.Add(new FilterCondition(FilterConditionType.Automapper, s.AutoMapper.Filter));
             if (s.UploaderName.Enable && s.UploaderName.Filter.Count > 0)
@@ -187,48 +182,35 @@ namespace BSIMM.Avalonia.Views
                 _conditions.Add(new FilterCondition(FilterConditionType.Tags, string.Join(",", s.IncludeTags.Filter)));
             if (s.ExcludeTags.Enable && s.ExcludeTags.Filter.Count > 0)
                 _conditions.Add(new FilterCondition(FilterConditionType.ExcludeTags, string.Join(",", s.ExcludeTags.Filter)));
-            if (s.ScoreSaberRanking.Enable && s.ScoreSaberRanking.Filter.Contains(RankingStatus.Ranked))
-                _conditions.Add(new FilterCondition(FilterConditionType.Ranked, true));
-            if (s.ScoreSaberRanking.Enable && s.ScoreSaberRanking.Filter.Contains(RankingStatus.Qualified))
-                _conditions.Add(new FilterCondition(FilterConditionType.Qualified, true));
-            if (s.BeatLeaderRanking.Enable && s.BeatLeaderRanking.Filter.Contains(RankingStatus.Ranked))
-                _conditions.Add(new FilterCondition(FilterConditionType.BlRanked, true));
-            if (s.BeatLeaderRanking.Enable && s.BeatLeaderRanking.Filter.Contains(RankingStatus.Qualified))
-                _conditions.Add(new FilterCondition(FilterConditionType.BlQualified, true));
-            if (s.UploadTime.Enable && s.UploadTime.Min.HasValue)
-                _conditions.Add(new FilterCondition(FilterConditionType.MinUploadedDate, s.UploadTime.Min.Value.DateTime));
-            if (s.UploadTime.Enable && s.UploadTime.Max.HasValue)
-                _conditions.Add(new FilterCondition(FilterConditionType.MaxUploadedDate, s.UploadTime.Max.Value.DateTime));
-            if (l.Nps.Enable && (l.Nps.Min.HasValue || l.Nps.Max.HasValue))
-                AddRangeCondition(FilterConditionType.NpsRange, l.Nps.Min, l.Nps.Max);
-            if (l.Njs.Enable && (l.Njs.Min.HasValue || l.Njs.Max.HasValue))
-                AddRangeCondition(FilterConditionType.NjsRange, l.Njs.Min, l.Njs.Max);
-            if (l.ScoreSaberStars.Enable && (l.ScoreSaberStars.Min.HasValue || l.ScoreSaberStars.Max.HasValue))
-                AddRangeCondition(FilterConditionType.SsStarsRange, l.ScoreSaberStars.Min, l.ScoreSaberStars.Max);
-            if (l.BeatLeaderStars.Enable && (l.BeatLeaderStars.Min.HasValue || l.BeatLeaderStars.Max.HasValue))
-                AddRangeCondition(FilterConditionType.BlStarsRange, l.BeatLeaderStars.Min, l.BeatLeaderStars.Max);
-            if (l.Notes.Enable && (l.Notes.Min.HasValue || l.Notes.Max.HasValue))
-                AddRangeCondition(FilterConditionType.NotesRange, l.Notes.Min, l.Notes.Max);
-            if (l.Bombs.Enable && (l.Bombs.Min.HasValue || l.Bombs.Max.HasValue))
-                AddRangeCondition(FilterConditionType.BombsRange, l.Bombs.Min, l.Bombs.Max);
-            if (l.Events.Enable && (l.Events.Min.HasValue || l.Events.Max.HasValue))
-                AddRangeCondition(FilterConditionType.EventsRange, l.Events.Min, l.Events.Max);
-            if (l.Walls.Enable && (l.Walls.Min.HasValue || l.Walls.Max.HasValue))
-                AddRangeCondition(FilterConditionType.ObstaclesRange, l.Walls.Min, l.Walls.Max);
-            if (l.Seconds.Enable && (l.Seconds.Min.HasValue || l.Seconds.Max.HasValue))
-                AddRangeCondition(FilterConditionType.SecondsRange, l.Seconds.Min, l.Seconds.Max);
-            if (l.Beats.Enable && (l.Beats.Min.HasValue || l.Beats.Max.HasValue))
-                AddRangeCondition(FilterConditionType.LengthRange, l.Beats.Min, l.Beats.Max);
-            if (l.Offset.Enable && (l.Offset.Min.HasValue || l.Offset.Max.HasValue))
-                AddRangeCondition(FilterConditionType.OffsetRange, l.Offset.Min, l.Offset.Max);
-            if (l.ParityErrors.Enable && (l.ParityErrors.Min.HasValue || l.ParityErrors.Max.HasValue))
-                AddRangeCondition(FilterConditionType.ParityErrorsRange, l.ParityErrors.Min, l.ParityErrors.Max);
-            if (l.ParityWarns.Enable && (l.ParityWarns.Min.HasValue || l.ParityWarns.Max.HasValue))
-                AddRangeCondition(FilterConditionType.ParityWarnsRange, l.ParityWarns.Min, l.ParityWarns.Max);
-            if (l.ParityResets.Enable && (l.ParityResets.Min.HasValue || l.ParityResets.Max.HasValue))
-                AddRangeCondition(FilterConditionType.ParityResetsRange, l.ParityResets.Min, l.ParityResets.Max);
-            if (l.MaxScore.Enable && (l.MaxScore.Min.HasValue || l.MaxScore.Max.HasValue))
-                AddRangeCondition(FilterConditionType.MaxScoreRange, l.MaxScore.Min, l.MaxScore.Max);
+            if (s.ScoreSaberRanking.Enable && s.ScoreSaberRanking.Filter.Count > 0)
+                foreach (var rs in s.ScoreSaberRanking.Filter)
+                    _conditions.Add(new FilterCondition(rs == RankingStatus.Ranked ? FilterConditionType.Ranked : FilterConditionType.Qualified, true));
+            if (s.BeatLeaderRanking.Enable && s.BeatLeaderRanking.Filter.Count > 0)
+                foreach (var rs in s.BeatLeaderRanking.Filter)
+                    _conditions.Add(new FilterCondition(rs == RankingStatus.Ranked ? FilterConditionType.BlRanked : FilterConditionType.BlQualified, true));
+            if (s.UploadTime.Enable)
+            {
+                if (s.UploadTime.Min.HasValue)
+                    _conditions.Add(new FilterCondition(FilterConditionType.MinUploadedDate, s.UploadTime.Min.Value.DateTime));
+                if (s.UploadTime.Max.HasValue)
+                    _conditions.Add(new FilterCondition(FilterConditionType.MaxUploadedDate, s.UploadTime.Max.Value.DateTime));
+            }
+
+            ExtractRange(l.Nps, FilterConditionType.NpsRange);
+            ExtractRange(l.Njs, FilterConditionType.NjsRange);
+            ExtractRange(l.ScoreSaberStars, FilterConditionType.SsStarsRange);
+            ExtractRange(l.BeatLeaderStars, FilterConditionType.BlStarsRange);
+            ExtractRangeInt(l.Notes, FilterConditionType.NotesRange);
+            ExtractRangeInt(l.Bombs, FilterConditionType.BombsRange);
+            ExtractRangeInt(l.Events, FilterConditionType.EventsRange);
+            ExtractRangeInt(l.Walls, FilterConditionType.ObstaclesRange);
+            ExtractRange(l.Seconds, FilterConditionType.SecondsRange);
+            ExtractRange(l.Beats, FilterConditionType.LengthRange);
+            ExtractRange(l.Offset, FilterConditionType.OffsetRange);
+            ExtractRangeInt(l.ParityErrors, FilterConditionType.ParityErrorsRange);
+            ExtractRangeInt(l.ParityWarns, FilterConditionType.ParityWarnsRange);
+            ExtractRangeInt(l.ParityResets, FilterConditionType.ParityResetsRange);
+            ExtractRangeInt(l.MaxScore, FilterConditionType.MaxScoreRange);
             foreach (var mod in l.RequireMods.Filter)
             {
                 var ct = mod switch
@@ -247,19 +229,29 @@ namespace BSIMM.Avalonia.Views
             foreach (var d in l.IncludeDifficulties.Filter)
                 _conditions.Add(new FilterCondition(FilterConditionType.Difficulty, d.ToString()));
             if (q.Enable)
-            {
                 foreach (var term in q.AdvanceTerms)
                     _conditions.Add(new FilterCondition(FilterConditionType.Query, term.Content));
-            }
         }
 
-        private void AddRangeCondition(FilterConditionType type, double? min, double? max)
+        private void ExtractRange(RangeOption<float> opt, FilterConditionType type)
         {
-            _conditions.Add(new FilterCondition(type, new RangeValue
-            {
-                MinRaw = min ?? double.NaN,
-                MaxRaw = max ?? double.NaN
-            }));
+            if (opt.Enable)
+                _conditions.Add(new FilterCondition(type, new RangeValue
+                { MinRaw = opt.Min.HasValue ? opt.Min.Value : double.NaN, MaxRaw = opt.Max.HasValue ? opt.Max.Value : double.NaN }));
+        }
+
+        private void ExtractRangeInt(RangeOption<int> opt, FilterConditionType type)
+        {
+            if (opt.Enable)
+                _conditions.Add(new FilterCondition(type, new RangeValue
+                { MinRaw = opt.Min.HasValue ? opt.Min.Value : double.NaN, MaxRaw = opt.Max.HasValue ? opt.Max.Value : double.NaN }));
+        }
+
+        private void ExtractRangeFloat(RangeOption<float> opt, FilterConditionType type)
+        {
+            if (opt.Enable)
+                _conditions.Add(new FilterCondition(type, new RangeValue
+                { MinRaw = opt.Min.HasValue ? opt.Min.Value : double.NaN, MaxRaw = opt.Max.HasValue ? opt.Max.Value : double.NaN }));
         }
 
         // === Build BSS Preset ===
@@ -274,7 +266,8 @@ namespace BSIMM.Avalonia.Views
 
             if (_chkLimit.IsChecked == true)
             {
-                var limitCond = new FilterCondition(FilterConditionType.ResultLimit, new ResultLimitValue((int)(_numLimit.Value ?? 100)));
+                var limitVal = int.TryParse(_numLimit.Text, out var n) ? n : 100;
+                var limitCond = new FilterCondition(FilterConditionType.ResultLimit, new ResultLimitValue(limitVal));
                 group.AddCondition(limitCond);
             }
 
@@ -576,6 +569,7 @@ namespace BSIMM.Avalonia.Views
 
         private void OnPresetComboSelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
+            if (_suppressComboEvent) return;
             if (_cboPreset.SelectedIndex >= 0 && _cboPreset.SelectedIndex < _savedPresets.Count)
             {
                 var item = _savedPresets[_cboPreset.SelectedIndex];
@@ -634,11 +628,15 @@ namespace BSIMM.Avalonia.Views
                 }
                 catch { }
             }
+            _suppressComboEvent = true;
             UpdatePresetCombo();
             if (_savedPresets.Count > 0)
             {
+                var last = _savedPresets.Last();
                 _cboPreset.SelectedIndex = _savedPresets.Count - 1;
+                LoadFromBssPreset(last.Preset);
             }
+            _suppressComboEvent = false;
         }
 
         private async void OnBrowsePlaylistClick(object? sender, RoutedEventArgs e)
@@ -674,7 +672,7 @@ namespace BSIMM.Avalonia.Views
                 var group = new FilterGroup("g");
                 foreach (var c in _conditions) group.AddCondition(c.Clone());
                 if (_chkLimit.IsChecked == true)
-                    group.AddCondition(new FilterCondition(FilterConditionType.ResultLimit, new ResultLimitValue((int)_numLimit.Value)));
+                    group.AddCondition(new FilterCondition(FilterConditionType.ResultLimit, new ResultLimitValue(int.TryParse(_numLimit.Text, out var lv) ? lv : 100)));
                 bsfPreset.AddGroup(group);
 
                 var cacheMgr = new LocalCacheManager();

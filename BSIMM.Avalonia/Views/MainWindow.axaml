@@ -380,7 +380,7 @@
                     <!-- Search Toolbar -->
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
                         <Button Content="打开筛选构建器(新版)" Click="OnOpenPresetEditorClick" Classes="bs-blue" />
-                        <Button Content="打开筛选构建器(旧版)" Click="OnOpenFilterBuilderClick" />
+                        <Button Content="打开筛选构建器" Click="OnOpenFilterBuilderClick" Classes="bs-blue" />
                         <Button Content="批量导出预设" Click="OnBatchExportClick" Classes="bs-red" />
                         <Button Content="导出搜索结果为歌单" Click="OnExportSearchResultsClick" Classes="bs-red" />
                         <Button Content="设置" Click="OnSettingsClick" />
