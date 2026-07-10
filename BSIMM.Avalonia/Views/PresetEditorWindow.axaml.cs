@@ -137,15 +137,18 @@ namespace BSIMM.Avalonia.Views
                 var g = CurrentPreset.Groups[i];
                 if (!g.IsEnabled) continue;
                 var parts = new List<string>();
-                foreach (var c in g.Conditions)
+                var conditions = g.Conditions.Where(c => c.IsEnabled).ToList();
+                for (int j = 0; j < conditions.Count; j++)
                 {
-                    if (!c.IsEnabled) continue;
-                    parts.Add(FilterConditionMetadata.GetDisplayName(c.Type));
+                    var label = FilterConditionMetadata.GetDisplayName(conditions[j].Type);
+                    if (j < conditions.Count - 1)
+                        label += $" {conditions[j].Operator.ToString().ToUpper()}";
+                    parts.Add(label);
                 }
                 if (parts.Count > 0)
-                    sb.Append($"[{string.Join($" {g.GroupOperator} ", parts)}]");
+                    sb.Append(string.Join(" ", parts));
                 if (i < CurrentPreset.Groups.Count - 1)
-                    sb.Append($" {CurrentPreset.Groups[i].GroupOperator} ");
+                    sb.Append($" {g.GroupOperator} ");
             }
             _lblFilterSummary.Text = sb.ToString();
         }
@@ -194,14 +197,6 @@ namespace BSIMM.Avalonia.Views
                 Foreground = GetBrush("HighlightBlueBrush"), VerticalAlignment = VerticalAlignment.Center
             };
 
-            var cmbOperator = new ComboBox
-            {
-                ItemsSource = new[] { "AND (全部满足)", "OR (满足任一)" },
-                SelectedIndex = group.GroupOperator == LogicOperator.And ? 0 : 1,
-                VerticalAlignment = VerticalAlignment.Center, MinWidth = 140
-            };
-            cmbOperator.SelectionChanged += (s, e) => { group.GroupOperator = cmbOperator.SelectedIndex == 0 ? LogicOperator.And : LogicOperator.Or; UpdateFilterSummary(); };
-
             var chkCache = new CheckBox { Content = "本地缓存", IsChecked = group.UseLocalCache, VerticalAlignment = VerticalAlignment.Center, Foreground = GetBrush("HighlightBlueBrush") };
             chkCache.IsCheckedChanged += (s, e) => { group.UseLocalCache = chkCache.IsChecked ?? false; RebuildUI(); };
 
@@ -210,7 +205,6 @@ namespace BSIMM.Avalonia.Views
 
             headerPanel.Children.Add(chkEnabled);
             headerPanel.Children.Add(lblName);
-            headerPanel.Children.Add(cmbOperator);
             headerPanel.Children.Add(chkCache);
             headerPanel.Children.Add(btnRemoveGroup);
             outerStack.Children.Add(headerPanel);
@@ -307,7 +301,7 @@ namespace BSIMM.Avalonia.Views
             panel.Children.Add(valuePanel);
 
             var cmbOperator = new ComboBox { ItemsSource = new[] { "AND", "OR" }, SelectedIndex = condition.Operator == LogicOperator.And ? 0 : 1, VerticalAlignment = VerticalAlignment.Center, MinWidth = 60 };
-            cmbOperator.SelectionChanged += (s, e) => condition.Operator = cmbOperator.SelectedIndex == 0 ? LogicOperator.And : LogicOperator.Or;
+            cmbOperator.SelectionChanged += (s, e) => { condition.Operator = cmbOperator.SelectedIndex == 0 ? LogicOperator.And : LogicOperator.Or; UpdateFilterSummary(); };
             panel.Children.Add(cmbOperator);
 
             var btnRemove = new Button { Content = "✕", VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(10, 4), FontSize = 12 };

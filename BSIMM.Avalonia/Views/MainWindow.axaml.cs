@@ -538,19 +538,6 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _coverLoadCts;
     private DispatcherTimer? _bsAudioTimer;
 
-    private async void OnOpenFilterBuilderClick(object? sender, RoutedEventArgs e)
-    {
-        var vm = ViewModel;
-        var window = new FilterBuilderWindow(_currentFilterPreset);
-        window.SearchRequested += async (s, preset) =>
-        {
-            _currentFilterPreset = preset;
-            _currentPage = 0;
-            await ExecuteSearch(vm, preset, 0);
-        };
-        await window.ShowDialog(this);
-    }
-
     private async void OnOpenPresetEditorClick(object? sender, RoutedEventArgs e)
     {
         var window = new PresetEditorWindow(_currentFilterPreset);
