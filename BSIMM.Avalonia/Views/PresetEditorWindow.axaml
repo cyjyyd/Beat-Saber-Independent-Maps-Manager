@@ -58,17 +58,7 @@
 
         <!-- Main Content: Groups List -->
         <ScrollViewer Grid.Row="2" Padding="12" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Name="GroupsPanel" Spacing="12">
-                <Border Name="EmptyPlaceholder" Background="{DynamicResource PanelBackgroundBrush}"
-                        CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="2"
-                        Padding="40" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,80,0,0">
-                    <StackPanel Spacing="12" HorizontalAlignment="Center">
-                        <TextBlock Text="还没有条件组" FontSize="18" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" />
-                        <TextBlock Text="点击「添加条件组」开始构建" FontSize="13" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" />
-                        <Button Content="添加条件组" Click="OnAddGroupClick" Classes="bs-blue" HorizontalAlignment="Center" Margin="0,8,0,0" />
-                    </StackPanel>
-                </Border>
-            </StackPanel>
+            <StackPanel Name="GroupsPanel" Spacing="12" />
         </ScrollViewer>
 
         <!-- Bottom Buttons -->

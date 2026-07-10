@@ -35,11 +35,11 @@ namespace BSIMM.Avalonia.Views
         {
             AvaloniaXamlLoader.Load(this);
             _groupsPanel = this.FindControl<StackPanel>("GroupsPanel")!;
-            _emptyPlaceholder = this.FindControl<Border>("EmptyPlaceholder")!;
             _cboPreset = this.FindControl<ComboBox>("CboPreset")!;
             _txtPresetName = this.FindControl<TextBox>("TxtPresetName")!;
             _lblFilterSummary = this.FindControl<TextBlock>("LblFilterSummary")!;
             _chkLocalCache = this.FindControl<CheckBox>("ChkLocalCache")!;
+            _emptyPlaceholder = CreateEmptyPlaceholder();
 
             LoadSavedPresets();
             CurrentPreset = preset ?? new FilterPreset("新预设");
@@ -69,6 +69,30 @@ namespace BSIMM.Avalonia.Views
             if (global::Avalonia.Application.Current?.TryFindResource(key, out var value) == true)
                 return value as IBrush;
             return null;
+        }
+
+        private Border CreateEmptyPlaceholder()
+        {
+            var border = new Border
+            {
+                Background = GetBrush("PanelBackgroundBrush"),
+                BorderBrush = GetBrush("BorderBrush"),
+                BorderThickness = new Thickness(2),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(40),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 80, 0, 0)
+            };
+            var stack = new StackPanel { Spacing = 12, HorizontalAlignment = HorizontalAlignment.Center };
+            stack.Children.Add(new TextBlock { Text = "还没有条件组", FontSize = 18, Foreground = GetBrush("TextSecondaryBrush"), HorizontalAlignment = HorizontalAlignment.Center });
+            stack.Children.Add(new TextBlock { Text = "点击「添加条件组」开始构建", FontSize = 13, Foreground = GetBrush("TextSecondaryBrush"), HorizontalAlignment = HorizontalAlignment.Center });
+            var btn = new Button { Content = "添加条件组", HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
+            btn.Classes.Add("bs-blue");
+            btn.Click += OnAddGroupClick;
+            stack.Children.Add(btn);
+            border.Child = stack;
+            return border;
         }
 
         private void LoadSavedPresets()

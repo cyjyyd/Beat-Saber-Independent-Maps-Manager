@@ -554,12 +554,14 @@ public partial class MainWindow : Window
     private async void OnOpenPresetEditorClick(object? sender, RoutedEventArgs e)
     {
         var window = new PresetEditorWindow(_currentFilterPreset);
-        window.SearchRequested += async (_, bssPreset) =>
+        window.SearchRequested += async (_, _) =>
         {
-            var bsfPreset = BsfToPresetConverter.ConvertBack(bssPreset);
-            _currentFilterPreset = bsfPreset;
-            _currentPage = 0;
-            await ExecuteSearch(ViewModel, bsfPreset, 0);
+            if (window.CurrentPreset != null)
+            {
+                _currentFilterPreset = window.CurrentPreset;
+                _currentPage = 0;
+                await ExecuteSearch(ViewModel, window.CurrentPreset, 0);
+            }
         };
         await window.ShowDialog(this);
     }
