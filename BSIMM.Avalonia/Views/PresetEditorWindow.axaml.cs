@@ -437,9 +437,10 @@ namespace BSIMM.Avalonia.Views
                 }
                 case FilterValueType.Number:
                 {
-                    var num = new NumericUpDown { Value = (decimal)Convert.ToDouble(condition.Value ?? 0), MinWidth = 100 };
-                    num.ValueChanged += (s, e) => condition.Value = (double)(num.Value ?? 0);
-                    panel.Children.Add(num);
+                    var val = condition.Value != null ? Convert.ToDouble(condition.Value).ToString() : "0";
+                    var txt = new TextBox { Text = val, MinWidth = 100 };
+                    txt.TextChanged += (s, e) => { if (double.TryParse(txt.Text, out var d)) condition.Value = d; };
+                    panel.Children.Add(txt);
                     break;
                 }
                 case FilterValueType.Boolean:
@@ -463,23 +464,33 @@ namespace BSIMM.Avalonia.Views
                 case FilterValueType.Range:
                 {
                     var r = condition.Value as RangeValue ?? new RangeValue();
-                    var numMin = new NumericUpDown
+                    var minStr = double.IsNaN(r.MinRaw) ? "" : r.MinRaw.ToString();
+                    var maxStr = double.IsNaN(r.MaxRaw) ? "" : r.MaxRaw.ToString();
+                    var txtMin = new TextBox
                     {
-                        Value = decimal.TryParse(r.MinRaw.ToString(), out var min) ? min : 0,
+                        Text = minStr,
                         MinWidth = 80,
                         PlaceholderText = "最小"
                     };
-                    var numMax = new NumericUpDown
+                    var txtMax = new TextBox
                     {
-                        Value = decimal.TryParse(r.MaxRaw.ToString(), out var max) ? max : 0,
+                        Text = maxStr,
                         MinWidth = 80,
                         PlaceholderText = "最大"
                     };
-                    numMin.ValueChanged += (s, e) => SetRange(condition, (double)(numMin.Value ?? 0), null);
-                    numMax.ValueChanged += (s, e) => SetRange(condition, null, (double)(numMax.Value ?? 0));
-                    panel.Children.Add(numMin);
+                    txtMin.TextChanged += (s, e) =>
+                    {
+                        if (double.TryParse(txtMin.Text, out var v)) { r.MinRaw = v; condition.Value = r; }
+                        else { r.MinRaw = double.NaN; condition.Value = r; }
+                    };
+                    txtMax.TextChanged += (s, e) =>
+                    {
+                        if (double.TryParse(txtMax.Text, out var v)) { r.MaxRaw = v; condition.Value = r; }
+                        else { r.MaxRaw = double.NaN; condition.Value = r; }
+                    };
+                    panel.Children.Add(txtMin);
                     panel.Children.Add(new TextBlock { Text = "~", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0) });
-                    panel.Children.Add(numMax);
+                    panel.Children.Add(txtMax);
                     break;
                 }
                 case FilterValueType.SearchQuery:
@@ -501,11 +512,16 @@ namespace BSIMM.Avalonia.Views
                 case FilterValueType.NumberWithSort:
                 {
                     var lv = condition.Value as ResultLimitValue ?? new ResultLimitValue(100);
-                    var num = new NumericUpDown { Value = lv.Count, MinWidth = 80, PlaceholderText = "数量" };
+                    var txt = new TextBox { Text = lv.Count.ToString(), MinWidth = 80, PlaceholderText = "数量" };
                     var cmb = new ComboBox { ItemsSource = new[] { "最新", "最早", "随机" }, SelectedIndex = (int)lv.SortOption, MinWidth = 80 };
-                    num.ValueChanged += (s, e) => { var r = condition.Value as ResultLimitValue ?? new ResultLimitValue(); r.Count = (int)(num.Value ?? 0); condition.Value = r; };
+                    txt.TextChanged += (s, e) =>
+                    {
+                        var r = condition.Value as ResultLimitValue ?? new ResultLimitValue();
+                        if (int.TryParse(txt.Text, out var n)) r.Count = n;
+                        condition.Value = r;
+                    };
                     cmb.SelectionChanged += (s, e) => { var r = condition.Value as ResultLimitValue ?? new ResultLimitValue(); r.SortOption = (ResultSortOption)cmb.SelectedIndex; condition.Value = r; };
-                    panel.Children.Add(num);
+                    panel.Children.Add(txt);
                     panel.Children.Add(cmb);
                     break;
                 }
@@ -621,8 +637,7 @@ namespace BSIMM.Avalonia.Views
             UpdatePresetCombo();
             if (_savedPresets.Count > 0)
             {
-                var last = _savedPresets.Last();
-                LoadFromBssPreset(last.Preset);
+                _cboPreset.SelectedIndex = _savedPresets.Count - 1;
             }
         }
 
