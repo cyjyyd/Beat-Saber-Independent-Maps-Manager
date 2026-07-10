@@ -554,9 +554,8 @@ public partial class MainWindow : Window
     private async void OnOpenPresetEditorClick(object? sender, RoutedEventArgs e)
     {
         var window = new PresetEditorWindow();
-        window.ExecuteRequested += (s, preset) =>
+        window.OnExecute = (preset, playlistDir, downloadDir) =>
         {
-            // Convert BSS preset to BSIMM FilterPreset and search
             var bsfPreset = BsfToPresetConverter.ConvertBack(preset);
             _currentFilterPreset = bsfPreset;
             _currentPage = 0;

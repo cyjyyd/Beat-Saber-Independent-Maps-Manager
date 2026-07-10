@@ -1,9 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
          x:Class="BSIMM.Avalonia.Views.PresetEditorWindow"
-         Title="筛选预设编辑器 (BeatSpiderSharp)" Width="1100" Height="750"
+         Title="筛选预设编辑器" Width="960" Height="720"
          Icon="/Assets/aa2yv-q2dg9-001.ico"
          WindowStartupLocation="CenterOwner"
          Background="{DynamicResource AppBackgroundBrush}"
@@ -17,10 +15,8 @@
                     <SolidColorBrush x:Key="BorderBrush">#D5DDEB</SolidColorBrush>
                     <SolidColorBrush x:Key="TextPrimaryBrush">#1A1E24</SolidColorBrush>
                     <SolidColorBrush x:Key="TextSecondaryBrush">#5A6A85</SolidColorBrush>
-                    <SolidColorBrush x:Key="TextMutedBrush">#9AA8C2</SolidColorBrush>
                     <SolidColorBrush x:Key="HighlightBlueBrush">#0078D4</SolidColorBrush>
                     <SolidColorBrush x:Key="HighlightRedBrush">#E81123</SolidColorBrush>
-                    <SolidColorBrush x:Key="HighlightGreenBrush">#2E8B57</SolidColorBrush>
                     <SolidColorBrush x:Key="ButtonHoverBrush">#E4E9F2</SolidColorBrush>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
@@ -29,124 +25,88 @@
                     <SolidColorBrush x:Key="BorderBrush">#1C2433</SolidColorBrush>
                     <SolidColorBrush x:Key="TextPrimaryBrush">#FFFFFF</SolidColorBrush>
                     <SolidColorBrush x:Key="TextSecondaryBrush">#8E9EBC</SolidColorBrush>
-                    <SolidColorBrush x:Key="TextMutedBrush">#4B6082</SolidColorBrush>
                     <SolidColorBrush x:Key="HighlightBlueBrush">#00D2FF</SolidColorBrush>
                     <SolidColorBrush x:Key="HighlightRedBrush">#FF1B51</SolidColorBrush>
-                    <SolidColorBrush x:Key="HighlightGreenBrush">#3CB371</SolidColorBrush>
                     <SolidColorBrush x:Key="ButtonHoverBrush">#253246</SolidColorBrush>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Window.Resources>
 
-    <Window.Styles>
-        <Style Selector="Button">
-            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="Padding" Value="10,6" />
-            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
-        </Style>
-        <Style Selector="Button:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
-        </Style>
-        <Style Selector="Button.bs-blue">
-            <Setter Property="Background" Value="{DynamicResource HighlightBlueBrush}" />
-            <Setter Property="Foreground" Value="#FFFFFF" />
-            <Setter Property="BorderThickness" Value="0" />
-        </Style>
-        <Style Selector="Button.bs-red">
-            <Setter Property="Background" Value="{DynamicResource HighlightRedBrush}" />
-            <Setter Property="Foreground" Value="#FFFFFF" />
-            <Setter Property="BorderThickness" Value="0" />
-        </Style>
-        <Style Selector="Button.bs-green">
-            <Setter Property="Background" Value="{DynamicResource HighlightGreenBrush}" />
-            <Setter Property="Foreground" Value="#FFFFFF" />
-            <Setter Property="BorderThickness" Value="0" />
-        </Style>
-        <Style Selector="TextBox, NumericUpDown">
-            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
-        </Style>
-        <Style Selector="ComboBox">
-            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
-        </Style>
-    </Window.Styles>
-
-    <Grid ColumnDefinitions="220,5,*" RowDefinitions="Auto,Auto,*,Auto">
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
         <!-- Top Toolbar -->
-        <Border Grid.Row="0" Grid.ColumnSpan="3" Background="{DynamicResource PanelBackgroundBrush}"
-                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="12,8">
+        <Border Grid.Row="0" Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="12,8">
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <TextBlock Text="预设编辑器" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"
-                           Foreground="{DynamicResource HighlightBlueBrush}" Margin="0,0,20,0" />
-                <TextBlock Text="名称:" VerticalAlignment="Center" />
-                <TextBox Name="TxtPresetName" MinWidth="180" VerticalAlignment="Center" />
-                <TextBlock Text="作者:" VerticalAlignment="Center" Margin="10,0,0,0" />
-                <TextBox Name="TxtPresetAuthor" MinWidth="120" VerticalAlignment="Center" />
-                <Border Width="1" Background="{DynamicResource BorderBrush}" Margin="8,4" />
-                <Button Content="导入旧预设(.bsf/.brset)..." Click="OnImportLegacyClick" Classes="bs-blue" />
+                <TextBlock Text="预设：" VerticalAlignment="Center" FontWeight="Bold" />
+                <TextBox Name="TxtPresetName" MinWidth="160" VerticalAlignment="Center" />
+                <ComboBox Name="CboPreset" MinWidth="140" VerticalAlignment="Center" PlaceholderText="加载已有..." />
+                <Button Content="保存" Click="OnSavePresetClick" MinWidth="60" />
+                <Button Content="删除" Click="OnDeletePresetClick" MinWidth="60" />
+                <Border Width="1" Background="{DynamicResource BorderBrush}" Margin="4,0" />
+                <Button Content="导入旧预设..." Click="OnImportLegacyClick" MinWidth="100" />
+                <Border Width="1" Background="{DynamicResource BorderBrush}" Margin="4,0" />
+                <Button Content="新建" Click="OnNewPresetClick" MinWidth="60" Classes="bs-blue" />
+                <CheckBox Name="ChkLocalCache" Content="本地缓存" VerticalAlignment="Center" Margin="20,0,0,0" Foreground="{DynamicResource HighlightBlueBrush}" />
             </StackPanel>
         </Border>
 
         <!-- Filter Summary -->
-        <Border Grid.Row="1" Grid.ColumnSpan="3" Background="{DynamicResource PanelBackgroundBrush}"
-                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="12,4">
-            <TextBlock Name="LblFilterSummary" Text="当前筛选：无" TextWrapping="Wrap"
-                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" />
+        <Border Grid.Row="1" Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="12,6">
+            <TextBlock Name="LblFilterSummary" Text="当前筛选：无" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" />
         </Border>
 
-        <!-- Left: Preset List -->
-        <Border Grid.Row="2" Grid.Column="0" Background="{DynamicResource PanelBackgroundBrush}"
-                CornerRadius="4,0,0,0" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,1,0">
-            <Grid RowDefinitions="*,Auto">
-                <ListBox Name="PresetList" Grid.Row="0" SelectionChanged="OnPresetSelected"
-                         Background="Transparent" BorderThickness="0">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding}" Foreground="{DynamicResource TextPrimaryBrush}" />
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-                <StackPanel Grid.Row="1" Spacing="4" Margin="8" Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Button Content="+新建" Click="OnNewPresetClick" Classes="bs-green" />
-                    <Button Content="保存" Click="OnSavePresetClick" />
-                    <Button Content="删除" Click="OnDeletePresetClick" />
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <GridSplitter Grid.Row="2" Grid.Column="1" Background="Transparent" />
-
-        <!-- Right: Filter Editor -->
-        <ScrollViewer Grid.Row="2" Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Name="EditorPanel" Spacing="12" Margin="12">
-                <Border Name="EmptyHint" Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="8"
-                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="2" Padding="40"
-                        HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,60,0,0">
+        <!-- Main Content: Conditions List -->
+        <ScrollViewer Grid.Row="2" Padding="12" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="12">
+                <!-- Empty placeholder -->
+                <Border Name="EmptyPlaceholder" Background="{DynamicResource PanelBackgroundBrush}"
+                        CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="2"
+                        Padding="40" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,80,0,0">
                     <StackPanel Spacing="12" HorizontalAlignment="Center">
-                        <TextBlock Text="创建或选择预设开始编辑" FontSize="16"
-                                   Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" />
-                        <Button Content="新建预设" Click="OnNewPresetClick" Classes="bs-blue" />
+                        <TextBlock Text="还没有筛选条件" FontSize="18" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Text="从下方下拉框选择条件类型开始构建" FontSize="13" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Conditions Panel -->
+                <StackPanel Name="ConditionsPanel" Spacing="6" />
+
+                <!-- Add Condition Row -->
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                    <TextBlock Text="+ 添加条件：" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <ComboBox Name="CboAddCondition" MinWidth="240" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Output Config Section -->
+                <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="6" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="12" Margin="0,8,0,0">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="输出配置" FontWeight="Bold" Foreground="{DynamicResource HighlightBlueBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <CheckBox Name="ChkLimit" Content="限制数量:" VerticalAlignment="Center" />
+                            <NumericUpDown Name="NumLimit" Value="100" Minimum="1" VerticalAlignment="Center" MinWidth="80" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <CheckBox Name="ChkPlaylist" Content="导出歌单:" VerticalAlignment="Center" />
+                            <TextBox Name="TxtPlaylistDir" MinWidth="300" VerticalAlignment="Center" IsReadOnly="True" />
+                            <Button Content="浏览..." Click="OnBrowsePlaylistClick" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <CheckBox Name="ChkDownload" Content="下载歌曲:" VerticalAlignment="Center" />
+                            <TextBox Name="TxtDownloadDir" MinWidth="300" VerticalAlignment="Center" IsReadOnly="True" />
+                            <Button Content="浏览..." Click="OnBrowseDownloadClick" VerticalAlignment="Center" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </StackPanel>
         </ScrollViewer>
 
         <!-- Bottom Buttons -->
-        <Border Grid.Row="3" Grid.ColumnSpan="3" Background="{DynamicResource PanelBackgroundBrush}"
-                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="15,10">
+        <Border Grid.Row="3" Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="15,10">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
-                <TextBlock Name="LblMatchCount" Text="" VerticalAlignment="Center"
-                           Foreground="{DynamicResource HighlightGreenBrush}" FontWeight="Bold" Margin="0,0,20,0" />
                 <Button Content="实时预览(本地)" Click="OnPreviewClick" Width="120" />
+                <TextBlock Name="LblMatchCount" Text="" VerticalAlignment="Center" Foreground="{DynamicResource HighlightRedBrush}" FontWeight="Bold" Margin="0,0,20,0" />
                 <Button Content="取消" Click="OnCancelClick" Width="80" />
-                <Button Content="执行筛选" Click="OnExecuteClick" Classes="bs-blue" Width="120" />
+                <Button Content="执行筛选" Click="OnExecuteClick" Classes="bs-blue" Width="100" />
             </StackPanel>
         </Border>
     </Grid>
