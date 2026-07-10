@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
          x:Class="BSIMM.Avalonia.Views.PresetEditorWindow"
-         Title="筛选预设编辑器" Width="960" Height="720"
+         Title="筛选条件构建器 (新版)" Width="960" Height="720"
          Icon="/Assets/aa2yv-q2dg9-001.ico"
          WindowStartupLocation="CenterOwner"
          Background="{DynamicResource AppBackgroundBrush}"
@@ -34,7 +34,7 @@
     </Window.Resources>
 
     <Grid RowDefinitions="Auto,Auto,*,Auto">
-        <!-- Top Toolbar -->
+        <!-- Preset Toolbar -->
         <Border Grid.Row="0" Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="12,8">
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock Text="预设：" VerticalAlignment="Center" FontWeight="Bold" />
@@ -43,7 +43,8 @@
                 <Button Content="保存" Click="OnSavePresetClick" MinWidth="60" />
                 <Button Content="删除" Click="OnDeletePresetClick" MinWidth="60" />
                 <Border Width="1" Background="{DynamicResource BorderBrush}" Margin="4,0" />
-                <Button Content="导入旧预设..." Click="OnImportLegacyClick" MinWidth="100" />
+                <Button Content="导入" Click="OnImportPresetClick" MinWidth="60" />
+                <Button Content="导出" Click="OnExportPresetClick" MinWidth="60" />
                 <Border Width="1" Background="{DynamicResource BorderBrush}" Margin="4,0" />
                 <Button Content="新建" Click="OnNewPresetClick" MinWidth="60" Classes="bs-blue" />
                 <CheckBox Name="ChkLocalCache" Content="本地缓存" VerticalAlignment="Center" Margin="20,0,0,0" Foreground="{DynamicResource HighlightBlueBrush}" />
@@ -55,46 +56,16 @@
             <TextBlock Name="LblFilterSummary" Text="当前筛选：无" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" />
         </Border>
 
-        <!-- Main Content: Conditions List -->
+        <!-- Main Content: Groups List -->
         <ScrollViewer Grid.Row="2" Padding="12" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="12">
-                <!-- Empty placeholder -->
+            <StackPanel Name="GroupsPanel" Spacing="12">
                 <Border Name="EmptyPlaceholder" Background="{DynamicResource PanelBackgroundBrush}"
                         CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="2"
                         Padding="40" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,80,0,0">
                     <StackPanel Spacing="12" HorizontalAlignment="Center">
-                        <TextBlock Text="还没有筛选条件" FontSize="18" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" />
-                        <TextBlock Text="从下方下拉框选择条件类型开始构建" FontSize="13" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" />
-                    </StackPanel>
-                </Border>
-
-                <!-- Conditions Panel -->
-                <StackPanel Name="ConditionsPanel" Spacing="6" />
-
-                <!-- Add Condition Row -->
-                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-                    <TextBlock Text="+ 添加条件：" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" />
-                    <ComboBox Name="CboAddCondition" MinWidth="240" VerticalAlignment="Center" />
-                </StackPanel>
-
-                <!-- Output Config Section -->
-                <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="6" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="12" Margin="0,8,0,0">
-                    <StackPanel Spacing="6">
-                        <TextBlock Text="输出配置" FontWeight="Bold" Foreground="{DynamicResource HighlightBlueBrush}" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <CheckBox Name="ChkLimit" Content="限制数量:" VerticalAlignment="Center" />
-                            <TextBox Name="NumLimit" Text="100" VerticalAlignment="Center" MinWidth="80" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <CheckBox Name="ChkPlaylist" Content="导出歌单:" VerticalAlignment="Center" />
-                            <TextBox Name="TxtPlaylistDir" MinWidth="300" VerticalAlignment="Center" IsReadOnly="True" />
-                            <Button Content="浏览..." Click="OnBrowsePlaylistClick" VerticalAlignment="Center" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <CheckBox Name="ChkDownload" Content="下载歌曲:" VerticalAlignment="Center" />
-                            <TextBox Name="TxtDownloadDir" MinWidth="300" VerticalAlignment="Center" IsReadOnly="True" />
-                            <Button Content="浏览..." Click="OnBrowseDownloadClick" VerticalAlignment="Center" />
-                        </StackPanel>
+                        <TextBlock Text="还没有条件组" FontSize="18" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Text="点击「添加条件组」开始构建" FontSize="13" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" />
+                        <Button Content="添加条件组" Click="OnAddGroupClick" Classes="bs-blue" HorizontalAlignment="Center" Margin="0,8,0,0" />
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -103,10 +74,8 @@
         <!-- Bottom Buttons -->
         <Border Grid.Row="3" Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="15,10">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
-                <Button Content="实时预览(本地)" Click="OnPreviewClick" Width="120" />
-                <TextBlock Name="LblMatchCount" Text="" VerticalAlignment="Center" Foreground="{DynamicResource HighlightRedBrush}" FontWeight="Bold" Margin="0,0,20,0" />
                 <Button Content="取消" Click="OnCancelClick" Width="80" />
-                <Button Content="执行筛选" Click="OnExecuteClick" Classes="bs-blue" Width="100" />
+                <Button Content="搜索" Click="OnSearchClick" Classes="bs-blue" Width="100" />
             </StackPanel>
         </Border>
     </Grid>

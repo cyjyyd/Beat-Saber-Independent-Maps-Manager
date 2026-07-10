@@ -1,15 +1,12 @@
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Interactivity;
-using Avalonia.Layout;
-using Avalonia.Markup.Xaml;
-using Avalonia.Platform.Storage;
-using Avalonia.Media;
+using global::Avalonia;
+using global::Avalonia.Controls;
+using global::Avalonia.Interactivity;
+using global::Avalonia.Layout;
+using global::Avalonia.Markup.Xaml;
+using global::Avalonia.Platform.Storage;
+using global::Avalonia.Media;
 using BeatSaberIndependentMapsManager;
 using BeatSaberIndependentMapsManager.BeatSpiderSharp;
-using BeatSpiderSharp.Models.Enums;
-using BeatSpiderSharp.Models.Preset;
-using BeatSpiderSharp.Models.Preset.FilterOptions;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -19,67 +16,52 @@ namespace BSIMM.Avalonia.Views
 {
     public partial class PresetEditorWindow : Window
     {
-        private StackPanel _conditionsPanel = null!;
+        private StackPanel _groupsPanel = null!;
         private Border _emptyPlaceholder = null!;
         private ComboBox _cboPreset = null!;
-        private ComboBox _cboAddCondition = null!;
         private TextBox _txtPresetName = null!;
         private TextBlock _lblFilterSummary = null!;
-        private TextBlock _lblMatchCount = null!;
         private CheckBox _chkLocalCache = null!;
-        private CheckBox _chkLimit = null!;
-        private TextBox _numLimit = null!;
-        private CheckBox _chkPlaylist = null!;
-        private TextBox _txtPlaylistDir = null!;
-        private CheckBox _chkDownload = null!;
-        private TextBox _txtDownloadDir = null!;
 
-        private string _presetsDir;
-        private List<PresetInfo> _savedPresets = new();
-        private List<FilterCondition> _conditions = new();
-        private bool _suppressComboEvent;
+        private List<FilterPreset> _savedPresets = new();
+        private string _presetsDir = Path.Combine(AppContext.BaseDirectory, "presets");
 
-        private string PlaylistDir { get; set; } = "";
-        private string DownloadDir { get; set; } = "";
+        public FilterPreset? CurrentPreset { get; private set; }
+        public event EventHandler<BeatSpiderSharp.Models.Preset.Preset>? SearchRequested;
 
-        private struct PresetInfo
-        {
-            public BeatSpiderSharp.Models.Preset.Preset Preset { get; set; }
-            public string FilePath { get; set; }
-        }
+        public PresetEditorWindow() : this(null) { }
 
-        public delegate void ExecuteHandler(BeatSpiderSharp.Models.Preset.Preset preset, string playlistDir, string downloadDir);
-        public ExecuteHandler? OnExecute;
-
-        public PresetEditorWindow()
+        public PresetEditorWindow(FilterPreset? preset)
         {
             AvaloniaXamlLoader.Load(this);
-            _conditionsPanel = this.FindControl<StackPanel>("ConditionsPanel")!;
+            _groupsPanel = this.FindControl<StackPanel>("GroupsPanel")!;
             _emptyPlaceholder = this.FindControl<Border>("EmptyPlaceholder")!;
             _cboPreset = this.FindControl<ComboBox>("CboPreset")!;
-            _cboAddCondition = this.FindControl<ComboBox>("CboAddCondition")!;
             _txtPresetName = this.FindControl<TextBox>("TxtPresetName")!;
             _lblFilterSummary = this.FindControl<TextBlock>("LblFilterSummary")!;
-            _lblMatchCount = this.FindControl<TextBlock>("LblMatchCount")!;
             _chkLocalCache = this.FindControl<CheckBox>("ChkLocalCache")!;
-            _chkLimit = this.FindControl<CheckBox>("ChkLimit")!;
-            _numLimit = this.FindControl<TextBox>("NumLimit")!;
-            _chkPlaylist = this.FindControl<CheckBox>("ChkPlaylist")!;
-            _txtPlaylistDir = this.FindControl<TextBox>("TxtPlaylistDir")!;
-            _chkDownload = this.FindControl<CheckBox>("ChkDownload")!;
-            _txtDownloadDir = this.FindControl<TextBox>("TxtDownloadDir")!;
-
-            _presetsDir = Path.Combine(AppContext.BaseDirectory, "presets.bss");
-            _chkLocalCache.Click += (s, e) => PopulateAddConditionCombo();
-
-            PopulateAddConditionCombo();
-            _cboAddCondition.SelectionChanged += OnAddConditionSelected;
-            _cboPreset.SelectionChanged += OnPresetComboSelectionChanged;
-            _chkLimit.Click += (s, e) => _numLimit.IsEnabled = _chkLimit.IsChecked ?? false;
 
             LoadSavedPresets();
-            if (_savedPresets.Count == 0)
-                CreateNewPreset();
+            CurrentPreset = preset ?? new FilterPreset("新预设");
+            if (CurrentPreset.Groups.Count == 0)
+            {
+                var g = new FilterGroup("条件组1");
+                g.AddCondition(new FilterCondition(FilterConditionType.Query));
+                CurrentPreset.AddGroup(g);
+            }
+            RebuildUI();
+            UpdatePresetCombo();
+            _cboPreset.SelectionChanged += OnPresetComboSelectionChanged;
+        }
+
+        private void OnPresetComboSelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_cboPreset.SelectedIndex >= 0 && _cboPreset.SelectedIndex < _savedPresets.Count)
+            {
+                CurrentPreset = _savedPresets[_cboPreset.SelectedIndex].Clone();
+                _txtPresetName.Text = CurrentPreset.Name;
+                RebuildUI();
+            }
         }
 
         private IBrush? GetBrush(string key)
@@ -89,261 +71,156 @@ namespace BSIMM.Avalonia.Views
             return null;
         }
 
-        // === Preset Management ===
-
         private void LoadSavedPresets()
         {
             _savedPresets.Clear();
             try
             {
-                if (!Directory.Exists(_presetsDir)) return;
-                foreach (var file in Directory.GetFiles(_presetsDir, "*.json"))
+                if (Directory.Exists(_presetsDir))
                 {
-                    var preset = BeatSpiderSharp.Core.Utilities.PresetLoader.LoadPreset(file);
-                    if (preset != null)
-                        _savedPresets.Add(new PresetInfo { Preset = preset, FilePath = file });
+                    foreach (var file in Directory.GetFiles(_presetsDir, "*.bsf"))
+                    {
+                        var p = FilterPreset.LoadFromFile(file);
+                        if (p != null) _savedPresets.Add(p);
+                    }
                 }
             }
             catch { }
-            UpdatePresetCombo();
         }
 
         private void UpdatePresetCombo()
         {
-            _suppressComboEvent = true;
-            _cboPreset.ItemsSource = _savedPresets.Select(p => p.Preset.Name ?? "(未命名)").ToList();
-            _cboPreset.SelectedIndex = -1;
-            _suppressComboEvent = false;
-        }
-
-        private void CreateNewPreset()
-        {
-            _conditions.Clear();
-            _txtPresetName.Text = "新预设";
-            _cboPreset.SelectedIndex = -1;
-            PlaylistDir = "";
-            DownloadDir = "";
-            _chkLimit.IsChecked = false;
-            _chkPlaylist.IsChecked = false;
-            _chkDownload.IsChecked = false;
-            _numLimit.Text = "100";
-            _txtPlaylistDir.Text = "";
-            _txtDownloadDir.Text = "";
-            RebuildUI();
-        }
-
-        private void LoadFromBssPreset(BeatSpiderSharp.Models.Preset.Preset? bssPreset)
-        {
-            if (bssPreset == null)
+            var names = _savedPresets.Select(p => p.Name).ToList();
+            _cboPreset.ItemsSource = names;
+            if (CurrentPreset != null)
             {
-                CreateNewPreset();
-                return;
+                _txtPresetName.Text = CurrentPreset.Name;
+                var idx = _savedPresets.FindIndex(p => p.Name == CurrentPreset.Name);
+                _cboPreset.SelectedIndex = idx >= 0 ? idx : -1;
             }
-
-            _conditions.Clear();
-            _txtPresetName.Text = bssPreset.Name ?? "导入的预设";
-            PlaylistDir = bssPreset.Output.Playlist.PlaylistDirectory ?? "";
-            DownloadDir = bssPreset.Output.SongDownload.DownloadPath ?? "";
-            _txtPlaylistDir.Text = PlaylistDir;
-            _txtDownloadDir.Text = DownloadDir;
-            _chkPlaylist.IsChecked = bssPreset.Output.Playlist.SavePlaylist;
-            _chkDownload.IsChecked = bssPreset.Output.SongDownload.DownloadSongs;
-            _chkLimit.IsChecked = bssPreset.Output.LimitSongs;
-            _numLimit.Text = (bssPreset.Output.MaxSongs ?? 100).ToString();
-            _numLimit.IsEnabled = bssPreset.Output.LimitSongs;
-
-            // Extract conditions from all FilterConfigs (merge into flat list)
-            foreach (var fc in bssPreset.FilterOptions)
-            {
-                ExtractConditionsFromFilterConfig(fc);
-            }
-            RebuildUI();
-        }
-
-        private void ExtractConditionsFromFilterConfig(BeatSpiderSharp.Models.Preset.FilterConfig fc)
-        {
-            var s = fc.SongDetailFilter;
-            var l = fc.LevelDetailOptions;
-            var q = fc.SearchOptions;
-
-            ExtractRange(s.Bpm, FilterConditionType.BpmRange);
-            ExtractRangeInt(s.Duration, FilterConditionType.DurationRange);
-            ExtractRangeFloat(s.Rating, FilterConditionType.ScoreRange);
-            ExtractRangeInt(s.UpVotes, FilterConditionType.UpvotesRange);
-            ExtractRangeInt(s.DownVotes, FilterConditionType.DownvotesRange);
-            ExtractRangeFloat(s.UpVotePercentage, FilterConditionType.UpvoteRatioRange);
-            ExtractRangeFloat(s.DownVotePercentage, FilterConditionType.DownvoteRatioRange);
-            ExtractRangeInt(s.SageScore, FilterConditionType.SageScoreRange);
-            if (s.AutoMapper.Enable)
-                _conditions.Add(new FilterCondition(FilterConditionType.Automapper, s.AutoMapper.Filter));
-            if (s.UploaderName.Enable && s.UploaderName.Filter.Count > 0)
-                _conditions.Add(new FilterCondition(FilterConditionType.UploaderName, s.UploaderName.Filter.First()));
-            if (s.IncludeTags.Enable && s.IncludeTags.Filter.Count > 0)
-                _conditions.Add(new FilterCondition(FilterConditionType.Tags, string.Join(",", s.IncludeTags.Filter)));
-            if (s.ExcludeTags.Enable && s.ExcludeTags.Filter.Count > 0)
-                _conditions.Add(new FilterCondition(FilterConditionType.ExcludeTags, string.Join(",", s.ExcludeTags.Filter)));
-            if (s.ScoreSaberRanking.Enable && s.ScoreSaberRanking.Filter.Count > 0)
-                foreach (var rs in s.ScoreSaberRanking.Filter)
-                    _conditions.Add(new FilterCondition(rs == RankingStatus.Ranked ? FilterConditionType.Ranked : FilterConditionType.Qualified, true));
-            if (s.BeatLeaderRanking.Enable && s.BeatLeaderRanking.Filter.Count > 0)
-                foreach (var rs in s.BeatLeaderRanking.Filter)
-                    _conditions.Add(new FilterCondition(rs == RankingStatus.Ranked ? FilterConditionType.BlRanked : FilterConditionType.BlQualified, true));
-            if (s.UploadTime.Enable)
-            {
-                if (s.UploadTime.Min.HasValue)
-                    _conditions.Add(new FilterCondition(FilterConditionType.MinUploadedDate, s.UploadTime.Min.Value.DateTime));
-                if (s.UploadTime.Max.HasValue)
-                    _conditions.Add(new FilterCondition(FilterConditionType.MaxUploadedDate, s.UploadTime.Max.Value.DateTime));
-            }
-
-            ExtractRange(l.Nps, FilterConditionType.NpsRange);
-            ExtractRange(l.Njs, FilterConditionType.NjsRange);
-            ExtractRange(l.ScoreSaberStars, FilterConditionType.SsStarsRange);
-            ExtractRange(l.BeatLeaderStars, FilterConditionType.BlStarsRange);
-            ExtractRangeInt(l.Notes, FilterConditionType.NotesRange);
-            ExtractRangeInt(l.Bombs, FilterConditionType.BombsRange);
-            ExtractRangeInt(l.Events, FilterConditionType.EventsRange);
-            ExtractRangeInt(l.Walls, FilterConditionType.ObstaclesRange);
-            ExtractRange(l.Seconds, FilterConditionType.SecondsRange);
-            ExtractRange(l.Beats, FilterConditionType.LengthRange);
-            ExtractRange(l.Offset, FilterConditionType.OffsetRange);
-            ExtractRangeInt(l.ParityErrors, FilterConditionType.ParityErrorsRange);
-            ExtractRangeInt(l.ParityWarns, FilterConditionType.ParityWarnsRange);
-            ExtractRangeInt(l.ParityResets, FilterConditionType.ParityResetsRange);
-            ExtractRangeInt(l.MaxScore, FilterConditionType.MaxScoreRange);
-            foreach (var mod in l.RequireMods.Filter)
-            {
-                var ct = mod switch
-                {
-                    MMod.Chroma => FilterConditionType.Chroma,
-                    MMod.NoodleExtensions => FilterConditionType.Noodle,
-                    MMod.MappingExtensions => FilterConditionType.Me,
-                    MMod.Cinema => FilterConditionType.Cinema,
-                    MMod.Vivify => FilterConditionType.Vivify,
-                    _ => FilterConditionType.Chroma
-                };
-                _conditions.Add(new FilterCondition(ct, true));
-            }
-            foreach (var c in l.IncludeCharacteristics.Filter)
-                _conditions.Add(new FilterCondition(FilterConditionType.Characteristic, c.ToString()));
-            foreach (var d in l.IncludeDifficulties.Filter)
-                _conditions.Add(new FilterCondition(FilterConditionType.Difficulty, d.ToString()));
-            if (q.Enable)
-                foreach (var term in q.AdvanceTerms)
-                    _conditions.Add(new FilterCondition(FilterConditionType.Query, term.Content));
-        }
-
-        private void ExtractRange(RangeOption<float> opt, FilterConditionType type)
-        {
-            if (opt.Enable)
-                _conditions.Add(new FilterCondition(type, new RangeValue
-                { MinRaw = opt.Min.HasValue ? opt.Min.Value : double.NaN, MaxRaw = opt.Max.HasValue ? opt.Max.Value : double.NaN }));
-        }
-
-        private void ExtractRangeInt(RangeOption<int> opt, FilterConditionType type)
-        {
-            if (opt.Enable)
-                _conditions.Add(new FilterCondition(type, new RangeValue
-                { MinRaw = opt.Min.HasValue ? opt.Min.Value : double.NaN, MaxRaw = opt.Max.HasValue ? opt.Max.Value : double.NaN }));
-        }
-
-        private void ExtractRangeFloat(RangeOption<float> opt, FilterConditionType type)
-        {
-            if (opt.Enable)
-                _conditions.Add(new FilterCondition(type, new RangeValue
-                { MinRaw = opt.Min.HasValue ? opt.Min.Value : double.NaN, MaxRaw = opt.Max.HasValue ? opt.Max.Value : double.NaN }));
-        }
-
-        // === Build BSS Preset ===
-
-        private BeatSpiderSharp.Models.Preset.Preset BuildBssPreset()
-        {
-            var bsfPreset = new FilterPreset(_txtPresetName.Text?.Trim() ?? "未命名");
-            var group = new FilterGroup("筛选组");
-            foreach (var c in _conditions)
-                group.AddCondition(c.Clone());
-            bsfPreset.AddGroup(group);
-
-            if (_chkLimit.IsChecked == true)
-            {
-                var limitVal = int.TryParse(_numLimit.Text, out var n) ? n : 100;
-                var limitCond = new FilterCondition(FilterConditionType.ResultLimit, new ResultLimitValue(limitVal));
-                group.AddCondition(limitCond);
-            }
-
-            var bssPreset = BsfToPresetConverter.Convert(bsfPreset);
-            bssPreset.Output.Playlist.SavePlaylist = _chkPlaylist.IsChecked ?? false;
-            bssPreset.Output.Playlist.PlaylistDirectory = PlaylistDir;
-            bssPreset.Output.SongDownload.DownloadSongs = _chkDownload.IsChecked ?? false;
-            bssPreset.Output.SongDownload.DownloadPath = DownloadDir;
-            return bssPreset;
-        }
-
-        // === UI Rebuild ===
-
-        private void RebuildUI()
-        {
-            _conditionsPanel.Children.Clear();
-            UpdateFilterSummary();
-
-            if (_conditions.Count == 0)
-            {
-                _emptyPlaceholder.IsVisible = true;
-                return;
-            }
-
-            _emptyPlaceholder.IsVisible = false;
-            foreach (var condition in _conditions)
-                _conditionsPanel.Children.Add(CreateConditionControl(condition));
         }
 
         private void UpdateFilterSummary()
         {
-            if (_conditions.Count == 0)
+            if (CurrentPreset == null || CurrentPreset.Groups.Count == 0)
             {
                 _lblFilterSummary.Text = "当前筛选：无";
                 return;
             }
-            var names = _conditions.Where(c => c.IsEnabled)
-                .Select(c => FilterConditionMetadata.GetDisplayName(c.Type));
-            _lblFilterSummary.Text = "当前筛选：" + string.Join(", ", names);
+            var sb = new System.Text.StringBuilder("当前筛选：");
+            for (int i = 0; i < CurrentPreset.Groups.Count; i++)
+            {
+                var g = CurrentPreset.Groups[i];
+                if (!g.IsEnabled) continue;
+                var parts = new List<string>();
+                foreach (var c in g.Conditions)
+                {
+                    if (!c.IsEnabled) continue;
+                    parts.Add(FilterConditionMetadata.GetDisplayName(c.Type));
+                }
+                if (parts.Count > 0)
+                    sb.Append($"[{string.Join($" {g.GroupOperator} ", parts)}]");
+                if (i < CurrentPreset.Groups.Count - 1)
+                    sb.Append($" {CurrentPreset.Groups[i].GroupOperator} ");
+            }
+            _lblFilterSummary.Text = sb.ToString();
         }
 
-        private void PopulateAddConditionCombo()
+        private void RebuildUI()
         {
-            var items = new List<ConditionComboItem>
+            _groupsPanel.Children.Clear();
+            UpdateFilterSummary();
+
+            if (CurrentPreset == null || CurrentPreset.Groups.Count == 0)
             {
-                new() { Type = FilterConditionType.None, Display = "-- 添加条件 --" }
+                _emptyPlaceholder.IsVisible = true;
+                _groupsPanel.Children.Add(_emptyPlaceholder);
+                return;
+            }
+
+            _emptyPlaceholder.IsVisible = false;
+            foreach (var group in CurrentPreset.Groups)
+            {
+                _groupsPanel.Children.Add(CreateGroupControl(group));
+            }
+        }
+
+        private Border CreateGroupControl(FilterGroup group)
+        {
+            var groupBorder = new Border
+            {
+                Background = GetBrush("PanelBackgroundBrush"),
+                BorderBrush = GetBrush("BorderBrush"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(16),
+                Tag = group
             };
 
-            var useLocalCache = _chkLocalCache.IsChecked ?? false;
-            var grouped = FilterConditionMetadata.GetGroupedConditions();
-            foreach (var cat in grouped)
+            var outerStack = new StackPanel { Spacing = 10 };
+
+            var headerPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+            var chkEnabled = new CheckBox { Content = "启用", IsChecked = group.IsEnabled, VerticalAlignment = VerticalAlignment.Center };
+            chkEnabled.IsCheckedChanged += (s, e) => { group.IsEnabled = chkEnabled.IsChecked ?? true; UpdateFilterSummary(); };
+
+            var lblName = new TextBlock
             {
-                if (!useLocalCache && cat.Key == "本地缓存专属") continue;
+                Text = string.IsNullOrEmpty(group.Name) ? "条件组" : group.Name,
+                FontWeight = FontWeight.Bold, FontSize = 15,
+                Foreground = GetBrush("HighlightBlueBrush"), VerticalAlignment = VerticalAlignment.Center
+            };
 
-                items.Add(new ConditionComboItem { Type = FilterConditionType.None, Display = $"-- {cat.Key} --", IsSeparator = true });
-                foreach (var type in cat.Value)
-                {
-                    if (!useLocalCache && FilterConditionMetadata.RequiresLocalCache(type)) continue;
-                    items.Add(new ConditionComboItem { Type = type, Display = "  " + FilterConditionMetadata.GetDisplayName(type) });
-                }
+            var cmbOperator = new ComboBox
+            {
+                ItemsSource = new[] { "AND (全部满足)", "OR (满足任一)" },
+                SelectedIndex = group.GroupOperator == LogicOperator.And ? 0 : 1,
+                VerticalAlignment = VerticalAlignment.Center, MinWidth = 140
+            };
+            cmbOperator.SelectionChanged += (s, e) => { group.GroupOperator = cmbOperator.SelectedIndex == 0 ? LogicOperator.And : LogicOperator.Or; UpdateFilterSummary(); };
+
+            var chkCache = new CheckBox { Content = "本地缓存", IsChecked = group.UseLocalCache, VerticalAlignment = VerticalAlignment.Center, Foreground = GetBrush("HighlightBlueBrush") };
+            chkCache.IsCheckedChanged += (s, e) => { group.UseLocalCache = chkCache.IsChecked ?? false; RebuildUI(); };
+
+            var btnRemoveGroup = new Button { Content = "删除组", VerticalAlignment = VerticalAlignment.Center };
+            btnRemoveGroup.Click += (s, e) => { CurrentPreset?.Groups.Remove(group); RebuildUI(); };
+
+            headerPanel.Children.Add(chkEnabled);
+            headerPanel.Children.Add(lblName);
+            headerPanel.Children.Add(cmbOperator);
+            headerPanel.Children.Add(chkCache);
+            headerPanel.Children.Add(btnRemoveGroup);
+            outerStack.Children.Add(headerPanel);
+
+            var sep = new Border { Height = 1, Background = GetBrush("BorderBrush"), Margin = new Thickness(0, 2, 0, 2) };
+            outerStack.Children.Add(sep);
+
+            var conditionsPanel = new StackPanel { Spacing = 6, Margin = new Thickness(0, 0, 0, 0), Tag = group };
+            foreach (var condition in group.Conditions)
+            {
+                conditionsPanel.Children.Add(CreateConditionControl(condition, group));
             }
-            _cboAddCondition.ItemsSource = items;
-            _cboAddCondition.SelectedIndex = 0;
-        }
+            outerStack.Children.Add(conditionsPanel);
 
-        private void OnAddConditionSelected(object? sender, SelectionChangedEventArgs e)
-        {
-            if (_cboAddCondition.SelectedIndex <= 0) return;
-            var item = _cboAddCondition.SelectedItem as ConditionComboItem;
-            if (item == null || item.Type == FilterConditionType.None || item.IsSeparator) return;
-            _conditions.Add(new FilterCondition(item.Type));
-            RebuildUI();
-            _cboAddCondition.SelectedIndex = 0;
-        }
+            var addCondPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
+            var cboAddCondition = new ComboBox { MinWidth = 220, VerticalAlignment = VerticalAlignment.Center };
+            PopulateConditionTypes(cboAddCondition, group.UseLocalCache);
+            cboAddCondition.SelectionChanged += (s, e) =>
+            {
+                if (cboAddCondition.SelectedIndex <= 0) return;
+                var tag = cboAddCondition.SelectedItem as ConditionComboItem;
+                if (tag == null || tag.Type == FilterConditionType.None) return;
+                var newCond = new FilterCondition(tag.Type);
+                group.Conditions.Add(newCond);
+                conditionsPanel.Children.Add(CreateConditionControl(newCond, group));
+                cboAddCondition.SelectedIndex = 0;
+            };
+            addCondPanel.Children.Add(new TextBlock { Text = "+ 添加条件：", VerticalAlignment = VerticalAlignment.Center, Foreground = GetBrush("TextSecondaryBrush") });
+            addCondPanel.Children.Add(cboAddCondition);
+            outerStack.Children.Add(addCondPanel);
 
-        // === Condition Control ===
+            groupBorder.Child = outerStack;
+            return groupBorder;
+        }
 
         private class ConditionComboItem
         {
@@ -353,359 +230,283 @@ namespace BSIMM.Avalonia.Views
             public override string ToString() => Display;
         }
 
-        private StackPanel CreateConditionControl(FilterCondition condition)
+        private void PopulateConditionTypes(ComboBox cbo, bool useLocalCache)
         {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 2, 0, 2) };
+            var items = new List<ConditionComboItem>
+            {
+                new ConditionComboItem { Type = FilterConditionType.None, Display = "-- 添加条件 --" }
+            };
 
-            // Enable checkbox
-            var chkEnabled = new CheckBox { IsChecked = condition.IsEnabled, VerticalAlignment = VerticalAlignment.Center };
-            chkEnabled.IsCheckedChanged += (s, e) => { condition.IsEnabled = chkEnabled.IsChecked ?? true; UpdateFilterSummary(); };
-            row.Children.Add(chkEnabled);
-
-            // Type dropdown
-            var typeItems = new List<ConditionComboItem>();
-            var useLocalCache = _chkLocalCache.IsChecked ?? false;
             var grouped = FilterConditionMetadata.GetGroupedConditions();
             foreach (var cat in grouped)
             {
                 if (!useLocalCache && cat.Key == "本地缓存专属") continue;
-                typeItems.Add(new ConditionComboItem { Type = FilterConditionType.None, Display = $"-- {cat.Key} --", IsSeparator = true });
-                foreach (var t in cat.Value)
+
+                items.Add(new ConditionComboItem { Type = FilterConditionType.None, Display = $"── {cat.Key} ──", IsSeparator = true });
+                foreach (var type in cat.Value)
                 {
-                    if (!useLocalCache && FilterConditionMetadata.RequiresLocalCache(t)) continue;
-                    typeItems.Add(new ConditionComboItem { Type = t, Display = "  " + FilterConditionMetadata.GetDisplayName(t) });
+                    if (!useLocalCache && FilterConditionMetadata.RequiresLocalCache(type)) continue;
+                    items.Add(new ConditionComboItem { Type = type, Display = "  " + FilterConditionMetadata.GetDisplayName(type) });
+                }
+            }
+            cbo.ItemsSource = items;
+            cbo.SelectedIndex = 0;
+        }
+
+        private StackPanel CreateConditionControl(FilterCondition condition, FilterGroup group)
+        {
+            var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Tag = condition, Margin = new Thickness(0, 2, 0, 2) };
+
+            var chkEnabled = new CheckBox { IsChecked = condition.IsEnabled, VerticalAlignment = VerticalAlignment.Center };
+            chkEnabled.IsCheckedChanged += (s, e) => { condition.IsEnabled = chkEnabled.IsChecked ?? true; UpdateFilterSummary(); };
+            panel.Children.Add(chkEnabled);
+
+            var typeItems = new List<ConditionComboItem>();
+            var groupedConditions = FilterConditionMetadata.GetGroupedConditions();
+            foreach (var category in groupedConditions)
+            {
+                if (!group.UseLocalCache && category.Key == "本地缓存专属") continue;
+                typeItems.Add(new ConditionComboItem { Type = FilterConditionType.None, Display = $"── {category.Key} ──", IsSeparator = true });
+                foreach (var type in category.Value)
+                {
+                    if (!group.UseLocalCache && FilterConditionMetadata.RequiresLocalCache(type)) continue;
+                    typeItems.Add(new ConditionComboItem { Type = type, Display = "  " + FilterConditionMetadata.GetDisplayName(type) });
                 }
             }
             var cmbType = new ComboBox { MinWidth = 180, VerticalAlignment = VerticalAlignment.Center, ItemsSource = typeItems };
             var matchIdx = typeItems.FindIndex(t => t.Type == condition.Type);
-            cmbType.SelectedIndex = matchIdx >= 0 ? matchIdx : 0;
-            row.Children.Add(cmbType);
+            cmbType.SelectedIndex = matchIdx >= 0 ? matchIdx : typeItems.FindIndex(t => t.Type == FilterConditionType.Query);
+            panel.Children.Add(cmbType);
 
-            // Value control wrapper
-            var valueWrapper = new StackPanel
-            {
-                Orientation = Orientation.Horizontal, Spacing = 5, VerticalAlignment = VerticalAlignment.Center
-            };
-            BuildValueControl(valueWrapper, condition);
-            row.Children.Add(valueWrapper);
+            var valuePanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, VerticalAlignment = VerticalAlignment.Center };
+            UpdateValueInput(valuePanel, condition);
+            panel.Children.Add(valuePanel);
 
-            // Handle type change: update condition type + rebuild value controls
+            var cmbOperator = new ComboBox { ItemsSource = new[] { "AND", "OR" }, SelectedIndex = condition.Operator == LogicOperator.And ? 0 : 1, VerticalAlignment = VerticalAlignment.Center, MinWidth = 60 };
+            cmbOperator.SelectionChanged += (s, e) => condition.Operator = cmbOperator.SelectedIndex == 0 ? LogicOperator.And : LogicOperator.Or;
+            panel.Children.Add(cmbOperator);
+
+            var btnRemove = new Button { Content = "✕", VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(10, 4), FontSize = 12 };
+            btnRemove.Click += (s, e) => { group.Conditions.Remove(condition); RebuildUI(); };
+            panel.Children.Add(btnRemove);
+
             cmbType.SelectionChanged += (s, e) =>
             {
                 if (cmbType.SelectedIndex < 0) return;
                 var item = cmbType.SelectedItem as ConditionComboItem;
-                if (item == null || item.Type == FilterConditionType.None || item.IsSeparator) return;
+                if (item == null || item.Type == FilterConditionType.None) return;
                 condition.Type = item.Type;
                 condition.SetDefaultValue();
-                BuildValueControl(valueWrapper, condition);
+                UpdateValueInput(valuePanel, condition);
                 UpdateFilterSummary();
             };
 
-            // Remove button
-            var btnRemove = new Button
-            {
-                Content = "✕", VerticalAlignment = VerticalAlignment.Center,
-                Padding = new Thickness(10, 4), FontSize = 12
-            };
-            btnRemove.Click += (s, e) => { _conditions.Remove(condition); RebuildUI(); };
-            row.Children.Add(btnRemove);
-
-            return row;
+            return panel;
         }
 
-        private void BuildValueControl(StackPanel panel, FilterCondition condition)
+        private void UpdateValueInput(StackPanel panel, FilterCondition condition)
         {
             panel.Children.Clear();
-            var vt = condition.ValueType;
-            var type = condition.Type;
+            var valueType = condition.ValueType;
 
-            switch (vt)
+            switch (valueType)
             {
                 case FilterValueType.Text:
-                {
                     var txt = new TextBox { Text = condition.Value?.ToString() ?? "", MinWidth = 200 };
                     txt.TextChanged += (s, e) => condition.Value = txt.Text;
                     panel.Children.Add(txt);
                     break;
-                }
+
                 case FilterValueType.Number:
-                {
-                    var val = condition.Value != null ? Convert.ToDouble(condition.Value).ToString() : "0";
-                    var txt = new TextBox { Text = val, MinWidth = 100 };
-                    txt.TextChanged += (s, e) => { if (double.TryParse(txt.Text, out var d)) condition.Value = d; };
-                    panel.Children.Add(txt);
+                    var num = new NumericUpDown { Value = (decimal)Convert.ToDouble(condition.Value ?? 0), MinWidth = 100 };
+                    num.ValueChanged += (s, e) => condition.Value = (double)(num.Value ?? 0);
+                    panel.Children.Add(num);
                     break;
-                }
+
                 case FilterValueType.Boolean:
-                {
-                    var cmb = new ComboBox { ItemsSource = new[] { "不限", "是", "否" }, MinWidth = 80 };
-                    cmb.SelectedIndex = condition.Value == null ? 0 : (Convert.ToBoolean(condition.Value) ? 1 : 2);
-                    cmb.SelectionChanged += (s, e) => condition.Value = cmb.SelectedIndex == 0 ? null : (object)(cmb.SelectedIndex == 1);
-                    panel.Children.Add(cmb);
+                    var boolCmb = new ComboBox { ItemsSource = new[] { "不限", "是", "否" }, SelectedIndex = condition.Value == null ? 0 : (Convert.ToBoolean(condition.Value) ? 1 : 2), MinWidth = 80 };
+                    boolCmb.SelectionChanged += (s, e) => condition.Value = boolCmb.SelectedIndex == 0 ? null : (object)(boolCmb.SelectedIndex == 1);
+                    panel.Children.Add(boolCmb);
                     break;
-                }
+
                 case FilterValueType.Selection:
-                {
                     var options = condition.Options ?? new List<string>();
-                    var cmb = new ComboBox { ItemsSource = options, MinWidth = 130 };
-                    var cur = condition.Value?.ToString();
-                    if (cur != null && options.Contains(cur)) cmb.SelectedIndex = options.IndexOf(cur);
-                    cmb.SelectionChanged += (s, e) => condition.Value = cmb.SelectedIndex >= 0 ? options[cmb.SelectedIndex] : "";
-                    panel.Children.Add(cmb);
+                    var selCmb = new ComboBox { ItemsSource = options, MinWidth = 120 };
+                    var currentVal = condition.Value?.ToString();
+                    if (currentVal != null && options.Contains(currentVal))
+                        selCmb.SelectedIndex = options.IndexOf(currentVal);
+                    selCmb.SelectionChanged += (s, e) => condition.Value = selCmb.SelectedIndex >= 0 ? options[selCmb.SelectedIndex] : "";
+                    panel.Children.Add(selCmb);
                     break;
-                }
+
                 case FilterValueType.Range:
-                {
-                    var r = condition.Value as RangeValue ?? new RangeValue();
-                    var minStr = double.IsNaN(r.MinRaw) ? "" : r.MinRaw.ToString();
-                    var maxStr = double.IsNaN(r.MaxRaw) ? "" : r.MaxRaw.ToString();
-                    var txtMin = new TextBox
-                    {
-                        Text = minStr,
-                        MinWidth = 80,
-                        PlaceholderText = "最小"
-                    };
-                    var txtMax = new TextBox
-                    {
-                        Text = maxStr,
-                        MinWidth = 80,
-                        PlaceholderText = "最大"
-                    };
-                    txtMin.TextChanged += (s, e) =>
-                    {
-                        if (double.TryParse(txtMin.Text, out var v)) { r.MinRaw = v; condition.Value = r; }
-                        else { r.MinRaw = double.NaN; condition.Value = r; }
-                    };
-                    txtMax.TextChanged += (s, e) =>
-                    {
-                        if (double.TryParse(txtMax.Text, out var v)) { r.MaxRaw = v; condition.Value = r; }
-                        else { r.MaxRaw = double.NaN; condition.Value = r; }
-                    };
-                    panel.Children.Add(txtMin);
+                    var rangeVal = condition.Value as RangeValue ?? new RangeValue();
+                    var minNum = new NumericUpDown { Value = (decimal)(double.IsNaN(rangeVal.MinRaw) ? 0 : rangeVal.MinRaw), MinWidth = 80 };
+                    var maxNum = new NumericUpDown { Value = (decimal)(double.IsNaN(rangeVal.MaxRaw) ? 0 : rangeVal.MaxRaw), MinWidth = 80 };
+                    minNum.ValueChanged += (s, e) => { var r = condition.Value as RangeValue ?? new RangeValue(); r.MinRaw = (double)(minNum.Value ?? 0); condition.Value = r; };
+                    maxNum.ValueChanged += (s, e) => { var r = condition.Value as RangeValue ?? new RangeValue(); r.MaxRaw = (double)(maxNum.Value ?? 0); condition.Value = r; };
+                    panel.Children.Add(minNum);
                     panel.Children.Add(new TextBlock { Text = "~", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0) });
-                    panel.Children.Add(txtMax);
+                    panel.Children.Add(maxNum);
                     break;
-                }
+
                 case FilterValueType.SearchQuery:
-                {
-                    var qv = condition.Value as SearchQueryValue ?? new SearchQueryValue();
-                    var txt = new TextBox { Text = qv.Query, MinWidth = 200, PlaceholderText = "搜索关键词" };
-                    txt.TextChanged += (s, e) => { var q = condition.Value as SearchQueryValue ?? new SearchQueryValue(); q.Query = txt.Text; condition.Value = q; };
-                    panel.Children.Add(txt);
-                    break;
-                }
-                case FilterValueType.Date:
-                {
-                    var dateStr = condition.Value is DateTime dt ? dt.ToString("yyyy-MM-dd") : "";
-                    var txt = new TextBox { Text = dateStr, MinWidth = 120, PlaceholderText = "yyyy-MM-dd" };
-                    txt.TextChanged += (s, e) => { if (DateTime.TryParse(txt.Text, out var d)) condition.Value = d; };
-                    panel.Children.Add(txt);
-                    break;
-                }
-                case FilterValueType.NumberWithSort:
-                {
-                    var lv = condition.Value as ResultLimitValue ?? new ResultLimitValue(100);
-                    var txt = new TextBox { Text = lv.Count.ToString(), MinWidth = 80, PlaceholderText = "数量" };
-                    var cmb = new ComboBox { ItemsSource = new[] { "最新", "最早", "随机" }, SelectedIndex = (int)lv.SortOption, MinWidth = 80 };
-                    txt.TextChanged += (s, e) =>
+                    var queryVal = condition.Value as SearchQueryValue ?? new SearchQueryValue();
+                    var queryTxt = new TextBox { Text = queryVal.Query, MinWidth = 150 };
+                    var fieldCmb = new ComboBox { ItemsSource = new[] { "全部", "歌名", "艺术家", "谱师", "标题", "简介", "上传者" }, SelectedIndex = 0, MinWidth = 80 };
+                    queryTxt.TextChanged += (s, e) => { var q = condition.Value as SearchQueryValue ?? new SearchQueryValue(); q.Query = queryTxt.Text; condition.Value = q; };
+                    fieldCmb.SelectionChanged += (s, e) =>
                     {
-                        var r = condition.Value as ResultLimitValue ?? new ResultLimitValue();
-                        if (int.TryParse(txt.Text, out var n)) r.Count = n;
-                        condition.Value = r;
+                        var q = condition.Value as SearchQueryValue ?? new SearchQueryValue();
+                        q.FieldTypes = fieldCmb.SelectedIndex switch
+                        {
+                            1 => SearchFieldType.SongName, 2 => SearchFieldType.Artist, 3 => SearchFieldType.Mapper,
+                            4 => SearchFieldType.MapName, 5 => SearchFieldType.Description, 6 => SearchFieldType.Uploader,
+                            _ => SearchFieldType.All
+                        };
+                        condition.Value = q;
                     };
-                    cmb.SelectionChanged += (s, e) => { var r = condition.Value as ResultLimitValue ?? new ResultLimitValue(); r.SortOption = (ResultSortOption)cmb.SelectedIndex; condition.Value = r; };
-                    panel.Children.Add(txt);
-                    panel.Children.Add(cmb);
+                    panel.Children.Add(queryTxt);
+                    panel.Children.Add(fieldCmb);
                     break;
-                }
+
+                case FilterValueType.Date:
+                    var dateStr = condition.Value is DateTime dt ? dt.ToString("yyyy-MM-dd") : "";
+                    var dateTxt = new TextBox { Text = dateStr, MinWidth = 120 };
+                    dateTxt.TextChanged += (s, e) => { if (DateTime.TryParse(dateTxt.Text, out var parsed)) condition.Value = parsed; };
+                    panel.Children.Add(dateTxt);
+                    break;
+
+                case FilterValueType.NumberWithSort:
+                    var limitVal = condition.Value as ResultLimitValue ?? new ResultLimitValue(100);
+                    var limitNum = new NumericUpDown { Value = limitVal.Count, MinWidth = 80 };
+                    var sortCmb = new ComboBox { ItemsSource = new[] { "最新上传", "最早上传", "随机" }, SelectedIndex = (int)limitVal.SortOption, MinWidth = 90 };
+                    limitNum.ValueChanged += (s, e) => { var r = condition.Value as ResultLimitValue ?? new ResultLimitValue(); r.Count = (int)(limitNum.Value ?? 100); condition.Value = r; };
+                    sortCmb.SelectionChanged += (s, e) => { var r = condition.Value as ResultLimitValue ?? new ResultLimitValue(); r.SortOption = (ResultSortOption)sortCmb.SelectedIndex; condition.Value = r; };
+                    panel.Children.Add(limitNum);
+                    panel.Children.Add(sortCmb);
+                    break;
+
                 case FilterValueType.ExcludeMod:
-                {
-                    var ev = condition.Value as ExcludeModValue ?? new ExcludeModValue();
-                    var txt = new TextBox { Text = ev.ModName, MinWidth = 120, PlaceholderText = "Mod名称" };
-                    var chk = new CheckBox { Content = "严格", IsChecked = ev.Strict };
-                    txt.TextChanged += (s, e) => { var v = condition.Value as ExcludeModValue ?? new ExcludeModValue(); v.ModName = txt.Text; condition.Value = v; };
-                    chk.IsCheckedChanged += (s, e) => { var v = condition.Value as ExcludeModValue ?? new ExcludeModValue(); v.Strict = chk.IsChecked ?? false; condition.Value = v; };
-                    panel.Children.Add(txt);
-                    panel.Children.Add(chk);
+                    var excludeVal = condition.Value as ExcludeModValue ?? new ExcludeModValue();
+                    var modTxt = new TextBox { Text = excludeVal.ModName, MinWidth = 120 };
+                    var strictChk = new CheckBox { Content = "严格", IsChecked = excludeVal.Strict };
+                    modTxt.TextChanged += (s, e) => { var v = condition.Value as ExcludeModValue ?? new ExcludeModValue(); v.ModName = modTxt.Text; condition.Value = v; };
+                    strictChk.IsCheckedChanged += (s, e) => { var v = condition.Value as ExcludeModValue ?? new ExcludeModValue(); v.Strict = strictChk.IsChecked ?? false; condition.Value = v; };
+                    panel.Children.Add(modTxt);
+                    panel.Children.Add(strictChk);
                     break;
-                }
             }
         }
 
-        private static void SetRange(FilterCondition cond, double? min, double? max)
+        // === Preset Management ===
+
+        private void OnNewPresetClick(object? sender, RoutedEventArgs e)
         {
-            var r = cond.Value as RangeValue ?? new RangeValue();
-            if (min.HasValue) r.MinRaw = min.Value;
-            if (max.HasValue) r.MaxRaw = max.Value;
-            cond.Value = r;
+            CurrentPreset = new FilterPreset("新预设");
+            var g = new FilterGroup("条件组1");
+            g.AddCondition(new FilterCondition(FilterConditionType.Query));
+            CurrentPreset.AddGroup(g);
+            _cboPreset.SelectedIndex = -1;
+            _txtPresetName.Text = "新预设";
+            _txtPresetName.SelectAll();
+            _txtPresetName.Focus();
+            RebuildUI();
         }
-
-        // === Button Handlers ===
-
-        private void OnNewPresetClick(object? sender, RoutedEventArgs e) => CreateNewPreset();
 
         private void OnSavePresetClick(object? sender, RoutedEventArgs e)
         {
-            var bssPreset = BuildBssPreset();
+            if (CurrentPreset == null) return;
+            CurrentPreset.Name = string.IsNullOrWhiteSpace(_txtPresetName.Text) ? "未命名预设" : _txtPresetName.Text.Trim();
             if (!Directory.Exists(_presetsDir)) Directory.CreateDirectory(_presetsDir);
-            var path = Path.Combine(_presetsDir, SanitizeFileName(bssPreset.Name) + ".json");
-            BeatSpiderSharp.Core.Utilities.PresetLoader.SavePreset(bssPreset, path);
 
-            var existing = _savedPresets.FindIndex(p => p.Preset.Name == bssPreset.Name);
-            if (existing >= 0) _savedPresets[existing] = new PresetInfo { Preset = bssPreset, FilePath = path };
-            else _savedPresets.Add(new PresetInfo { Preset = bssPreset, FilePath = path });
+            var existing = _savedPresets.FirstOrDefault(p => p.Name == CurrentPreset.Name);
+            if (existing != null) _savedPresets.Remove(existing);
+            _savedPresets.Add(CurrentPreset);
+            CurrentPreset.SaveToFile(Path.Combine(_presetsDir, CurrentPreset.Name + ".bsf"));
             UpdatePresetCombo();
         }
 
         private void OnDeletePresetClick(object? sender, RoutedEventArgs e)
         {
             if (_cboPreset.SelectedIndex < 0 || _cboPreset.SelectedIndex >= _savedPresets.Count) return;
-            var item = _savedPresets[_cboPreset.SelectedIndex];
-            if (File.Exists(item.FilePath)) File.Delete(item.FilePath);
+            var preset = _savedPresets[_cboPreset.SelectedIndex];
+            var path = Path.Combine(_presetsDir, preset.Name + ".bsf");
+            if (File.Exists(path)) File.Delete(path);
             _savedPresets.RemoveAt(_cboPreset.SelectedIndex);
             UpdatePresetCombo();
-            CreateNewPreset();
         }
 
-        private void OnPresetComboSelectionChanged(object? sender, SelectionChangedEventArgs e)
-        {
-            if (_suppressComboEvent) return;
-            if (_cboPreset.SelectedIndex >= 0 && _cboPreset.SelectedIndex < _savedPresets.Count)
-            {
-                var item = _savedPresets[_cboPreset.SelectedIndex];
-                LoadFromBssPreset(item.Preset);
-            }
-        }
-
-        private async void OnImportLegacyClick(object? sender, RoutedEventArgs e)
+        private async void OnImportPresetClick(object? sender, RoutedEventArgs e)
         {
             var topLevel = GetTopLevel(this);
             if (topLevel == null) return;
             var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = "导入预设",
+                Title = "导入筛选预设（支持多选）",
                 AllowMultiple = true,
                 FileTypeFilter = new[]
                 {
-                    new FilePickerFileType("预设文件 (*.bsf;*.json)") { Patterns = new[] { "*.bsf", "*.json" } },
+                    new FilePickerFileType("筛选预设文件 (*.bsf)") { Patterns = new[] { "*.bsf" } },
+                    new FilePickerFileType("JSON文件 (*.json)") { Patterns = new[] { "*.json" } },
                     new FilePickerFileType("所有文件") { Patterns = new[] { "*.*" } }
                 }
             });
             if (files == null || files.Count == 0) return;
+
             if (!Directory.Exists(_presetsDir)) Directory.CreateDirectory(_presetsDir);
-
-            foreach (var file in files)
+            foreach (var f in files)
             {
-                var path = file.Path.LocalPath;
-                try
-                {
-                    var bssPreset = BeatSpiderSharp.Core.Utilities.PresetLoader.LoadPreset(path);
-                    if (bssPreset != null)
-                    {
-                        var name = bssPreset.Name ?? "导入的预设";
-                        int n = 2;
-                        var baseName = name;
-                        while (_savedPresets.Any(p => p.Preset.Name == name)) name = $"{baseName} ({n++})";
-                        bssPreset.Name = name;
-                        var outPath = Path.Combine(_presetsDir, name + ".json");
-                        BeatSpiderSharp.Core.Utilities.PresetLoader.SavePreset(bssPreset, outPath);
-                        _savedPresets.Add(new PresetInfo { Preset = bssPreset, FilePath = outPath });
-                        continue;
-                    }
+                string path = f.Path.LocalPath;
+                var preset = FilterPreset.LoadFromFile(path);
+                if (preset == null) continue;
 
-                    var bsf = FilterPreset.LoadFromFile(path);
-                    if (bsf != null)
-                    {
-                        var converted = BsfToPresetConverter.Convert(bsf);
-                        converted.Name = bsf.Name ?? "旧预设";
-                        int n = 2;
-                        var baseName = converted.Name;
-                        while (_savedPresets.Any(p => p.Preset.Name == converted.Name)) converted.Name = $"{baseName} ({n++})";
-                        var outPath = Path.Combine(_presetsDir, converted.Name + ".json");
-                        BeatSpiderSharp.Core.Utilities.PresetLoader.SavePreset(converted, outPath);
-                        _savedPresets.Add(new PresetInfo { Preset = converted, FilePath = outPath });
-                    }
-                }
-                catch { }
+                string name = preset.Name;
+                int n = 2;
+                while (_savedPresets.Any(p => p.Name == name)) { name = $"{preset.Name} ({n++})"; }
+                preset.Name = name;
+                preset.SaveToFile(Path.Combine(_presetsDir, name + ".bsf"));
+                _savedPresets.Add(preset);
             }
-            _suppressComboEvent = true;
             UpdatePresetCombo();
-            if (_savedPresets.Count > 0)
-            {
-                var last = _savedPresets.Last();
-                _cboPreset.SelectedIndex = _savedPresets.Count - 1;
-                LoadFromBssPreset(last.Preset);
-            }
-            _suppressComboEvent = false;
         }
 
-        private async void OnBrowsePlaylistClick(object? sender, RoutedEventArgs e)
+        private async void OnExportPresetClick(object? sender, RoutedEventArgs e)
         {
+            if (CurrentPreset == null) return;
             var topLevel = GetTopLevel(this);
             if (topLevel == null) return;
-            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "选择歌单导出目录" });
-            if (folders.Count > 0)
+            var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
-                PlaylistDir = folders[0].Path.LocalPath;
-                _txtPlaylistDir.Text = PlaylistDir;
-            }
-        }
-
-        private async void OnBrowseDownloadClick(object? sender, RoutedEventArgs e)
-        {
-            var topLevel = GetTopLevel(this);
-            if (topLevel == null) return;
-            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "选择歌曲下载目录" });
-            if (folders.Count > 0)
-            {
-                DownloadDir = folders[0].Path.LocalPath;
-                _txtDownloadDir.Text = DownloadDir;
-            }
-        }
-
-        private async void OnPreviewClick(object? sender, RoutedEventArgs e)
-        {
-            _lblMatchCount.Text = "预览中...";
-            try
-            {
-                var bsfPreset = new FilterPreset("preview");
-                var group = new FilterGroup("g");
-                foreach (var c in _conditions) group.AddCondition(c.Clone());
-                if (_chkLimit.IsChecked == true)
-                    group.AddCondition(new FilterCondition(FilterConditionType.ResultLimit, new ResultLimitValue(int.TryParse(_numLimit.Text, out var lv) ? lv : 100)));
-                bsfPreset.AddGroup(group);
-
-                var cacheMgr = new LocalCacheManager();
-                if (!cacheMgr.IsCacheAvailable)
+                Title = "导出筛选预设",
+                DefaultExtension = "bsf",
+                FileTypeChoices = new[]
                 {
-                    _lblMatchCount.Text = "缓存不可用";
-                    return;
+                    new FilePickerFileType("筛选预设文件 (*.bsf)") { Patterns = new[] { "*.bsf" } },
+                    new FilePickerFileType("JSON文件 (*.json)") { Patterns = new[] { "*.json" } }
                 }
-
-                var token = System.Threading.CancellationToken.None;
-                var results = await System.Threading.Tasks.Task.Run(
-                    () => cacheMgr.ParallelFilterMaps(bsfPreset, null, token));
-                _lblMatchCount.Text = $"匹配: {results.Count} 首";
-            }
-            catch (Exception ex)
-            {
-                _lblMatchCount.Text = $"预览失败: {ex.Message}";
-            }
+            });
+            if (file != null) CurrentPreset.SaveToFile(file.Path.LocalPath);
         }
 
-        private void OnExecuteClick(object? sender, RoutedEventArgs e)
+        private void OnAddGroupClick(object? sender, RoutedEventArgs e)
         {
-            var bssPreset = BuildBssPreset();
-            OnExecute?.Invoke(bssPreset, PlaylistDir, DownloadDir);
-            Close();
+            if (CurrentPreset == null) return;
+            var group = new FilterGroup($"条件组 {CurrentPreset.Groups.Count + 1}");
+            group.AddCondition(new FilterCondition(FilterConditionType.Query));
+            CurrentPreset.AddGroup(group);
+            RebuildUI();
         }
 
         private void OnCancelClick(object? sender, RoutedEventArgs e) => Close();
 
-        private static string SanitizeFileName(string name)
+        private void OnSearchClick(object? sender, RoutedEventArgs e)
         {
-            var invalids = System.IO.Path.GetInvalidFileNameChars();
-            return string.Join("_", name.Split(invalids, StringSplitOptions.RemoveEmptyEntries)).TrimEnd('.');
+            if (CurrentPreset == null) return;
+            // Convert BSIMM FilterPreset → BeatSpiderSharp Preset
+            var bssPreset = BsfToPresetConverter.Convert(CurrentPreset);
+            SearchRequested?.Invoke(this, bssPreset);
+            Close();
         }
     }
 }

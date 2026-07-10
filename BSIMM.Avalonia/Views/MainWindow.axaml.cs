@@ -553,13 +553,13 @@ public partial class MainWindow : Window
 
     private async void OnOpenPresetEditorClick(object? sender, RoutedEventArgs e)
     {
-        var window = new PresetEditorWindow();
-        window.OnExecute = (preset, playlistDir, downloadDir) =>
+        var window = new PresetEditorWindow(_currentFilterPreset);
+        window.SearchRequested += async (_, bssPreset) =>
         {
-            var bsfPreset = BsfToPresetConverter.ConvertBack(preset);
+            var bsfPreset = BsfToPresetConverter.ConvertBack(bssPreset);
             _currentFilterPreset = bsfPreset;
             _currentPage = 0;
-            _ = ExecuteSearch(ViewModel, bsfPreset, 0);
+            await ExecuteSearch(ViewModel, bsfPreset, 0);
         };
         await window.ShowDialog(this);
     }
