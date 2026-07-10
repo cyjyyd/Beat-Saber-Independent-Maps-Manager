@@ -474,4 +474,74 @@ public static class BsfToPresetConverter
             option.Max = new DateTimeOffset(dt);
         }
     }
+
+    public static FilterPreset ConvertBack(Preset preset)
+    {
+        var fpreset = new FilterPreset(preset.Name) { Description = preset.Description };
+        foreach (var fc in preset.FilterOptions)
+        {
+            var group = new FilterGroup("筛选组");
+            MapFilterConfigToGroup(fc, group);
+            fpreset.AddGroup(group);
+        }
+        if (preset.Output.LimitSongs && preset.Output.MaxSongs > 0)
+        {
+            var limit = new ResultLimitValue(preset.Output.MaxSongs.Value);
+            if (fpreset.Groups.Count > 0)
+                fpreset.Groups[0].AddCondition(new FilterCondition(FilterConditionType.ResultLimit, limit));
+            else
+                fpreset.TopLevelResultLimit = limit;
+        }
+        return fpreset;
+    }
+
+    private static void MapFilterConfigToGroup(FilterConfig fc, FilterGroup group)
+    {
+        var s = fc.SongDetailFilter;
+        var l = fc.LevelDetailOptions;
+        var q = fc.SearchOptions;
+
+        if (s.Bpm.Enable && (s.Bpm.Min.HasValue || s.Bpm.Max.HasValue))
+            group.AddCondition(new FilterCondition(FilterConditionType.BpmRange, new RangeValue { MinRaw = DVal(s.Bpm.Min), MaxRaw = DVal(s.Bpm.Max) }));
+        if (s.Duration.Enable && (s.Duration.Min.HasValue || s.Duration.Max.HasValue))
+            group.AddCondition(new FilterCondition(FilterConditionType.DurationRange, new RangeValue { MinRaw = DValInt(s.Duration.Min), MaxRaw = DValInt(s.Duration.Max) }));
+        if (s.Rating.Enable && (s.Rating.Min.HasValue || s.Rating.Max.HasValue))
+            group.AddCondition(new FilterCondition(FilterConditionType.ScoreRange, new RangeValue { MinRaw = DVal(s.Rating.Min), MaxRaw = DVal(s.Rating.Max) }));
+        if (s.ScoreSaberRanking.Enable && s.ScoreSaberRanking.Filter.Contains(RankingStatus.Ranked))
+            group.AddCondition(new FilterCondition(FilterConditionType.Ranked, true));
+        if (s.ScoreSaberRanking.Enable && s.ScoreSaberRanking.Filter.Contains(RankingStatus.Qualified))
+            group.AddCondition(new FilterCondition(FilterConditionType.Qualified, true));
+        if (s.BeatLeaderRanking.Enable && s.BeatLeaderRanking.Filter.Contains(RankingStatus.Ranked))
+            group.AddCondition(new FilterCondition(FilterConditionType.BlRanked, true));
+        if (s.IncludeTags.Enable && s.IncludeTags.Filter.Count > 0)
+            group.AddCondition(new FilterCondition(FilterConditionType.Tags, string.Join(",", s.IncludeTags.Filter)));
+        if (s.ExcludeTags.Enable && s.ExcludeTags.Filter.Count > 0)
+            group.AddCondition(new FilterCondition(FilterConditionType.ExcludeTags, string.Join(",", s.ExcludeTags.Filter)));
+        if (l.Nps.Enable && (l.Nps.Min.HasValue || l.Nps.Max.HasValue))
+            group.AddCondition(new FilterCondition(FilterConditionType.NpsRange, new RangeValue { MinRaw = DVal(l.Nps.Min), MaxRaw = DVal(l.Nps.Max) }));
+        if (l.ScoreSaberStars.Enable && (l.ScoreSaberStars.Min.HasValue || l.ScoreSaberStars.Max.HasValue))
+            group.AddCondition(new FilterCondition(FilterConditionType.SsStarsRange, new RangeValue { MinRaw = DVal(l.ScoreSaberStars.Min), MaxRaw = DVal(l.ScoreSaberStars.Max) }));
+        if (l.BeatLeaderStars.Enable && (l.BeatLeaderStars.Min.HasValue || l.BeatLeaderStars.Max.HasValue))
+            group.AddCondition(new FilterCondition(FilterConditionType.BlStarsRange, new RangeValue { MinRaw = DVal(l.BeatLeaderStars.Min), MaxRaw = DVal(l.BeatLeaderStars.Max) }));
+
+        foreach (var mod in l.RequireMods.Filter)
+        {
+            var ct = mod switch
+            {
+                MMod.Chroma => FilterConditionType.Chroma,
+                MMod.NoodleExtensions => FilterConditionType.Noodle,
+                MMod.MappingExtensions => FilterConditionType.Me,
+                MMod.Cinema => FilterConditionType.Cinema,
+                MMod.Vivify => FilterConditionType.Vivify,
+                _ => FilterConditionType.None
+            };
+            if (ct != FilterConditionType.None) group.AddCondition(new FilterCondition(ct, true));
+        }
+
+        if (q.Enable)
+            group.AddCondition(new FilterCondition(FilterConditionType.Query, q.AdvanceTerms.FirstOrDefault()?.Content ?? ""));
+    }
+
+    private static double DVal(float? v) => v.HasValue ? v.Value : double.NaN;
+    private static double DValInt(int? v) => v.HasValue ? v.Value : double.NaN;
 }

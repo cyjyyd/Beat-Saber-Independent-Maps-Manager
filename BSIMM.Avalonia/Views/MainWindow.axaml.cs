@@ -6,6 +6,7 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using BeatSaberIndependentMapsManager;
+using BeatSaberIndependentMapsManager.BeatSpiderSharp;
 using BeatSaberIndependentMapsManager.ViewModels;
 using BeatSaberIndependentMapsManager.Services;
 using BSIMM.Avalonia.Services;
@@ -546,6 +547,20 @@ public partial class MainWindow : Window
             _currentFilterPreset = preset;
             _currentPage = 0;
             await ExecuteSearch(vm, preset, 0);
+        };
+        await window.ShowDialog(this);
+    }
+
+    private async void OnOpenPresetEditorClick(object? sender, RoutedEventArgs e)
+    {
+        var window = new PresetEditorWindow();
+        window.ExecuteRequested += (s, preset) =>
+        {
+            // Convert BSS preset to BSIMM FilterPreset and search
+            var bsfPreset = BsfToPresetConverter.ConvertBack(preset);
+            _currentFilterPreset = bsfPreset;
+            _currentPage = 0;
+            _ = ExecuteSearch(ViewModel, bsfPreset, 0);
         };
         await window.ShowDialog(this);
     }
