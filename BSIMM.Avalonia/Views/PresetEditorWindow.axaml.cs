@@ -274,7 +274,7 @@ namespace BSIMM.Avalonia.Views
 
             if (_chkLimit.IsChecked == true)
             {
-                var limitCond = new FilterCondition(FilterConditionType.ResultLimit, new ResultLimitValue((int)_numLimit.Value));
+                var limitCond = new FilterCondition(FilterConditionType.ResultLimit, new ResultLimitValue((int)(_numLimit.Value ?? 100)));
                 group.AddCondition(limitCond);
             }
 
@@ -296,7 +296,6 @@ namespace BSIMM.Avalonia.Views
             if (_conditions.Count == 0)
             {
                 _emptyPlaceholder.IsVisible = true;
-                _conditionsPanel.Children.Add(_emptyPlaceholder);
                 return;
             }
 
