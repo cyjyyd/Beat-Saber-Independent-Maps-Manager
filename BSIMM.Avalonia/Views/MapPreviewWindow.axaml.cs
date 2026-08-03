@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using System;
 using System.IO;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -18,6 +19,7 @@ namespace BSIMM.Avalonia.Views
         private ProgressBar _loadProgress = null!;
         private NativeWebView? _webView;
         private string? _tempZipPath;
+        private bool _closed;
 
         private const string ArcViewerUrl = "https://allpoland.github.io/ArcViewer/";
 
@@ -45,6 +47,7 @@ namespace BSIMM.Avalonia.Views
             }
             _tempZipPath = await DownloadZipAsync(downloadUrl);
             if (_tempZipPath == null) { OnFail("下载失败"); return; }
+            if (_closed) return;
             InitWebViewWithZip(_tempZipPath);
         }
 
@@ -65,6 +68,7 @@ namespace BSIMM.Avalonia.Views
 
         private void InitWebView(string url)
         {
+            if (_closed) return;
             try
             {
                 _webView = new NativeWebView();
@@ -84,6 +88,7 @@ namespace BSIMM.Avalonia.Views
 
         private void InitWebViewWithZip(string zipPath)
         {
+            if (_closed) return;
             try
             {
                 var base64 = Convert.ToBase64String(File.ReadAllBytes(zipPath));
@@ -155,7 +160,58 @@ namespace BSIMM.Avalonia.Views
 
         private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
         {
+            _closed = true;
+            CleanupWebView();
             try { if (_tempZipPath != null && File.Exists(_tempZipPath)) File.Delete(_tempZipPath); } catch { }
+            _tempZipPath = null;
+        }
+
+        /// <summary>
+        /// Tears down the WebView so the ArcViewer page (and its audio) stops completely.
+        /// Detaching the control destroys the underlying native WebView2 controller/process,
+        /// otherwise preview audio keeps playing after the window closes.
+        /// </summary>
+        private void CleanupWebView()
+        {
+            var webView = _webView;
+            if (webView == null) return;
+            _webView = null;
+
+            try
+            {
+                // Unload the page first so its scripts/audio stop immediately.
+                webView.Navigate(new Uri("about:blank"));
+                webView.Stop();
+            }
+            catch
+            {
+                // Navigation can fail when the control is not fully initialized; detach still cleans up.
+            }
+
+            try
+            {
+                // The installed Avalonia.Controls.WebView (12.0.1) keeps the WebView2 controller alive
+                // after the control is removed from the visual tree, so preview audio keeps playing.
+                // Disposing the underlying adapter closes the controller; the accessor is non-public,
+                // hence reflection is required.
+                var adapter = webView.GetType()
+                    .GetMethod("TryGetAdapter", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?.Invoke(webView, null) as IDisposable;
+                adapter?.Dispose();
+            }
+            catch
+            {
+                // Adapter may not have been created yet; removal below still tears down the host.
+            }
+
+            try
+            {
+                _webViewContainer.Children.Remove(webView);
+            }
+            catch
+            {
+                // The visual tree may already be tearing down; the native control is destroyed with it.
+            }
         }
     }
 }
