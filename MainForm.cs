@@ -1706,7 +1706,7 @@ namespace BeatSaberIndependentMapsManager
                         if (cancellationToken.IsCancellationRequested)
                             return;
 
-                        Image? img = null;
+                        Image img = null;
                         using (var ms = new MemoryStream(imageData))
                         {
                             var originalImg = Image.FromStream(ms);

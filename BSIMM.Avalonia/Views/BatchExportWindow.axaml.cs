@@ -183,7 +183,7 @@ namespace BSIMM.Avalonia.Views
                 return;
             }
 
-            OutputDirectory = _txtOutputDir.Text;
+            OutputDirectory = _txtOutputDir.Text ?? string.Empty;
             Close();
         }
     }

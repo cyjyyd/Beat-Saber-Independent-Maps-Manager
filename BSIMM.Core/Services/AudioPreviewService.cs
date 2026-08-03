@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.IO;
 using System.Net.Http;
@@ -15,8 +16,8 @@ namespace BeatSaberIndependentMapsManager.Services
 
     public class AudioPreviewService : IDisposable
     {
-        private WaveOut _waveOut;
-        private WaveStream _currentAudioReader;
+        private WaveOut? _waveOut;
+        private WaveStream? _currentAudioReader;
         private bool _disposed;
         private static readonly HttpClient _httpClient = CreateHttpClient();
 

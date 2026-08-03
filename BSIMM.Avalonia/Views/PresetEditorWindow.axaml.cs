@@ -28,7 +28,7 @@ namespace BSIMM.Avalonia.Views
         private string _presetsDir = Path.Combine(AppContext.BaseDirectory, "presets");
 
         public FilterPreset? CurrentPreset { get; private set; }
-        public event EventHandler<BeatSpiderSharp.Models.Preset.Preset>? SearchRequested;
+        public event EventHandler? SearchRequested;
 
         public PresetEditorWindow() : this(null) { }
 
@@ -542,9 +542,7 @@ namespace BSIMM.Avalonia.Views
         private void OnSearchClick(object? sender, RoutedEventArgs e)
         {
             if (CurrentPreset == null) return;
-            // Convert BSIMM FilterPreset → BeatSpiderSharp Preset
-            var bssPreset = BsfToPresetConverter.Convert(CurrentPreset);
-            SearchRequested?.Invoke(this, bssPreset);
+            SearchRequested?.Invoke(this, EventArgs.Empty);
             Close();
         }
     }

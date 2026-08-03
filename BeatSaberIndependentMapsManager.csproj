@@ -80,6 +80,7 @@
 	</PropertyGroup>
   <ItemGroup>
     <Compile Remove="LocalCacheFilterTest.cs" />
+    <Compile Remove="libs\**\*.cs" />
     <Compile Remove="tests\**\*.cs" />
     <Compile Remove="packages\**\*.cs" />
   </ItemGroup>
@@ -107,7 +108,6 @@
 	</ItemGroup>
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="NAudio.Asio" Version="2.2.1" />
     <PackageReference Include="NAudio.Core" Version="2.2.1" />
@@ -119,8 +119,6 @@
     <PackageReference Include="NVorbis" Version="0.10.5" />
     <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
-    <PackageReference Include="System.Security.AccessControl" Version="6.0.1" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="BSIMM.Core\BSIMM.Core.csproj" />

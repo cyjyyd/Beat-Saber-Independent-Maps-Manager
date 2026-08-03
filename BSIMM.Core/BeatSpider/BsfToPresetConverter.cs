@@ -21,6 +21,20 @@ public static class BsfToPresetConverter
         FilterConditionType.ExcludeCustomMod,
     };
 
+    /// <summary>
+    /// Returns true when the preset contains conditions that BeatSpiderSharp cannot represent.
+    /// Callers should fall back to the BSIMM filter engine for such presets, otherwise these
+    /// conditions would be silently ignored.
+    /// </summary>
+    public static bool HasUnmappableConditions(FilterPreset filterPreset)
+    {
+        if (filterPreset == null) return false;
+
+        return filterPreset.GetActiveGroups()
+            .SelectMany(g => g.GetActiveConditions())
+            .Any(c => _unmappableTypes.Contains(c.Type));
+    }
+
     public static Preset Convert(FilterPreset filterPreset)
     {
         var preset = new Preset
@@ -127,7 +141,13 @@ public static class BsfToPresetConverter
         switch (cond.Type)
         {
             case FilterConditionType.Query:
-                if (cond.Value is string query && !string.IsNullOrWhiteSpace(query))
+                string query = cond.Value switch
+                {
+                    SearchQueryValue queryValue => queryValue.Query ?? string.Empty,
+                    string plain => plain,
+                    _ => string.Empty
+                };
+                if (!string.IsNullOrWhiteSpace(query))
                 {
                     q.Enable = true;
                     q.SearchTitle = true;

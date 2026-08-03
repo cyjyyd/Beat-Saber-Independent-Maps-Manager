@@ -6,7 +6,6 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using BeatSaberIndependentMapsManager;
-using BeatSaberIndependentMapsManager.BeatSpiderSharp;
 using BeatSaberIndependentMapsManager.ViewModels;
 using BeatSaberIndependentMapsManager.Services;
 using BSIMM.Avalonia.Services;
@@ -248,10 +247,10 @@ public partial class MainWindow : Window
         if (files != null && files.Count > 0)
         {
             string sourcePath = files[0].Path.LocalPath;
-            string packPath;
+            string? packPath;
             lock (vm.SyncRoot)
             {
-                if (!vm.MusicPackPath.TryGetValue(pack, out packPath)) return;
+                if (!vm.MusicPackPath.TryGetValue(pack, out packPath) || packPath == null) return;
             }
 
             string targetPath = Path.Combine(packPath, "cover.jpg");
@@ -267,7 +266,7 @@ public partial class MainWindow : Window
 
                 // Force UI update by triggering property changed
                 // (Since the path is the same, just toggling it to null and back will refresh)
-                vm.MusicPackCoverPath = null;
+                vm.MusicPackCoverPath = string.Empty;
                 vm.MusicPackCoverPath = targetPath;
                 
                 vm.ActionText = "封面：";
@@ -1262,9 +1261,4 @@ public partial class MainWindow : Window
         await settingsWindow.ShowDialog(this);
     }
 
-    private async IAsyncEnumerable<T> ToAsyncEnumerable<T>(IEnumerable<T> source)
-    {
-        foreach (var item in source)
-            yield return item;
-    }
 }

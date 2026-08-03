@@ -25,6 +25,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BeatSpiderSharp.Models", "l
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BeatSpiderSharp.Shared", "libs\BeatSpiderSharp\Libs\BeatSpiderSharp.Shared\BeatSpiderSharp.Shared.csproj", "{E8E49015-DE8B-431A-8CED-4A5D4EBF930F}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BeatSaberIndependentMapsManager.Tests", "tests\BeatSaberIndependentMapsManager.Tests\BeatSaberIndependentMapsManager.Tests.csproj", "{F810E980-1644-4611-803E-A17282C76AA0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -131,6 +135,18 @@ Global
 		{E8E49015-DE8B-431A-8CED-4A5D4EBF930F}.Release|x64.Build.0 = Release|Any CPU
 		{E8E49015-DE8B-431A-8CED-4A5D4EBF930F}.Release|x86.ActiveCfg = Release|Any CPU
 		{E8E49015-DE8B-431A-8CED-4A5D4EBF930F}.Release|x86.Build.0 = Release|Any CPU
+		{F810E980-1644-4611-803E-A17282C76AA0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F810E980-1644-4611-803E-A17282C76AA0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F810E980-1644-4611-803E-A17282C76AA0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F810E980-1644-4611-803E-A17282C76AA0}.Debug|x64.Build.0 = Debug|Any CPU
+		{F810E980-1644-4611-803E-A17282C76AA0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F810E980-1644-4611-803E-A17282C76AA0}.Debug|x86.Build.0 = Debug|Any CPU
+		{F810E980-1644-4611-803E-A17282C76AA0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F810E980-1644-4611-803E-A17282C76AA0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F810E980-1644-4611-803E-A17282C76AA0}.Release|x64.ActiveCfg = Release|Any CPU
+		{F810E980-1644-4611-803E-A17282C76AA0}.Release|x64.Build.0 = Release|Any CPU
+		{F810E980-1644-4611-803E-A17282C76AA0}.Release|x86.ActiveCfg = Release|Any CPU
+		{F810E980-1644-4611-803E-A17282C76AA0}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -143,6 +159,7 @@ Global
 		{2849E994-DE37-417A-8303-FC37BFBB0375} = {6841C87B-5A21-DC2A-43CB-9BD52A5755AF}
 		{988DDA63-372C-476B-87DF-848D3EE2F34D} = {6841C87B-5A21-DC2A-43CB-9BD52A5755AF}
 		{E8E49015-DE8B-431A-8CED-4A5D4EBF930F} = {6841C87B-5A21-DC2A-43CB-9BD52A5755AF}
+		{F810E980-1644-4611-803E-A17282C76AA0} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AE97AA4A-D497-4D6A-8A9C-C0BD6199B53F}

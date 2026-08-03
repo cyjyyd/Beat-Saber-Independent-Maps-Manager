@@ -97,8 +97,13 @@ namespace BeatSaberIndependentMapsManager
         public bool UseSystemProxy { get; set; } = true;
 
         public LocalCacheManager()
+            : this(Path.Combine(Application.StartupPath, LocalCacheFileName))
         {
-            cachePath = Path.Combine(Application.StartupPath, LocalCacheFileName);
+        }
+
+        internal LocalCacheManager(string cachePath)
+        {
+            this.cachePath = cachePath;
 
             // Initialize HttpClient with system proxy support
             InitializeHttpClient();
@@ -618,6 +623,11 @@ namespace BeatSaberIndependentMapsManager
             FilterPreset preset, IProgress<int> progress, CancellationToken cToken = default)
         {
             if (!IsCacheAvailable) return new List<BeatSaverMap>();
+
+            // BeatSpiderSharp cannot represent every BSIMM condition (e.g. Curated/Verified/Leaderboard).
+            // Falling back to the BSIMM engine keeps those conditions effective instead of silently dropping them.
+            if (BsfToPresetConverter.HasUnmappableConditions(preset))
+                return await Task.Run(() => ParallelFilterMaps(preset, progress, cToken), cToken);
 
             var bssPreset = BsfToPresetConverter.Convert(preset);
             if (bssPreset.FilterOptions.Count == 0) return new List<BeatSaverMap>();
